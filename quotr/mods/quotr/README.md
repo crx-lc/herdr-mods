@@ -31,8 +31,8 @@ The screenshot is illustrative; it does not set the default watchlist.
 > [`99f70b2c`](https://github.com/fatwang2/Pulse/tree/99f70b2c066c6f03657639bf44bf3cecd6e1bb43/herdr/pulse).
 
 Pulse is MIT-licensed. Its copyright notice and license are kept in
-[`LICENSE-PULSE.txt`](LICENSE-PULSE.txt) because parts of its code remain, mainly in `main.js`,
-`quotes.js` and `watchlist.js`. Quotr's own changes are under this repository's MIT license.
+[`LICENSE-PULSE.txt`](LICENSE-PULSE.txt) because parts of its code remain, mainly in the view files
+(`main.js`, `charts.js`, `dialog.js`), `quotes.js` and `watchlist.js`. Quotr's own changes are under this repository's MIT license.
 Not taken from Pulse: its name, its icon (Quotr has its own `icon.svg`) and its "Pulse for Mac"
 promotion, which was removed.
 

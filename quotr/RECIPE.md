@@ -54,7 +54,7 @@ A panel 300px wide in the theme's `chrome` background with `foreground` text at 
 ## Built from
 
 - **One mod**, `mods/quotr/`, no layout. `mod.json`: `{ "place": "right", "size": 300, "title": "Quotr" }`. As a pane: `pane.split {direction: "right", mod: "quotr"}`.
-- `main.js`: the view (`gpui-kit` `View`, `div`, `image`, `PathBuilder`, `Background`, `window.paint_path`; `gpui-base` `h_flex`, `v_flex`, `InputState`, `Input`), panel or band by `on_size_change`. The dialog is the same mod: `openOverlay({ mod: "quotr", kind: "dialog", width: 440, props: { detail } })`.
+- `main.js`, with `charts.js`, `logoview.js` and `dialog.js` (methods joined to the one view class) and `context.js` (what they share on Herdr's side: storage keys, the logo cache's host, the history store, the link opener): the view (`gpui-kit` `View`, `div`, `image`, `PathBuilder`, `Background`, `window.paint_path`; `gpui-base` `h_flex`, `v_flex`, `InputState`, `Input`), panel or band by `on_size_change`. The dialog is the same mod: `openOverlay({ mod: "quotr", kind: "dialog", width: 440, props: { detail } })`.
 - Modules with no Herdr imports, so `node --test` runs them, with Herdr's APIs passed in:
   - `quotes.js`, `watchlist.js`: Pulse's symbol rules, decoding, formatting and refresh loop, extended with per-point times, bounded concurrency, `move`, `restore` and per-row in-flight state.
   - `history.js` (1W / 1M / 1Y series and period stats), `readout.js` (nearest point, time-zone text), `extended.js` (pre-market and after-hours from Yahoo, session bands), `ticks.js` (which prices moved).

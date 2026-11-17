@@ -36,6 +36,9 @@ copying that folder. No imports from another mod or from the repo root.
 
 - `herdr-app check` has no network and no window: `fetch` is refused and `window()` returns null.
   A passing check says the mod loads and renders, nothing about requests, links or timers.
+- It also draws only what the mod shows with no props. A dialog (a copy opened with props) is
+  never drawn: after changing one, check a throwaway copy of the mod whose `props()` is replaced by
+  a sample, once per state worth seeing, and confirm a deliberate break makes that check fail.
 - A request can hang forever. Race it against `cx.timer.after`, not `cx.sleep`, and cap how long
   any "loading" state can show.
 - Saving a non-hidden file in a live mod folder reloads the mod and clears its memory. Runtime
