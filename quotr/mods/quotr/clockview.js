@@ -6,99 +6,45 @@
 import { View, div } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { checking, exec, theme } from "herdr";
-import {
-  MARKET_INFO_URL, clockText, formatCountdown, marketClock, nextTickMs, parseMarketInfo, restoreSchedule, shouldFetch,
-} from "./marketclock.js";
+import { MARKET_INFO_URL, clockText, formatCountdown, nextTickMs } from "./marketclock.js";
+import { REQUEST_TIMEOUT_MS, ScheduleFeed, USER_AGENT, curlArgs, readCurl } from "./marketfeed.js";
 
 const STORE_KEY = "quotr.market.v1";
-const HEADERS = { "User-Agent": "Herdr-Quotr/1.0", Accept: "application/json" };
-const UA = HEADERS["User-Agent"];
-const REQUEST_TIMEOUT_MS = 15_000;
-// However a request ends (or doesn't), "loading" never lasts longer than this.
-const BUSY_LIMIT_MS = 45_000;
+const HEADERS = { "User-Agent": USER_AGENT, Accept: "application/json" };
+// The current frame's context, for the deadline timer (GPUI timers, so a hung request can't hold it).
+let timerCx = null;
 // Shared by every clock in this mod (the panel's and the band's): one schedule, one request.
-const MARKET = { schedule: null, failures: 0, lastAttempt: 0, inflight: false, loaded: false, lastError: "", startedAt: Date.now() };
-const busy = (now) => MARKET.inflight && now - MARKET.lastAttempt < BUSY_LIMIT_MS;
-
-function loadSchedule() {
-  if (MARKET.loaded) return;
-  MARKET.loaded = true;
-  try {
-    const text = localStorage.getItem(STORE_KEY);
-    MARKET.schedule = text ? restoreSchedule(JSON.parse(text)) : null;
-  } catch { MARKET.schedule = null; }
-}
-
-/** `promise`'s value, or null once `ms` pass (a GPUI timer, so a hung request can't hold it). */
-function withDeadline(cx, promise, ms) {
-  return new Promise((resolve) => {
+// Loading, fallback and retry rules live in marketfeed.js; this is only Herdr's side of them.
+const MARKET = new ScheduleFeed({
+  now: () => Date.now(),
+  viaFetch: async () => {
+    const r = await fetch(MARKET_INFO_URL, { headers: HEADERS });
+    return { status: r.status, text: await r.text() };
+  },
+  // The same GET through curl, run directly (no shell).
+  viaCurl: async () => readCurl(await exec("curl", curlArgs(), { timeout: REQUEST_TIMEOUT_MS })),
+  deadline: (promise, ms) => new Promise((resolve) => {
     let done = false;
     const finish = (value) => { if (!done) { done = true; resolve(value); } };
-    cx.timer.after(ms, () => finish(null));
+    timerCx.timer.after(ms, () => finish(null));
     promise.then(finish, () => finish(null));
-  });
-}
-
-/** Herdr's fetch. → { status, text } or null. */
-async function viaFetch() {
-  const r = await fetch(MARKET_INFO_URL, { headers: HEADERS });
-  return { status: r.status, text: await r.text() };
-}
-
-/** The same GET through curl, run directly (no shell), https only, with its own time limit. */
-async function viaCurl() {
-  const r = await exec("curl", ["-sS", "--proto", "=https", "--max-time", "12", "-A", UA, "-H", "Accept: application/json",
-    "-w", "\n%{http_code}", MARKET_INFO_URL], { timeout: REQUEST_TIMEOUT_MS });
-  const out = String(r?.stdout ?? "");
-  const cut = out.lastIndexOf("\n");
-  return r?.code === 0 && cut > 0 ? { status: Number(out.slice(cut + 1)), text: out.slice(0, cut) } : null;
-}
-
-/** A checked schedule from one answer, or a short reason it isn't one. */
-function readAnswer(response) {
-  if (!response) return { error: "no answer" };
-  if (response.status !== 200) return { error: `HTTP ${response.status}` };
-  let json;
-  try { json = JSON.parse(response.text); } catch { return { error: "unreadable answer" }; }
-  const schedule = parseMarketInfo(json, Date.now());
-  return schedule ? { schedule } : { error: "unexpected answer" };
-}
-
-/** One try for today's schedule: Herdr's fetch, then curl. A failure keeps the last good schedule. */
-async function fetchSchedule(cx) {
-  MARKET.inflight = true;
-  MARKET.lastAttempt = Date.now();
-  try {
-    let result = readAnswer(await withDeadline(cx, viaFetch(), REQUEST_TIMEOUT_MS));
-    if (!result.schedule) {
-      const second = readAnswer(await withDeadline(cx, viaCurl(), REQUEST_TIMEOUT_MS + 2_000));
-      if (second.schedule) result = second;
-      else result = { error: `${result.error}; curl: ${second.error}` };
-    }
-    if (!result.schedule) throw new Error(result.error);
-    MARKET.schedule = result.schedule;
-    MARKET.failures = 0;
-    MARKET.lastError = "";
-    try { localStorage.setItem(STORE_KEY, JSON.stringify(result.schedule)); } catch { /* kept in memory */ }
-  } catch (error) {
-    MARKET.failures += 1;
-    MARKET.lastError = String(error?.message ?? error);
-  } finally {
-    MARKET.inflight = false;
-  }
-}
+  }),
+  load: () => localStorage.getItem(STORE_KEY),
+  save: (text) => localStorage.setItem(STORE_KEY, text),
+});
 
 export class MarketClock extends View {
   init(props, cx) {
     this.band = Boolean(props?.band);
-    loadSchedule();
+    MARKET.restore();
     if (checking()) return;
     cx.spawn(async (cx) => {
       for (;;) {
-        if (shouldFetch({ ...MARKET, inflight: busy(Date.now()), now: Date.now() })) fetchSchedule(cx).then(() => cx.notify(), () => cx.notify());
+        timerCx = cx;
+        if (MARKET.due()) MARKET.refresh().then(() => cx.notify());
         cx.notify();
         const now = Date.now();
-        await cx.sleep(nextTickMs(marketClock(MARKET.schedule, now), now));
+        await cx.sleep(nextTickMs(MARKET.state(now), now));
       }
     });
   }
@@ -108,8 +54,7 @@ export class MarketClock extends View {
   render() {
     const t = theme();
     const now = Date.now();
-    const loading = !checking() && (busy(now) || (MARKET.lastAttempt === 0 && now - MARKET.startedAt < BUSY_LIMIT_MS));
-    const state = marketClock(MARKET.schedule, now, { loading });
+    const state = MARKET.state(now, { loading: !checking() && MARKET.loading(now) });
     const text = clockText(state, now);
     const color = state.phase === "regular" ? t.done : state.phase === "pre" || state.phase === "post" ? t.working : t.dim;
     const tip = state.available

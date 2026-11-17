@@ -61,8 +61,9 @@ A panel 300px wide in the theme's `chrome` background with `foreground` text at 
   - `logosource.js`: logo source adapters `{ id, name, attribution, lookup(symbol), imageUrl?(symbol, host) }`, tried in order. AllInvestView: its search API maps a symbol to a company domain, the image is `cdn.tickerlogos.com/<domain>`; a pair searches `BASE-USD`. Elbstream: `api.elbstream.com/logos/crypto/<BASE>` or `/symbol/<SYMBOL>`. Indices and FX/futures: no request. Small correction tables fix known mismatches.
   - `logocache.js`, `svgcheck.js`: the cache index (`.cache/logos/index.json`), file checks (HTTP 200, the bytes really PNG, JPEG or SVG, 300 KB cap), versioned file names, the draw style per file.
   - `marketclock.js`: New York time from the US daylight-saving rule (no `Intl` in Herdr's runtime), parsing and checking Nasdaq's answer, the session phase, countdown text, when to redraw and when to fetch.
+  - `marketfeed.js`: loading that schedule: fetch first, curl second, each against a deadline, one request at a time, the last good schedule kept through failures.
   - `opener.js`: the opener per platform and URL checks.
-- `clockview.js`: the clock as a retained nested view (`cx.new(MarketClock, { band })`, one per layout), its own `cx.spawn` loop with `cx.sleep`, a deadline from `cx.timer.after`.
+- `clockview.js`: the clock as a retained nested view (`cx.new(MarketClock, { band })`, one per layout), its own `cx.spawn` loop with `cx.sleep`; it hands `marketfeed.js` Herdr's `fetch`, `exec` and a deadline from `cx.timer.after`.
 - `assetlogo.js`: the monogram. `icon.svg`: Quotr's own icon.
 - **Storage**: `shared("quotr.watchlist.v1")` (`{ version: 1, symbols, paused }`), `shared("quotr.logos.v1")` (`{ SYMBOL: source id }`), `shared("quotr.logos.rev")`; `localStorage` `quotr.quotes.v1` (last quotes) and `quotr.market.v1` (the schedule); logo files under `mods/quotr/.cache/logos/` (a hidden folder, so writing there doesn't reload the mod).
 - **Network**, GETs with `User-Agent: Herdr-Quotr/1.0`:
