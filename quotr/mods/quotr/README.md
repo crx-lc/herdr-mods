@@ -52,7 +52,9 @@ Compared with Pulse at `99f70b2c`:
 - The footer credits each source with a count ("11 logos by AllInvestView ↗").
 
 **Other**
-- Links open on Windows through the system URL handler when `open` is missing.
+- External links open on macOS (`open`), Windows (the system URL handler) and Linux (`xdg-open`,
+  then `gio open`), chosen by platform, without a shell and only for https URLs (`opener.js`). If no
+  opener works, the link simply doesn't open.
 - Watchlist and logo choices saved under `quotr.*` keys; Pulse's saved watchlist is copied over once.
 
 ## Installing and updating

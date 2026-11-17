@@ -26,6 +26,10 @@ import { SESSION_NAMES, sessionBands, sessionHours } from "./extended.js";
 import { assetLogo } from "./assetlogo.js";
 // Local customization: price tick flashes.
 import { createTickMemory, primeTicks, takeTicks } from "./ticks.js";
+// Local customization: external links per platform. Herdr's window() is renamed: `window` is GPUI's
+// drawing global here (window.paint_path).
+import { window as herdrWindow } from "herdr";
+import { detectPlatform, openExternal } from "./opener.js";
 
 // The watchlist lives in Herdr's shared state (persisted), so every copy sees one list.
 const STORE = "quotr.watchlist.v1";
@@ -72,11 +76,11 @@ function saveSnapshot(quotes, symbols) {
   } catch { /* storage full or unavailable: the next refresh still fills the rows */ }
 }
 
-// Local customization: the same opener for any fixed https link (the Elbstream attribution too).
+// Local customization: opens a fixed https link (the logo sources' attribution links) in the system's
+// browser: macOS `open`, Windows' URL handler, Linux `xdg-open` then `gio open` (opener.js). Never
+// through a shell; not awaited, so a missing or slow opener never holds the UI; failures are silent.
 function openUrl(url) {
-  exec("open", [url])
-    .catch(() => exec("rundll32", ["url.dll,FileProtocolHandler", url]))
-    .catch(() => {});
+  openExternal(url, detectPlatform(herdrWindow), exec).catch(() => {});
 }
 
 // Local customization: Elbstream logos for stocks without a bundled one, cached in a hidden
