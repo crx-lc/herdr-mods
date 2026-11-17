@@ -1,0 +1,11 @@
+# Runtime and machine-specific files never enter this repo.
+# Written by Herdr into every mod folder:
+gpui-kit.d.ts
+jsconfig.json
+# A mod's runtime cache (Quotr's downloaded logos and their index):
+.cache/
+# Personal data lives in Herdr's shared state and localStorage, outside the mod folders.
+node_modules/
+*.log
+.DS_Store
+Thumbs.db

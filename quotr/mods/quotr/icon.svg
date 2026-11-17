@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Herdr Quotr: a "Q" whose tail is a rising price line. Original artwork for this mod. -->
+  <rect width="1024" height="1024" fill="#0B1E36"/>
+  <circle cx="470" cy="470" r="250" fill="none" stroke="#F7F9FC" stroke-width="84"/>
+  <path d="M560 600 L655 520 L730 620 L860 450" fill="none" stroke="#6AB0FF" stroke-width="84"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
