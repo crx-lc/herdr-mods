@@ -101,10 +101,10 @@ or copy this folder to `~/.config/herdr-app/mods/quotr/`. Then
 - **Quotes:** Yahoo Finance's chart endpoint (unofficial, may be rate-limited or unavailable in some
   regions; regular-session prices with exchange delays, plus extended hours for US stocks where Yahoo
   has them) and Binance Spot public market data (24-hour change).
-- **Logos:** AllInvestView Ticker Logos (attribution link required; caching allowed by its FAQ; logos
-  must not be modified) and Elbstream (its terms describe the API as for business customers, ask for a
-  12 pt attribution link and list own caching under its Enterprise tier; this mod shows a smaller link
-  and caches locally, by its author's choice). Check each source's current terms before relying on it.
+- **Online logo sources:** [AllInvestView Ticker Logos](https://www.allinvestview.com/tools/ticker-logos/)
+  and [Elbstream](https://elbstream.com/logos). These are the two online sources currently supported.
+  Source adapters make it easy to add others without changing the panel; the bundled Bitcoin logo is
+  a separate local source. See the logo selection and per-ticker settings above.
 - **Market clock scope:** the Nasdaq schedule represents US market sessions, not the trading hours of
   every symbol in the watchlist. Crypto trades around the clock and other exchanges have their own hours.
 - **Market schedule:** Nasdaq's public market-info endpoint (undocumented, the one behind
