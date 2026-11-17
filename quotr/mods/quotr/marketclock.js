@@ -51,6 +51,7 @@ export function nyParts(utcMs) {
     year, month, day, hour: d.getUTCHours(), minute: d.getUTCMinutes(), second: d.getUTCSeconds(),
     weekday: d.getUTCDay(), date: `${year}-${pad(month)}-${pad(day)}`, zone: offset === -4 ? "EDT" : "EST",
     time: `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`,
+    day: `${WEEKDAYS[d.getUTCDay()]} ${MONTHS[month - 1]} ${day}`, // "Tue Nov 17"
   };
 }
 
@@ -178,17 +179,18 @@ export function marketClock(schedule, now, { maxAgeMs = MAX_AGE_MS, loading = fa
 }
 
 /**
- * The line's parts: left "NY 15:42", phase "Open", event "Closes 16:00", countdown "18m", and right,
+ * The line's parts: left "NY 15:42", day "Tue Nov 17" (New York's date, shown in the panel), phase "Open", event "Closes 16:00", countdown "18m", and right,
  * the last two joined ("Closes 16:00 · 18m"); no event or countdown when the schedule is unavailable.
  */
 export function clockText(state, now) {
   const left = `NY ${state.ny.time}`;
-  if (!state.available) return { left, phase: state.label, event: "", countdown: "", right: "" };
+  const day = state.ny.day;
+  if (!state.available) return { left, day, phase: state.label, event: "", countdown: "", right: "" };
   const e = state.event;
   const verb = e.kind === "close" ? (e.early ? "Early close" : "Closes") : "Opens";
   const event = `${verb} ${formatEventTime(e.at, now)}`;
   const countdown = formatCountdown(e.at - now);
-  return { left, phase: state.label, event, countdown, right: `${event} · ${countdown}` };
+  return { left, day, phase: state.label, event, countdown, right: `${event} · ${countdown}` };
 }
 
 /** Milliseconds until the line next changes: the next second while seconds show, else the next minute. */

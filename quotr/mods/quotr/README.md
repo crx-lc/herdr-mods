@@ -35,7 +35,7 @@ Compared with Pulse at `99f70b2c`:
 **Panel and refresh**
 - A New York market clock under the title (`marketclock.js`, `clockview.js`): New York time, the
   US regular session's state (Open, Pre-market, After-hours, Closed, Weekend, Holiday) and its next
-  open or close with a live countdown ("NY 15:42 · Open · Closes 16:00 · 18m"), early closes included.
+  open or close with a live countdown ("NY Tue Nov 17 15:42 · Open · Closes 16:00 · 18m"), early closes included.
   It runs on its own timer, apart from the quote refresh. Without a current schedule it shows the time
   and "Market schedule unavailable", never a guessed countdown. The one-line band shows it shortened.
 - Last values stay visible during a refresh, with a small updating dot per row; quotes are restored

@@ -123,7 +123,11 @@ export class MarketClock extends View {
         .when(Boolean(short), (el) => el.child(div().text_color(t.dim).child(short)));
     }
     return h_flex().id("quotr-clock").w_full().min_w(0).items_center().gap(6).text_size(11.5).whitespace_nowrap().tooltip(tip)
-      .child(div().flex_none().font_semibold().text_color(t.foreground).child(text.left))
+      // "NY Tue Nov 17 14:16": New York's own date, which can differ from the local one.
+      .child(h_flex().flex_none().gap(4).items_center()
+        .child(div().font_semibold().text_color(t.foreground).child("NY"))
+        .child(div().text_color(t.muted).child(text.day))
+        .child(div().font_semibold().text_color(t.foreground).child(state.ny.time)))
       .child(div().flex_none().text_color(color).child(text.phase))
       // When the panel is narrow, the event's time gives way first; the countdown always shows.
       .when(Boolean(text.right), (el) => el

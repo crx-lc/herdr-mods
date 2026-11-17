@@ -184,3 +184,10 @@ test("a stored schedule survives JSON, and junk doesn't", () => {
     assert.equal(restoreSchedule(junk), null, JSON.stringify(junk));
   }
 });
+
+test("the panel's date is New York's, with its weekday", () => {
+  assert.equal(nyParts(Z("2026-11-17T19:16:00Z")).day, "Tue Nov 17");
+  assert.equal(nyParts(Z("2026-11-18T03:30:00Z")).day, "Tue Nov 17", "22:30 in New York, already Wednesday in UTC");
+  assert.equal(nyParts(Z("2027-01-01T04:59:00Z")).day, "Thu Dec 31");
+  assert.equal(clockText(marketClock(null, Z("2026-11-21T15:00:00Z")), 0).day, "Sat Nov 21", "shown without a schedule too");
+});
