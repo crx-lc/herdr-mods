@@ -4,6 +4,13 @@ A stock and crypto watchlist panel for [Herdr](https://herdr.dev): live quotes w
 sparklines, price-tick flashes, and a detail dialog with history, hover readouts and pre/post-market
 data for US stocks.
 
+## Preview
+
+![Herdr Quotr panel with a New York market clock, stock and crypto quotes, logos and sparklines](../../docs/quotr-panel.png)
+
+An example watchlist from the running mod. Prices and market status are a snapshot, not live data.
+The screenshot is illustrative; it does not set the default watchlist.
+
 ## Based on Pulse
 
 > **Quotr is based on [Pulse](https://github.com/fatwang2/Pulse) by [fatwang2](https://github.com/fatwang2).**
@@ -38,6 +45,7 @@ Compared with Pulse at `99f70b2c`:
   open or close with a live countdown ("NY Tue Nov 17 15:42 · Open · Closes 16:00 · 18m"), early closes included.
   It runs on its own timer, apart from the quote refresh. Without a current schedule it shows the time
   and "Market schedule unavailable", never a guessed countdown. The one-line band shows it shortened.
+- Quotes refresh every 60 seconds while unpaused. The market clock keeps running independently.
 - Last values stay visible during a refresh, with a small updating dot per row; quotes are restored
   from local storage after a reload or restart; failures show "Stale · last updated HH:MM".
 - Price ticks: a short green/red flash and a ▲/▼ since the previous quote (`ticks.js`).
@@ -48,12 +56,15 @@ Compared with Pulse at `99f70b2c`:
 
 **Logos** (`logosource.js`, `logocache.js`)
 - Source adapters, tried in order: files shipped with the mod (`logos-local/`, today the Bitcoin
-  coin), then AllInvestView Ticker Logos, then Elbstream where AllInvestView declines a symbol.
+  coin), then AllInvestView Ticker Logos, then Elbstream where AllInvestView's symbol lookup declines.
+  This is selection priority, not automatic failover after a failed download or empty search result.
+  In Auto, MSTR and STRC deliberately use Elbstream; STRC uses its issuer's MSTR logo.
 - Automatic rules, no per-ticker setup: stocks by their exact Yahoo symbol, crypto pairs by base asset;
   indices and FX/futures get a monogram and no request. A corrections table handles known mismatches.
 - Downloaded once into the mod's `.cache/` (Herdr's `image()` takes local files only), checked before
-  use, never fetched again while present; Refresh re-downloads them one at a time. Transparent logos
-  get a white backdrop.
+  use and reused during automatic quote refreshes. Manual Refresh queues re-downloads one at a time,
+  skipping logos fetched within the last minute; quotes do not wait for them. A failed download keeps
+  the previous good file when available. Transparent logos get a white backdrop.
 - The footer credits each source with a count ("11 logos by AllInvestView ↗").
 
 **Other**
@@ -71,10 +82,18 @@ or copy this folder to `~/.config/herdr-app/mods/quotr/`. Then
 
 ## Configuration
 
+- **First launch:** without saved Quotr or Pulse state, the starter list is AAPL, NVDA, ^GSPC and
+  BTC/USDT. A deliberately saved empty list stays empty. Existing Pulse watchlist and logo preferences
+  are migrated once when the corresponding Quotr state is absent.
 - **Watchlist:** add tickers in the panel (Yahoo symbols such as `AAPL`, `PETR4.SA`, `0700.HK`, or
   Binance pairs such as `BTC/USDT`); remove with ×; Reorder; Pause.
-- **Logo source per ticker:** Change in the ticker's dialog. Defaults and corrections live in
-  `logosource.js` (`LOGO_SOURCES`, `AIV_CORRECTIONS`, `CORRECTIONS`, `LOCAL_FILES`).
+- **Logo source per ticker:** open the asset's detail dialog and click **Change** to cycle through its
+  eligible sources. The choice is saved per ticker and shared by panels using the same Herdr state.
+  No choice means Auto. The current button cycles sources, not arbitrary image URLs or an Auto/None
+  menu. Defaults and corrections live in logosource.js.
+- **Storage:** watchlist and logo choices use persisted Herdr shared state (quotr.watchlist.v1,
+  quotr.logos.v1); quote snapshots and the market schedule use localStorage. Downloaded logos live
+  in the mod's excluded .cache/ directory. Installing the source does not replace that saved state.
 - **Keys:** `quotr.refresh` and `quotr.pause` can be bound in Herdr's `keys.json`.
 
 ## Data sources and limits
@@ -86,9 +105,12 @@ or copy this folder to `~/.config/herdr-app/mods/quotr/`. Then
   must not be modified) and Elbstream (its terms describe the API as for business customers, ask for a
   12 pt attribution link and list own caching under its Enterprise tier; this mod shows a smaller link
   and caches locally, by its author's choice). Check each source's current terms before relying on it.
+- **Market clock scope:** the Nasdaq schedule represents US market sessions, not the trading hours of
+  every symbol in the watchlist. Crypto trades around the clock and other exchanges have their own hours.
 - **Market schedule:** Nasdaq's public market-info endpoint (undocumented, the one behind
-  nasdaq.com's market status), asked once per New York day and every 3 hours while the panel is open,
-  and kept for 24 hours at most. It gives each day's hours and the next trading date; the next day's
+  nasdaq.com's market status), refreshed on a New York date change and every 3 hours while the panel is
+  open. Failed requests retry with backoff; the client can fall back from fetch to curl. Schedules older
+  than 24 hours are not trusted. It gives each day's hours and the next trading date; the next day's
   open is taken as 09:30 ET. New York time follows the US daylight-saving rule in force since 2007
   (Herdr's runtime has no time-zone data). "Regular closed" means only the regular session is known
   closed; the official holiday calendar is at [nasdaqtrader.com](https://www.nasdaqtrader.com/trader.aspx?id=Calendar).
@@ -96,6 +118,14 @@ or copy this folder to `~/.config/herdr-app/mods/quotr/`. Then
 - Logos remain their owners' trademarks and are shown only to identify each asset. No price data is
   guaranteed accurate or real-time.
 
-## Tests
+## Requirements and tests
 
-`node --test .tests` in this folder, plus `herdr-app check` on the installed copy.
+Use Herdr with its mod API. curl must be available for logo downloads and the market-schedule
+fallback. External links use the platform's opener (see above). Node.js is needed for this
+repository's sync script and tests, not for running the installed mod.
+
+From the repository root, run `npm test`.
+From this mod's directory, run `node --test ".tests/*.test.mjs"`.
+
+Run `herdr-app check` on the installed copy for a render/load check. Automated tests do not guarantee
+that the external quote, schedule or logo services are available.

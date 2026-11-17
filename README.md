@@ -29,6 +29,10 @@ node scripts/sync.mjs pull    quotr    # live → repo: bring back changes made 
 herdr-app check ~/.config/herdr-app/mods/quotr
 ```
 
+Run these commands from the repository root. Before install or pull, inspect status and commit
+or back up changes you want to keep: both commands **overwrite differing files at the destination**
+without making a backup. They are one-way copies, not merges.
+
 The script never deletes files and never copies Herdr's runtime files (`gpui-kit.d.ts`,
 `jsconfig.json`) or a mod's `.cache/`. Herdr reloads a mod as soon as one of its files is saved.
 To show a mod as a panel: `herdr-app do pane.split '{"direction":"right","mod":"quotr"}'`.
