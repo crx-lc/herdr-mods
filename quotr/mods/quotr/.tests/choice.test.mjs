@@ -7,16 +7,17 @@ import { LogoCache } from "../logocache.js";
 
 test("the dialog offers only sources that can show the ticker", () => {
   assert.deepEqual(sourcesFor("BTC/USDT").map((s) => s.id), ["allinvestview", "elbstream"]);
-  assert.deepEqual(sourcesFor("MSTR").map((s) => s.id), ["allinvestview", "elbstream"], "AllInvestView is offered even though Auto skips it");
+  assert.deepEqual(sourcesFor("MSTR").map((s) => s.id), ["allinvestview", "elbstream"]);
   assert.deepEqual(sourcesFor("INTR").map((s) => s.id), ["allinvestview", "elbstream"]);
   assert.deepEqual(sourcesFor("^GSPC"), [], "an index: no choice row");
 });
 
 test("a choice forces that source; None is the monogram; Auto and unknown choices keep the usual order", () => {
   const pick = (s, c) => resolveLogo(s, LOGO_SOURCES, c)?.source.id ?? "monogram";
-  assert.equal(pick("MSTR"), "elbstream");
-  assert.equal(pick("MSTR", "auto"), "elbstream");
-  assert.equal(pick("MSTR", "allinvestview"), "allinvestview", "explicit: past Auto's decline");
+  assert.equal(pick("MSTR"), "allinvestview", "the default for every ticker");
+  assert.equal(pick("MSTR", "auto"), "allinvestview");
+  assert.equal(pick("MSTR", "elbstream"), "elbstream", "by Change");
+  assert.equal(pick("MSTR", "allinvestview"), "allinvestview");
   assert.equal(pick("INTR", "elbstream"), "elbstream");
   assert.equal(pick("BTC/USDT", "allinvestview"), "allinvestview");
   assert.equal(pick("INTR", "none"), "monogram");
@@ -81,8 +82,8 @@ test("a broken preference reader never breaks logos", async () => {
 
 test("Change cycles through the ticker's sources from the one shown now, wrapping round", async () => {
   const { nextLogoSource } = await import("../logosource.js");
-  assert.equal(nextLogoSource("MSTR"), "allinvestview", "Auto shows Elbstream: next is AllInvestView");
-  assert.equal(nextLogoSource("MSTR", undefined, "allinvestview"), "elbstream", "and back");
+  assert.equal(nextLogoSource("MSTR"), "elbstream", "Auto shows AllInvestView: next is Elbstream");
+  assert.equal(nextLogoSource("MSTR", undefined, "elbstream"), "allinvestview", "and back");
   assert.equal(nextLogoSource("INTR"), "elbstream", "Auto shows AllInvestView");
   const order = [];
   let c;

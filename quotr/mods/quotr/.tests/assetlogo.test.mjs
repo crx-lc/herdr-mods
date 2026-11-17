@@ -14,7 +14,7 @@ const MOD = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 // A sample list covering crypto, US stocks, ADRs and a preferred share.
 const SAMPLE = ["BTC/USDT", "INTR", "AZUL", "MSFT", "NU", "PBR", "BDORY", "NVDA", "MSTR", "STRC"];
 
-test("AllInvestView, then Elbstream (only where AllInvestView declines); no logo files ship with the mod", () => {
+test("AllInvestView, then Elbstream; no logo files ship with the mod", () => {
   assert.deepEqual(LOGO_SOURCES.map((s) => s.id), ["allinvestview", "elbstream"]);
   assert.equal(fs.existsSync(path.join(MOD, "logos")), false, "no bundled logo folder");
   assert.equal(fs.existsSync(path.join(MOD, "logos.js")), false, "no bundled logo map");
@@ -23,7 +23,7 @@ test("AllInvestView, then Elbstream (only where AllInvestView declines); no logo
   assert.equal(sourceById("simple-icons"), null);
 });
 
-test("Elbstream (if re-activated): every asset in a sample list resolves to its checked logo", () => {
+test("Elbstream: every asset in a sample list resolves to its checked logo", () => {
   const urls = Object.fromEntries(SAMPLE.map((s) => [s, resolveLogo(s, [ELBSTREAM])?.url ?? null]));
   assert.deepEqual(urls, {
     "BTC/USDT": "https://api.elbstream.com/logos/crypto/BTC",

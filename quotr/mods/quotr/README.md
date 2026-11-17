@@ -67,10 +67,9 @@ Compared with Pulse at `99f70b2c`:
 - Asset logos at the start of each row, with a monogram fallback.
 
 **Logos** (`logosource.js`, `logocache.js`)
-- Source adapters, tried in order: AllInvestView Ticker Logos, then Elbstream where AllInvestView's
-  symbol lookup declines.
-  This is selection priority, not automatic failover after a failed download or empty search result.
-  In Auto, MSTR and STRC deliberately use Elbstream; STRC uses its issuer's MSTR logo.
+- Two sources: AllInvestView Ticker Logos is the default for every ticker; Elbstream is the
+  alternative, chosen per ticker with **Change** in its dialog. There is no automatic failover: a
+  failed download or an empty search result leaves the monogram until you switch the source.
 - Automatic rules, no per-ticker setup: stocks by their exact Yahoo symbol, crypto pairs by base asset;
   indices and FX/futures get a monogram and no request. A corrections table handles known mismatches.
 - Downloaded once into the mod's `.cache/` (Herdr's `image()` takes local files only), checked before

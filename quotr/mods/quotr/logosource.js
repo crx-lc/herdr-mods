@@ -37,13 +37,9 @@ const LISTING = /^[A-Z0-9][A-Z0-9.\-]{0,31}$/;
  *   - indices and FX/futures  → no request, monogram
  *   - no exact row, or no website on it → no logo (monogram; asked again hours later)
  */
-// The only list to edit for AllInvestView: a symbol → the domain to use instead (or null for the
-// monogram) when its automatic choice is wrong. Each was looked at on 2026-11-17.
+// The only list to edit for AllInvestView: a symbol → the domain to use instead when its automatic
+// choice is wrong (or null to leave the symbol to the next source in Auto). Looked at on 2026-11-17.
 const AIV_CORRECTIONS = {
-  // Strategy: microstrategy.com is a promo banner and strategy.com a wide wordmark, both tiny in a tile;
-  // the owner chose Elbstream's square ₿ icon (2026-11-17), so AllInvestView declines these two.
-  MSTR: null,
-  STRC: null, // Strategy's preferred: its issuer's logo
   GOOG: "google.com",   // abc.xyz is the "Alphabet" wordmark, unreadable at icon size
   GOOGL: "google.com",
 };
@@ -86,8 +82,8 @@ export const ALLINVESTVIEW = {
 };
 
 /**
- * Elbstream (https://elbstream.com/logos): the second source. In Auto it shows what AllInvestView
- * declines; any ticker can be switched to it with Change in its dialog.
+ * Elbstream (https://elbstream.com/logos): the second source, never the default: a ticker shows its
+ * logo only after being switched to it with Change in its dialog.
  * Terms (https://elbstream.com/terms, 2025-06-09): "intended for business customers only"; Logo API
  * "free to use with proper attribution"; "you must link back to Elbstream on any page where a logo is
  * shown", "minimum font size of 12 points"; own caching is listed under its Enterprise tier.
@@ -127,8 +123,9 @@ export const ELBSTREAM = {
   },
 };
 
-// Active sources, in order: AllInvestView, then Elbstream only for what AllInvestView declines (its
-// corrections set to null: MSTR, STRC). Elbstream's link shows only while one of its logos is on screen.
+// The sources, in order. AllInvestView handles every stock and pair, so it is the default for all of
+// them; Elbstream shows only for a ticker switched to it with Change (or one a null correction above
+// leaves to it). Each source's link shows only while one of its logos is on screen.
 export const LOGO_SOURCES = [ALLINVESTVIEW, ELBSTREAM];
 export const ALL_SOURCES = [ALLINVESTVIEW, ELBSTREAM];
 

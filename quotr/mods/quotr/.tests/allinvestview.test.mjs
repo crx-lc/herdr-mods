@@ -30,7 +30,7 @@ const host = (extra = {}) => ({
   },
 });
 
-test("AllInvestView, then Elbstream for what AllInvestView declines; AIV link has no minimum size", () => {
+test("AllInvestView first, then Elbstream; AIV link has no minimum size", () => {
   assert.deepEqual(LOGO_SOURCES.map((s) => s.id), ["allinvestview", "elbstream"]);
   assert.deepEqual(ALLINVESTVIEW.attribution, {
     text: "Logos by AllInvestView ↗", url: "https://www.allinvestview.com/tools/ticker-logos/", minPx: null,
@@ -55,14 +55,14 @@ test("crypto: BASE-USD's row, never a same-named stock", async () => {
   assert.deepEqual(h.searches, [`${SEARCH}ETH-USD`, `${SEARCH}XTZ-USD`]);
 });
 
-test("corrections: GOOG/GOOGL → google.com without a search; MSTR/STRC declined, so Elbstream's ₿ square", async () => {
+test("AllInvestView is the default for every stock and pair; corrections: GOOG/GOOGL → google.com without a search", async () => {
   const h = host();
-  assert.equal(ALLINVESTVIEW.lookup("MSTR"), null);
-  assert.equal(ALLINVESTVIEW.lookup("STRC"), null);
-  assert.equal(resolveLogo("MSTR").source.id, "elbstream");
-  assert.equal(resolveLogo("MSTR").url, "https://api.elbstream.com/logos/symbol/MSTR");
-  assert.equal(resolveLogo("STRC").url, "https://api.elbstream.com/logos/symbol/MSTR", "the issuer's icon");
-  assert.equal(resolveLogo("MSFT").source.id, "allinvestview", "Elbstream only where AllInvestView declines");
+  for (const s of ["MSTR", "STRC", "MSFT", "INTR", "PETR4.SA", "BTC/USDT", "XTZ/USDT"]) {
+    assert.equal(resolveLogo(s).source.id, "allinvestview", s);
+    assert.equal(resolveLogo(s, LOGO_SOURCES, "elbstream").source.id, "elbstream", `${s}: Elbstream by choice`);
+  }
+  assert.deepEqual(Object.keys(ALLINVESTVIEW.corrections), ["GOOG", "GOOGL"], "nothing is left to Elbstream by default");
+  assert.equal(resolveLogo("STRC", LOGO_SOURCES, "elbstream").url, "https://api.elbstream.com/logos/symbol/MSTR", "by choice: the issuer's icon");
   assert.equal(await ALLINVESTVIEW.imageUrl("GOOG", h), `${CDN}google.com`);
   assert.equal(await ALLINVESTVIEW.imageUrl("GOOGL", h), `${CDN}google.com`);
   assert.deepEqual(h.searches, []);
