@@ -6,7 +6,7 @@
 import { View, div, image, PathBuilder, Background } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { closeOverlay, exec, nextCommand, openOverlay, props, setShared, settings, shared, theme } from "herdr";
-// Local customization: the Elbstream logo cache.
+// Local customization: the logo cache (its folder, and no downloads during herdr-app check).
 import { appHome, checking } from "herdr";
 import * as fs from "fs/promises";
 import { CACHE, LogoCache } from "./logocache.js";
@@ -53,10 +53,6 @@ const brand = () => (settings().dark === false ? "#1066C6" : "#6AB0FF");
 // calls; a reload of the mod starts it empty. Exported only so a check harness can seed it.
 export const HISTORY = new HistoryStore();
 
-// The site, in the system's browser: the one program the mod runs, and only on a click.
-// macOS has `open`; on Windows it is missing (exec rejects), so fall back to the
-// URL protocol handler, which takes the URL as one argument with no shell (the
-// URLs contain `&`, which `cmd /c start` would split).
 // Local customization: "13:05" today, "Nov 16 13:05" before; "unknown" without a time.
 function stamp(t, now) {
   if (!(t > 0)) return "unknown";
@@ -453,7 +449,7 @@ export default class Quotr extends View {
   // Local customization: an asset's cached logo (logosource.js / logocache.js), drawn over its
   // initial. The initial is always there underneath, so a symbol without a logo, or a logo file that
   // is missing or won't load, shows a neat monogram; nothing here waits on the network.
-  // `logos: false` (the one-line band: no room for a 12 pt attribution) shows the monogram only.
+  // `logos: false` (the one-line band: no room for the sources' attribution links) shows the monogram only.
   assetIcon(symbol, size, t, { logos = true } = {}) {
     const logo = assetLogo(symbol);
     const path = logos ? LOGOS.pathFor(symbol) : null;
@@ -525,8 +521,8 @@ export default class Quotr extends View {
     });
   }
 
-  // Local customization: one attribution link per logo source shown among `symbols` (today only
-  // Elbstream, whose free tier asks for a visible link of at least 12 pt = 16 px wherever its logos show).
+  // Local customization: one attribution link per logo source shown among `symbols`, each with its
+  // count. Both sources ask for a visible link wherever their logos show.
   logoCredits(symbols, t) {
     const counts = new Map();
     for (const s of symbols) {
@@ -534,7 +530,7 @@ export default class Quotr extends View {
       if (source?.attribution) counts.set(source, (counts.get(source) ?? 0) + 1);
     }
     // "11 logos by AllInvestView ↗" in the panel, "Logo by Elbstream ↗" in a ticker's dialog. All at the
-    // footer's 10.5 px (the owner's choice, also for Elbstream), in Pulse's blue.
+    // footer's 10.5 px, in the brand blue.
     const single = symbols.length === 1;
     return [...counts].map(([source, n]) => {
       const by = source.attribution.text.replace(/^Logos by /, "");

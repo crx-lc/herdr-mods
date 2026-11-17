@@ -20,8 +20,8 @@ const PAIR = /^([A-Z0-9]{1,20})\/[A-Z0-9]{1,20}$/;
 const LISTING = /^[A-Z0-9][A-Z0-9.\-]{0,31}$/;
 
 /**
- * AllInvestView Ticker Logos (https://www.allinvestview.com/tools/ticker-logos/): the active source,
- * chosen by the owner on 2026-11-17. Read on that date:
+ * AllInvestView Ticker Logos (https://www.allinvestview.com/tools/ticker-logos/): the first source.
+ * Its terms as read on 2026-11-17:
  *   - "Ticker Logos requires no API key, no signup, and no registration." Free for personal use.
  *   - FAQ: "You may cache or proxy logos on your own servers for performance. A visible dofollow
  *     attribution link to AllInvestView is still required when using cached logos."
@@ -86,8 +86,8 @@ export const ALLINVESTVIEW = {
 };
 
 /**
- * Elbstream (https://elbstream.com/logos): kept, not active (owner, 2026-11-17: its required 12 pt
- * attribution link looked bad). Put it back in LOGO_SOURCES to use it again.
+ * Elbstream (https://elbstream.com/logos): the second source. In Auto it shows what AllInvestView
+ * declines; any ticker can be switched to it with Change in its dialog.
  * Terms (https://elbstream.com/terms, 2025-06-09): "intended for business customers only"; Logo API
  * "free to use with proper attribution"; "you must link back to Elbstream on any page where a logo is
  * shown", "minimum font size of 12 points"; own caching is listed under its Enterprise tier.
@@ -118,7 +118,7 @@ export const ELBSTREAM = {
   id: "elbstream",
   name: "Elbstream",
   api: "https://api.elbstream.com/logos/",
-  // Elbstream asks for at least 12 pt; the owner chose the small footer size anyway (2026-11-17).
+  // Its terms ask for a 12 pt link (termsMinPx); the link is shown at the footer's size, like the other source's.
   attribution: { text: "Logos by Elbstream ↗", url: "https://elbstream.com", minPx: null, termsMinPx: 16 },
   corrections: CORRECTIONS,
   lookup(symbol) {

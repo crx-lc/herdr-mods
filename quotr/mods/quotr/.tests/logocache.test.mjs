@@ -1,5 +1,5 @@
 // Local customization tests for the logo cache (logocache.js) over the sources in logosource.js.
-// Run: node --test "%USERPROFILE%\.config\herdr-app\mods\quotr\.tests"
+// Run: npm test from the repository root, or node --test ".tests/*.test.mjs" in the mod's folder.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { CACHE, LogoCache, sniffImage } from "../logocache.js";
@@ -8,7 +8,7 @@ import { ELBSTREAM, resolveLogo } from "../logosource.js";
 const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 73, 72, 68, 82]);
 const SVG = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 60"><rect width="60" height="60" fill="#FA660F"/></svg>');
 const HTML = new TextEncoder().encode("<html><body>Service unavailable</body></html>");
-const ELB = [ELBSTREAM]; // these tests pin the Elbstream adapter (kept, not active)
+const ELB = [ELBSTREAM]; // these tests pin the Elbstream adapter on its own
 const url = (s) => resolveLogo(s, ELB)?.url ?? null;
 
 // An in-memory host: files, a fake network keyed by URL, a clock, and a log of downloads.

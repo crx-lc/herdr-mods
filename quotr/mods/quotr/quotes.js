@@ -4,16 +4,10 @@
 // on quotes, plus decodeKlinePoints, for the detail chart's hover readout.
 import { UTC_ZONE, timedPoints, yahooTimeZone } from "./readout.js";
 
-// The only two hosts Pulse contacts.
+// The quote sources. Every host the mod contacts is listed in README.md, "Data sources and limits".
 export const YAHOO_CHART = "https://query1.finance.yahoo.com/v8/finance/chart/";
 export const BINANCE_TICKERS = "https://data-api.binance.vision/api/v3/ticker/24hr";
 export const BINANCE_KLINES = "https://data-api.binance.vision/api/v3/klines";
-// The one page the mod opens, on a click (`open`, the system's browser), tagged
-// with where the click came from.
-export const PULSE_URLS = {
-  panel: "https://www.pulseticker.app/?utm_source=herdr&utm_medium=mod&utm_content=panel",
-  detail: "https://www.pulseticker.app/?utm_source=herdr&utm_medium=mod&utm_content=detail",
-};
 // Shown until the person saves a watchlist of their own.
 export const STARTER_SYMBOLS = ["AAPL", "NVDA", "^GSPC", "BTC/USDT"];
 export const BINANCE_BATCH = 100;

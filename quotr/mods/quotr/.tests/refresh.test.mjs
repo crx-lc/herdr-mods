@@ -1,6 +1,6 @@
 // Local customization tests for the refresh round: existing data kept, bounded concurrency,
 // slow and failing quotes, stale data, overlapping refreshes, and independence from logos.
-// Run: node --test "%USERPROFILE%\.config\herdr-app\mods\quotr\.tests"
+// Run: npm test from the repository root, or node --test ".tests/*.test.mjs" in the mod's folder.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { Watchlist, YAHOO_CONCURRENCY, YAHOO_SPACING_MS } from "../watchlist.js";

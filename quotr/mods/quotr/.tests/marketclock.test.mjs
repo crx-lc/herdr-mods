@@ -1,6 +1,6 @@
 // Tests for marketclock.js: New York time across DST, Nasdaq's schedule answer, the session phase,
 // the next open or close with its countdown, and every way the schedule can be missing or untrustworthy.
-// Run: node --test "%USERPROFILE%\.config\herdr-app\mods\quotr\.tests"
+// Run: npm test from the repository root, or node --test ".tests/*.test.mjs" in the mod's folder.
 import test from "node:test";
 import assert from "node:assert/strict";
 import {

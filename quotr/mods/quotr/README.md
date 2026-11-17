@@ -18,7 +18,7 @@ and installs it without touching your other mods. To install by hand, see
 
 ## Preview
 
-![Herdr Quotr panel with a New York market clock, stock and crypto quotes, logos and sparklines](../../preview.png)
+![Herdr Quotr panel with a New York market clock, stock and crypto quotes, logos and sparklines](https://raw.githubusercontent.com/crx-lc/herdr-mods/main/quotr/preview.png)
 
 An example watchlist from the running mod. Prices and market status are a snapshot, not live data.
 The screenshot is illustrative; it does not set the default watchlist.
@@ -135,7 +135,7 @@ fallback. External links use the platform's opener (see above). Node.js is neede
 repository's sync script and tests, not for running the installed mod.
 
 From the repository root, run `npm test`.
-From this mod's directory, run `node --test ".tests/*.test.mjs"`.
+From this mod's directory, run `node --test ".tests/*.test.mjs"`. Both need Node 22 or later.
 
 Run `herdr-app check` on the installed copy for a render/load check. Automated tests do not guarantee
 that the external quote, schedule or logo services are available.

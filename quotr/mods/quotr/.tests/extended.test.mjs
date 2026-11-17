@@ -1,7 +1,7 @@
 // Local customization tests for pre-market / after-hours (extended.js and its wiring).
 // Fixtures follow the shape of live Yahoo chart responses (range=2d, interval=5m,
 // includePrePost=true) checked for INTR, AAPL, NU, 0700.HK, VOD.L, 7203.T and ^GSPC in Nov 2026.
-// Run: node --test "%USERPROFILE%\.config\herdr-app\mods\quotr\.tests"
+// Run: npm test from the repository root, or node --test ".tests/*.test.mjs" in the mod's folder.
 import test from "node:test";
 import assert from "node:assert/strict";
 import {

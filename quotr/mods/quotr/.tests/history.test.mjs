@@ -1,5 +1,5 @@
 // Local customization tests for history.js (1W / 1M / 1Y in the detail dialog).
-// Run: node --test "%USERPROFILE%\.config\herdr-app\mods\quotr\.tests"
+// Run: npm test from the repository root, or node --test ".tests/*.test.mjs" in the mod's folder.
 // The folder is hidden, so Herdr neither loads it nor reloads the mod when it changes.
 import test from "node:test";
 import assert from "node:assert/strict";

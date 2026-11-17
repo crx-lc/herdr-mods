@@ -1,5 +1,5 @@
 // Local customization tests for per-ticker logo choices (resolveLogo's choice, sourcesFor, the cache).
-// Run: node --test "%USERPROFILE%\.config\herdr-app\mods\quotr\.tests"
+// Run: npm test from the repository root, or node --test ".tests/*.test.mjs" in the mod's folder.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { LOGO_SOURCES, resolveLogo, sourcesFor } from "../logosource.js";

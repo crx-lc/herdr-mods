@@ -1,6 +1,6 @@
 // Tests for opener.js: which program opens a link on each platform, what happens when it can't,
 // and which URLs are refused. Herdr's exec is faked; nothing is launched.
-// Run: node --test "%USERPROFILE%\.config\herdr-app\mods\quotr\.tests"
+// Run: npm test from the repository root, or node --test ".tests/*.test.mjs" in the mod's folder.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { normalizePlatform, openExternal, openersFor, safeUrl } from "../opener.js";

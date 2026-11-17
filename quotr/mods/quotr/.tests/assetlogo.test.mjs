@@ -1,6 +1,6 @@
 // Local customization tests for logo sources (logosource.js), monograms (assetlogo.js) and the
 // logo file check (svgcheck.js). Logos come from the online sources only; none ship with the mod.
-// Run: node --test "%USERPROFILE%\.config\herdr-app\mods\quotr\.tests"
+// Run: npm test from the repository root, or node --test ".tests/*.test.mjs" in the mod's folder.
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -77,7 +77,7 @@ test("an adapter added later is used after Elbstream, and only https URLs count"
   assert.equal(resolveLogo("^BAD", sources), null, "not https: refused");
 });
 
-test("Elbstream's attribution: its link, shown small by the owner's choice (its terms ask 12 pt, recorded)", () => {
+test("Elbstream's attribution: its link, at the footer's size (the size its terms ask is recorded)", () => {
   assert.deepEqual(ELBSTREAM.attribution, { text: "Logos by Elbstream ↗", url: "https://elbstream.com", minPx: null, termsMinPx: 16 });
 });
 
