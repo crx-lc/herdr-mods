@@ -42,13 +42,19 @@ node scripts/sync.mjs pull    quotr    # live → repo: bring back changes made 
 herdr-app check ~/.config/herdr-app/mods/quotr
 ```
 
-Run these commands from the repository root. Before install or pull, inspect status and commit
-or back up changes you want to keep: both commands **overwrite differing files at the destination**
-without making a backup. They are one-way copies, not merges.
+Run these commands from the repository root (`npm run status -- quotr` and
+`npm run install-mod -- quotr` are shortcuts for the first two). Check status first: install and
+pull are one-way copies, not merges, and **overwrite differing files at the destination**.
 
-The script never deletes files and never copies Herdr's runtime files (`gpui-kit.d.ts`,
-`jsconfig.json`) or a mod's `.cache/`. Herdr reloads a mod as soon as one of its files is saved.
-To show a mod as a panel: `herdr-app do pane.split '{"direction":"right","mod":"quotr"}'`.
+- Every file about to be overwritten or removed is first copied to
+  `.backups/<mod>-<command>-<time>/` in this repository (ignored by git; set `HERDR_MODS_BACKUPS`
+  to put it elsewhere).
+- Files that exist only at the destination are listed and left alone. Add `--prune` to remove
+  them, for example after a file was deleted from the repo: `node scripts/sync.mjs install quotr --prune`.
+- Herdr's runtime files (`gpui-kit.d.ts`, `jsconfig.json`) and a mod's `.cache/` are never
+  copied, overwritten or removed.
+
+Herdr reloads a mod as soon as one of its files is saved. To show a mod as a panel: `herdr-app do pane.split '{"direction":"right","mod":"quotr"}'`.
 
 ## Tests
 
@@ -56,8 +62,14 @@ To show a mod as a panel: `herdr-app do pane.split '{"direction":"right","mod":"
 npm test
 ```
 
-Runs every mod's `.tests` and the sync script's tests with Node's built-in test runner (Node 20+).
-Also run `herdr-app check <mod folder>` after a change: it loads and renders the mod once.
+Runs every mod's `.tests` and the sync script's tests with Node's built-in test runner. It needs
+Node 22 or later (the test script uses glob patterns, which older versions don't expand). The same
+tests run on GitHub for every push, on Linux and Windows.
+
+Also run `herdr-app check <mod folder>` after a change: it loads and renders the mod once. It has
+no network and no window, so it can't show whether a request or a link works.
+
+Adding a mod, or changing one with an agent: see [AGENTS.md](AGENTS.md).
 
 ## License
 

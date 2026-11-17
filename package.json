@@ -7,5 +7,8 @@
     "test": "node --test \"*/mods/*/.tests/*.test.mjs\" \"scripts/*.test.mjs\"",
     "status": "node scripts/sync.mjs status",
     "install-mod": "node scripts/sync.mjs install"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }
