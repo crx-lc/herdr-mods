@@ -4,9 +4,21 @@ A stock and crypto watchlist panel for [Herdr](https://herdr.dev): live quotes w
 sparklines, price-tick flashes, and a detail dialog with history, hover readouts and pre/post-market
 data for US stocks.
 
+## Install
+
+Open an agent in Herdr and ask it:
+
+```text
+Read ~/.config/herdr-app/AGENTS.md, then add this mod: https://github.com/crx-lc/herdr-mods/tree/main/quotr
+```
+
+The agent reads the mod's files, tells you what it reaches (see [Data sources and limits](#data-sources-and-limits))
+and installs it without touching your other mods. To install by hand, see
+[Installing and updating](#installing-and-updating).
+
 ## Preview
 
-![Herdr Quotr panel with a New York market clock, stock and crypto quotes, logos and sparklines](../../docs/quotr-panel.png)
+![Herdr Quotr panel with a New York market clock, stock and crypto quotes, logos and sparklines](../../preview.png)
 
 An example watchlist from the running mod. Prices and market status are a snapshot, not live data.
 The screenshot is illustrative; it does not set the default watchlist.
@@ -75,7 +87,7 @@ Compared with Pulse at `99f70b2c`:
 
 ## Installing and updating
 
-From this repository: `node scripts/sync.mjs install quotr` (see the [root README](../../../README.md)),
+With an agent: the prompt under [Install](#install); ask the same again to update. From a clone of this repository: `node scripts/sync.mjs install quotr` (see the [root README](../../../README.md)),
 or copy this folder to `~/.config/herdr-app/mods/quotr/`. Then
 `herdr-app check ~/.config/herdr-app/mods/quotr` and open it as a panel:
 `herdr-app do pane.split '{"direction":"right","mod":"quotr"}'`.
