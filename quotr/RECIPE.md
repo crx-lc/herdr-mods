@@ -76,7 +76,7 @@ A panel 300px wide in the theme's `chrome` background with `foreground` text at 
 ## Watch out
 
 - The mod reaches the network (Yahoo Finance, Binance, Nasdaq, AllInvestView and its CDN, Elbstream), runs `curl` and a URL opener, and writes logo files inside its own `.cache/` folder.
-- Check each source's terms before relying on it. AllInvestView asks for a visible attribution link wherever its logos show and that logos stay unmodified. Elbstream's terms describe its API as for business customers, ask for a 12pt link and list own caching under a paid tier; this build shows a smaller link and caches locally.
+- Check each source's terms before relying on it. Both logo sources ask for a visible attribution link wherever their logos show; keep the footer and dialog links, and store logos unmodified.
 - Yahoo's chart endpoint and Nasdaq's market-info are unofficial. Check Nasdaq's answer strictly and never show a countdown from a schedule that is missing, old or used up. The next day's open is taken as 09:30 ET.
 - `herdr-app check` blocks network access, so it can't show whether a request works; a request can also hang. Race requests against `cx.timer.after`, not `cx.sleep`, and cap how long "loading" can show.
 - `herdr-app check` also has no window: `window()` returns null there, so fall back to `process.platform`.
