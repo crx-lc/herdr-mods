@@ -143,8 +143,6 @@ export class LogoCache {
    */
   pathFor(symbol) {
     const now = resolveLogo(symbol, this.sources, this.choice(symbol));
-    // A file shipped with the mod: shown as is, nothing cached or downloaded.
-    if (now?.source.localPath) return now.source.localPath(symbol);
     const e = this.index[symbol];
     if (!e || !e.file || !FILE.test(e.file)) return null;
     if (!now || now.key !== keyOf(e) || now.source.id !== e.source) return null;
@@ -159,8 +157,6 @@ export class LogoCache {
    */
   logoStyle(symbol) {
     if (!this.pathFor(symbol)) return null;
-    const local = resolveLogo(symbol, this.sources, this.choice(symbol))?.source;
-    if (local?.localPath) return local.styleFor?.(symbol) ?? "full";
     const e = this.index[symbol];
     if (e.opaque === true) return "full";
     return /\.svg$/.test(e.file) ? "inset" : "backdrop";
@@ -174,14 +170,13 @@ export class LogoCache {
   /** The source whose logo is shown for `symbol` (for its attribution), or null. */
   sourceFor(symbol) {
     if (!this.pathFor(symbol)) return null;
-    const want = resolveLogo(symbol, this.sources, this.choice(symbol));
-    return want?.source.localPath ? want.source : sourceById(this.index[symbol].source, this.sources);
+    return sourceById(this.index[symbol].source, this.sources);
   }
 
   /** Whether `symbol` should be fetched now: mapped, and its logo not present (missing, dropped as damaged, or for another mapping); not recently failed. A present logo is never fetched again. */
   needs(symbol, now) {
     const want = resolveLogo(symbol, this.sources, this.choice(symbol));
-    if (!want || want.source.localPath) return false;
+    if (!want) return false;
     const e = this.index[symbol];
     if (!e) return true;
     const wait = e.transient || e.error === "HTTP 0" ? CACHE.transientRetryMs : CACHE.retryMs;
@@ -206,7 +201,7 @@ export class LogoCache {
    */
   async refresh(symbol) {
     const want = resolveLogo(symbol, this.sources, this.choice(symbol));
-    if (!want || want.source.localPath || this.busy.has(symbol)) return false;
+    if (!want || this.busy.has(symbol)) return false;
     const { source, key } = want;
     let url = key;
     this.busy.add(symbol);

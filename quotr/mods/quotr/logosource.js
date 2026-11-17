@@ -127,49 +127,10 @@ export const ELBSTREAM = {
   },
 };
 
-/**
- * Local: icon files shipped with the mod (mods/quotr/logos-local/), used before any download source.
- * Only for assets whose online logo is a wide wordmark that is unreadable at icon size.
- *   - Bitcoin (any BTC/… pair): btc.svg from cryptocurrency-icons 0.18.1 (npm), CC0-1.0, unmodified,
- *     sha256 5a8131ecdf855b12cb56080aeeeefea266976529c45b2d58c284a13b7519f4ca (see logos-local/SOURCES.md).
- * No requests, no attribution (public domain).
- */
-const LOCAL_FILES = {
-  "crypto:BTC": { path: "mods/quotr/logos-local/btc.svg", style: "full" },
-};
-
-function localKey(symbol) {
-  const s = String(symbol ?? "");
-  const pair = PAIR.exec(s);
-  const key = pair ? `crypto:${pair[1]}` : `stock:${s}`;
-  return own(LOCAL_FILES, key) ? key : null;
-}
-
-export const LOCAL = {
-  id: "local",
-  name: "Bundled",
-  attribution: null,
-  files: LOCAL_FILES,
-  lookup(symbol) {
-    const key = localKey(symbol);
-    return key ? `local:${key}` : null;
-  },
-  /** The shipped file for `symbol` (relative to the Herdr home), or null. */
-  localPath(symbol) {
-    const key = localKey(symbol);
-    return key ? LOCAL_FILES[key].path : null;
-  },
-  styleFor(symbol) {
-    const key = localKey(symbol);
-    return key ? LOCAL_FILES[key].style : null;
-  },
-};
-
-// Active sources, in order: shipped files, then AllInvestView, then Elbstream only for what AllInvestView
-// declines (its corrections set to null: MSTR, STRC). Elbstream's 16 px link shows only while one of its
-// logos is on screen.
-export const LOGO_SOURCES = [LOCAL, ALLINVESTVIEW, ELBSTREAM];
-export const ALL_SOURCES = [LOCAL, ALLINVESTVIEW, ELBSTREAM];
+// Active sources, in order: AllInvestView, then Elbstream only for what AllInvestView declines (its
+// corrections set to null: MSTR, STRC). Elbstream's link shows only while one of its logos is on screen.
+export const LOGO_SOURCES = [ALLINVESTVIEW, ELBSTREAM];
+export const ALL_SOURCES = [ALLINVESTVIEW, ELBSTREAM];
 
 /**
  * { source, key, url } from the first source that handles this symbol, or null (the monogram).

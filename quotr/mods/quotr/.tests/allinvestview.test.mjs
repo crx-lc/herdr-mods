@@ -30,8 +30,8 @@ const host = (extra = {}) => ({
   },
 });
 
-test("shipped files, then AllInvestView, then Elbstream for what AllInvestView declines; AIV link has no minimum size", () => {
-  assert.deepEqual(LOGO_SOURCES.map((s) => s.id), ["local", "allinvestview", "elbstream"]);
+test("AllInvestView, then Elbstream for what AllInvestView declines; AIV link has no minimum size", () => {
+  assert.deepEqual(LOGO_SOURCES.map((s) => s.id), ["allinvestview", "elbstream"]);
   assert.deepEqual(ALLINVESTVIEW.attribution, {
     text: "Logos by AllInvestView ↗", url: "https://www.allinvestview.com/tools/ticker-logos/", minPx: null,
   });
@@ -157,36 +157,9 @@ test("drawing style: raster with alpha full size on a backdrop, transparent SVG 
   assert.equal(c.logoStyle("NOPE"), null);
 });
 
-// --- Local shipped files (Bitcoin's coin icon) ahead of AllInvestView ---
-import fs from "node:fs";
-import path from "node:path";
-import crypto from "node:crypto";
-import { fileURLToPath } from "node:url";
-import { LOCAL } from "../logosource.js";
-const MOD = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-
-test("any BTC pair uses the shipped Bitcoin coin: no search, no download, no attribution", async () => {
-  for (const s of ["BTC/USDT", "BTC/BRL"]) {
-    const want = resolveLogo(s);
-    assert.equal(want.source, LOCAL, s);
-    assert.equal(LOCAL.localPath(s), "mods/quotr/logos-local/btc.svg");
-  }
-  const h = cacheHost();
-  const c = new LogoCache(h);
-  await c.load();
-  assert.equal(c.pathFor("BTC/USDT"), "mods/quotr/logos-local/btc.svg");
-  assert.equal(c.needs("BTC/USDT", h.clock), false);
-  assert.equal(await c.refresh("BTC/USDT"), false, "nothing to fetch");
-  assert.deepEqual(h.downloads, []);
-  assert.equal(c.sourceFor("BTC/USDT"), LOCAL);
-  assert.equal(c.sourceFor("BTC/USDT").attribution, null, "public domain: no link needed for it");
-  assert.equal(c.logoStyle("BTC/USDT"), "full", "a filled coin");
-  assert.equal(resolveLogo("ETH/USDT").source, ALLINVESTVIEW, "other coins still from AllInvestView");
-});
-
-test("the shipped Bitcoin file is the recorded CC0 icon, unmodified", () => {
-  const bytes = fs.readFileSync(path.join(MOD, "logos-local", "btc.svg"));
-  assert.equal(crypto.createHash("sha256").update(bytes).digest("hex"), "5a8131ecdf855b12cb56080aeeeefea266976529c45b2d58c284a13b7519f4ca");
-  assert.match(bytes.toString(), /<circle cx="16" cy="16" r="16" fill="#F7931A"\/>/);
-  assert.match(fs.readFileSync(path.join(MOD, "logos-local", "SOURCES.md"), "utf8"), /CC0-1\.0/);
+// --- Bitcoin: from the two online sources, like any other coin ---
+test("BTC pairs come from AllInvestView in Auto, with Elbstream's crypto/BTC as the alternative", () => {
+  for (const s of ["BTC/USDT", "BTC/BRL"]) assert.equal(resolveLogo(s).source, ALLINVESTVIEW, s);
+  assert.equal(resolveLogo("BTC/USDT", LOGO_SOURCES, "elbstream").url, "https://api.elbstream.com/logos/crypto/BTC");
+  assert.equal(LOGO_SOURCES.some((s) => s.localPath), false, "no files shipped with the mod");
 });

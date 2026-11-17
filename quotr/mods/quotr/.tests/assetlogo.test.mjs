@@ -1,5 +1,5 @@
 // Local customization tests for logo sources (logosource.js), monograms (assetlogo.js) and the
-// logo file check (svgcheck.js). Elbstream is the only source; there are no bundled logos.
+// logo file check (svgcheck.js). Logos come from the online sources only; none ship with the mod.
 // Run: node --test "%USERPROFILE%\.config\herdr-app\mods\quotr\.tests"
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -14,8 +14,8 @@ const MOD = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 // A sample list covering crypto, US stocks, ADRs and a preferred share.
 const SAMPLE = ["BTC/USDT", "INTR", "AZUL", "MSFT", "NU", "PBR", "BDORY", "NVDA", "MSTR", "STRC"];
 
-test("shipped files, then AllInvestView, then Elbstream (only where AllInvestView declines); no bundled logo set", () => {
-  assert.deepEqual(LOGO_SOURCES.map((s) => s.id), ["local", "allinvestview", "elbstream"]);
+test("AllInvestView, then Elbstream (only where AllInvestView declines); no logo files ship with the mod", () => {
+  assert.deepEqual(LOGO_SOURCES.map((s) => s.id), ["allinvestview", "elbstream"]);
   assert.equal(fs.existsSync(path.join(MOD, "logos")), false, "no bundled logo folder");
   assert.equal(fs.existsSync(path.join(MOD, "logos.js")), false, "no bundled logo map");
   assert.equal(fs.existsSync(path.join(MOD, ".tools")), false, "no vendoring tools");

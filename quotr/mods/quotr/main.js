@@ -22,7 +22,7 @@ import { HistoryStore, RANGES, RANGE_SPECS, formatDay, sourceName } from "./hist
 import { UTC_ZONE, formatPointTime, nearestIndex, readoutAt } from "./readout.js";
 // Local customization: pre-market and after-hours for stocks.
 import { SESSION_NAMES, sessionBands, sessionHours } from "./extended.js";
-// Local customization: bundled asset logos.
+// Local customization: asset monograms (the fallback under every logo).
 import { assetLogo } from "./assetlogo.js";
 // Local customization: price tick flashes.
 import { createTickMemory, primeTicks, takeTicks } from "./ticks.js";
@@ -85,7 +85,7 @@ function openUrl(url) {
   openExternal(url, detectPlatform(herdrWindow), exec).catch(() => {});
 }
 
-// Local customization: Elbstream logos for stocks without a bundled one, cached in a hidden
+// Local customization: logos from the online sources (logosource.js), cached in a hidden
 // folder of this mod (Herdr's image() takes local paths only). Module scope so the panel's
 // downloads serve the dialogs too; no host call happens until it is used.
 const LOGO_HOST = {
@@ -557,7 +557,7 @@ export default class Quotr extends View {
     const shownFrom = LOGOS.sourceFor(symbol);
     const credit = shownFrom?.attribution
       ? this.logoCredits([symbol], t)
-      : [div().text_size(10.5).text_color(t.dim).child(shownFrom?.id === "local" ? "Bundled logo" : LOGOS.pathFor(symbol) ? "Logo" : "No logo")];
+      : [div().text_size(10.5).text_color(t.dim).child(LOGOS.pathFor(symbol) ? "Logo" : "No logo")];
     return [h_flex().gap(6).items_center().flex_wrap()
       .children(credit)
       .when(sources.length > 1, (el) => el

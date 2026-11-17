@@ -55,8 +55,8 @@ Compared with Pulse at `99f70b2c`:
 - Asset logos at the start of each row, with a monogram fallback.
 
 **Logos** (`logosource.js`, `logocache.js`)
-- Source adapters, tried in order: files shipped with the mod (`logos-local/`, today the Bitcoin
-  coin), then AllInvestView Ticker Logos, then Elbstream where AllInvestView's symbol lookup declines.
+- Source adapters, tried in order: AllInvestView Ticker Logos, then Elbstream where AllInvestView's
+  symbol lookup declines.
   This is selection priority, not automatic failover after a failed download or empty search result.
   In Auto, MSTR and STRC deliberately use Elbstream; STRC uses its issuer's MSTR logo.
 - Automatic rules, no per-ticker setup: stocks by their exact Yahoo symbol, crypto pairs by base asset;
@@ -103,8 +103,7 @@ or copy this folder to `~/.config/herdr-app/mods/quotr/`. Then
   has them) and Binance Spot public market data (24-hour change).
 - **Online logo sources:** [AllInvestView Ticker Logos](https://www.allinvestview.com/tools/ticker-logos/)
   and [Elbstream](https://elbstream.com/logos). These are the two online sources currently supported.
-  Source adapters make it easy to add others without changing the panel; the bundled Bitcoin logo is
-  a separate local source. See the logo selection and per-ticker settings above.
+  Source adapters make it easy to add others without changing the panel. See the logo selection and per-ticker settings above.
 - **Market clock scope:** the Nasdaq schedule represents US market sessions, not the trading hours of
   every symbol in the watchlist. Crypto trades around the clock and other exchanges have their own hours.
 - **Market schedule:** Nasdaq's public market-info endpoint (undocumented, the one behind
@@ -114,7 +113,6 @@ or copy this folder to `~/.config/herdr-app/mods/quotr/`. Then
   open is taken as 09:30 ET. New York time follows the US daylight-saving rule in force since 2007
   (Herdr's runtime has no time-zone data). "Regular closed" means only the regular session is known
   closed; the official holiday calendar is at [nasdaqtrader.com](https://www.nasdaqtrader.com/trader.aspx?id=Calendar).
-- **Shipped logo:** `logos-local/btc.svg`, CC0-1.0 (see `logos-local/SOURCES.md`).
 - Logos remain their owners' trademarks and are shown only to identify each asset. No price data is
   guaranteed accurate or real-time.
 

@@ -6,7 +6,7 @@ import { LOGO_SOURCES, resolveLogo, sourcesFor } from "../logosource.js";
 import { LogoCache } from "../logocache.js";
 
 test("the dialog offers only sources that can show the ticker", () => {
-  assert.deepEqual(sourcesFor("BTC/USDT").map((s) => s.id), ["local", "allinvestview", "elbstream"]);
+  assert.deepEqual(sourcesFor("BTC/USDT").map((s) => s.id), ["allinvestview", "elbstream"]);
   assert.deepEqual(sourcesFor("MSTR").map((s) => s.id), ["allinvestview", "elbstream"], "AllInvestView is offered even though Auto skips it");
   assert.deepEqual(sourcesFor("INTR").map((s) => s.id), ["allinvestview", "elbstream"]);
   assert.deepEqual(sourcesFor("^GSPC"), [], "an index: no choice row");
@@ -20,7 +20,7 @@ test("a choice forces that source; None is the monogram; Auto and unknown choice
   assert.equal(pick("INTR", "elbstream"), "elbstream");
   assert.equal(pick("BTC/USDT", "allinvestview"), "allinvestview");
   assert.equal(pick("INTR", "none"), "monogram");
-  assert.equal(pick("INTR", "local"), "allinvestview", "a source that can't show it: back to Auto");
+  assert.equal(pick("INTR", "local"), "allinvestview", "a source that no longer exists (the old bundled one): back to Auto");
   assert.equal(pick("INTR", "made-up"), "allinvestview");
   assert.equal(resolveLogo("MSTR", LOGO_SOURCES, "allinvestview").chosen, true);
 });
@@ -87,7 +87,7 @@ test("Change cycles through the ticker's sources from the one shown now, wrappin
   const order = [];
   let c;
   for (let i = 0; i < 3; i++) order.push((c = nextLogoSource("BTC/USDT", undefined, c)));
-  assert.deepEqual(order, ["allinvestview", "elbstream", "local"], "BTC: Bundled → AllInvestView → Elbstream → Bundled");
+  assert.deepEqual(order, ["elbstream", "allinvestview", "elbstream"], "BTC: AllInvestView (Auto) → Elbstream → AllInvestView → …");
   assert.equal(nextLogoSource("INTR", undefined, "none"), "allinvestview", "from the monogram: the first source");
   assert.equal(nextLogoSource("^GSPC"), "auto", "nothing to cycle");
 });

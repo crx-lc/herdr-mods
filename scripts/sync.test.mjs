@@ -16,8 +16,8 @@ function tree(files) {
 }
 
 test("Herdr's runtime files and the cache are never listed", () => {
-  const d = tree({ "main.js": "a", "gpui-kit.d.ts": "x", "jsconfig.json": "{}", ".cache/logos/index.json": "{}", ".tests/a.test.mjs": "t", "logos-local/b.svg": "<svg/>" });
-  assert.deepEqual(listFiles(d), [".tests/a.test.mjs", "logos-local/b.svg", "main.js"]);
+  const d = tree({ "main.js": "a", "gpui-kit.d.ts": "x", "jsconfig.json": "{}", ".cache/logos/index.json": "{}", ".tests/a.test.mjs": "t", "assets/b.svg": "<svg/>" });
+  assert.deepEqual(listFiles(d), [".tests/a.test.mjs", "assets/b.svg", "main.js"]);
 });
 
 test("compare: changed, one-sided and equal files", () => {
