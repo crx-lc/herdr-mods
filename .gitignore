@@ -9,3 +9,5 @@ node_modules/
 *.log
 .DS_Store
 Thumbs.db
+# Backups scripts/sync.mjs makes before overwriting or pruning:
+.backups/
