@@ -33,6 +33,11 @@ Compared with Pulse at `99f70b2c`:
   ticker through the logo sources that can show it.
 
 **Panel and refresh**
+- A New York market clock under the title (`marketclock.js`, `clockview.js`): New York time, the
+  US regular session's state (Open, Pre-market, After-hours, Closed, Weekend, Holiday) and its next
+  open or close with a live countdown ("NY 15:42 · Open · Closes 16:00 · 18m"), early closes included.
+  It runs on its own timer, apart from the quote refresh. Without a current schedule it shows the time
+  and "Market schedule unavailable", never a guessed countdown. The one-line band shows it shortened.
 - Last values stay visible during a refresh, with a small updating dot per row; quotes are restored
   from local storage after a reload or restart; failures show "Stale · last updated HH:MM".
 - Price ticks: a short green/red flash and a ▲/▼ since the previous quote (`ticks.js`).
@@ -81,6 +86,12 @@ or copy this folder to `~/.config/herdr-app/mods/quotr/`. Then
   must not be modified) and Elbstream (its terms describe the API as for business customers, ask for a
   12 pt attribution link and list own caching under its Enterprise tier; this mod shows a smaller link
   and caches locally, by its author's choice). Check each source's current terms before relying on it.
+- **Market schedule:** Nasdaq's public market-info endpoint (undocumented, the one behind
+  nasdaq.com's market status), asked once per New York day and every 3 hours while the panel is open,
+  and kept for 24 hours at most. It gives each day's hours and the next trading date; the next day's
+  open is taken as 09:30 ET. New York time follows the US daylight-saving rule in force since 2007
+  (Herdr's runtime has no time-zone data). "Regular closed" means only the regular session is known
+  closed; the official holiday calendar is at [nasdaqtrader.com](https://www.nasdaqtrader.com/trader.aspx?id=Calendar).
 - **Shipped logo:** `logos-local/btc.svg`, CC0-1.0 (see `logos-local/SOURCES.md`).
 - Logos remain their owners' trademarks and are shown only to identify each asset. No price data is
   guaranteed accurate or real-time.

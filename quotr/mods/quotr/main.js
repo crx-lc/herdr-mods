@@ -30,6 +30,8 @@ import { createTickMemory, primeTicks, takeTicks } from "./ticks.js";
 // drawing global here (window.paint_path).
 import { window as herdrWindow } from "herdr";
 import { detectPlatform, openExternal } from "./opener.js";
+// Local customization: the New York market clock (its own retained view and timer).
+import { MarketClock } from "./clockview.js";
 
 // The watchlist lives in Herdr's shared state (persisted), so every copy sees one list.
 const STORE = "quotr.watchlist.v1";
@@ -137,6 +139,9 @@ export default class Quotr extends View {
       return;
     }
     this.size = null;
+    // Local customization: the market clock, one for each layout (an entity mounts once per render).
+    this.clockPanel = cx.new(MarketClock, { band: false });
+    this.clockBand = cx.new(MarketClock, { band: true });
     this.reordering = false;
     this.typed = "";
     this.notice = "";
@@ -691,6 +696,7 @@ export default class Quotr extends View {
       .child(h_flex().flex_none().gap(6).items_center()
         .child(image(LOGO).w(14).h(14).rounded(3))
         .child(div().text_color(brand()).font_semibold().child("Quotr")))
+      .child(this.clockBand)
       .when(w.preferences.paused, (el) => el.child(div().flex_none().text_color(t.blocked).child("Paused")))
       .when(!symbols.length, (el) => el.child(div().text_color(t.dim).truncate().child("Make the panel taller to add tickers.")))
       .children(symbols.map((symbol) => {
@@ -747,6 +753,8 @@ export default class Quotr extends View {
           this.reordering ? "Done" : "Reorder", (cx) => { this.reordering = !this.reordering; this.notice = ""; cx.notify(); })))
         .child(this.button(t, "quotr-refresh", "Refresh", (cx) => { this.watch.refreshNow(); cx.notify(); }))
         .child(this.button(t, "quotr-pause", paused ? "Resume" : "Pause", (cx) => this.act(cx, () => this.togglePause()))))
+      // Local customization: the New York market clock, between the title and the refresh status.
+      .child(this.clockPanel)
       .child(h_flex().items_center().gap(6)
         .child(div().flex_none().w(6).h(6).rounded_full().bg(statusColor)
           .when(w.loading, (el) => el.loop("opacity", { from: 0.35, to: 1, period: 1200 })))
