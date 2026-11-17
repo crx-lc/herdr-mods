@@ -51,7 +51,7 @@ export function nyParts(utcMs) {
     year, month, day, hour: d.getUTCHours(), minute: d.getUTCMinutes(), second: d.getUTCSeconds(),
     weekday: d.getUTCDay(), date: `${year}-${pad(month)}-${pad(day)}`, zone: offset === -4 ? "EDT" : "EST",
     time: `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`,
-    day: `${WEEKDAYS[d.getUTCDay()]} ${MONTHS[month - 1]} ${day}`, // "Tue Nov 17"
+    dayText: `${WEEKDAYS[d.getUTCDay()]} ${MONTHS[month - 1]} ${day}`, // "Tue Nov 17"
   };
 }
 
@@ -184,7 +184,7 @@ export function marketClock(schedule, now, { maxAgeMs = MAX_AGE_MS, loading = fa
  */
 export function clockText(state, now) {
   const left = `NY ${state.ny.time}`;
-  const day = state.ny.day;
+  const day = state.ny.dayText;
   if (!state.available) return { left, day, phase: state.label, event: "", countdown: "", right: "" };
   const e = state.event;
   const verb = e.kind === "close" ? (e.early ? "Early close" : "Closes") : "Opens";

@@ -4,7 +4,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  HOUR, MINUTE, clockText, formatCountdown, marketClock, nextTickMs, nyOffsetHours, nyParts, nyToUtc,
+  HOUR, MINUTE, clockText, formatCountdown, formatEventTime, marketClock, nextTickMs, nyOffsetHours, nyParts, nyToUtc,
   parseMarketInfo, parseUsDate, restoreSchedule, shouldFetch,
 } from "../marketclock.js";
 
@@ -186,8 +186,16 @@ test("a stored schedule survives JSON, and junk doesn't", () => {
 });
 
 test("the panel's date is New York's, with its weekday", () => {
-  assert.equal(nyParts(Z("2026-11-17T19:16:00Z")).day, "Tue Nov 17");
-  assert.equal(nyParts(Z("2026-11-18T03:30:00Z")).day, "Tue Nov 17", "22:30 in New York, already Wednesday in UTC");
-  assert.equal(nyParts(Z("2027-01-01T04:59:00Z")).day, "Thu Dec 31");
+  assert.equal(nyParts(Z("2026-11-17T19:16:00Z")).dayText, "Tue Nov 17");
+  assert.equal(nyParts(Z("2026-11-18T03:30:00Z")).dayText, "Tue Nov 17", "22:30 in New York, already Wednesday in UTC");
+  assert.equal(nyParts(Z("2027-01-01T04:59:00Z")).dayText, "Thu Dec 31");
   assert.equal(clockText(marketClock(null, Z("2026-11-21T15:00:00Z")), 0).day, "Sat Nov 21", "shown without a schedule too");
+});
+
+test("an open a week or more away is named by its date, and the day of the month stays a number", () => {
+  assert.equal(nyParts(Z("2026-11-17T19:16:00Z")).day, 17);
+  const now = Z("2026-11-20T22:00:00Z"); // Fri 17:00 in New York
+  assert.equal(formatEventTime(Z("2026-11-30T14:30:00Z"), now), "Nov 30 09:30", "ten days on");
+  assert.equal(formatEventTime(Z("2026-11-23T14:30:00Z"), now), "Mon 09:30", "within the week");
+  assert.equal(formatEventTime(Z("2026-11-20T23:00:00Z"), now), "18:00", "today");
 });
