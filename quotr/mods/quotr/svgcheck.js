@@ -1,4 +1,4 @@
-// Local customization: what a cached logo file must be (logocache.js).
+// What a cached logo file must be (logocache.js).
 // A plain drawing in one <svg> root: no script, event handler, foreign object, entity or DOCTYPE,
 // and no reference outside the file (only #fragment links).
 

@@ -2,8 +2,9 @@
 // second, each against a deadline, and a last good schedule kept through failures. No Herdr imports
 // (fetch, curl, the timer and storage are passed in as a host), so `node --test` runs it.
 import { MARKET_INFO_URL, marketClock, parseMarketInfo, restoreSchedule, shouldFetch } from "./marketclock.js";
+import { USER_AGENT } from "./quotes.js";
 
-export const USER_AGENT = "Herdr-Quotr/1.0";
+export { USER_AGENT };
 export const REQUEST_TIMEOUT_MS = 15_000;
 /** However a request ends (or doesn't), "loading" never shows longer than this. */
 export const BUSY_LIMIT_MS = 45_000;

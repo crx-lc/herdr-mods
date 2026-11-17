@@ -1,4 +1,4 @@
-// Local customization (not part of upstream Pulse): price history for the
+// Price history for the
 // detail dialog's 1W / 1M / 1Y ranges. No Herdr imports, so `node --test` runs it.
 // Same two hosts as quotes.js: Yahoo Finance for stocks and indices, Binance Spot for pairs.
 import { BINANCE_KLINES, QuoteError, YAHOO_CHART, isCryptoPair, normalizeSymbol } from "./quotes.js";
@@ -313,7 +313,7 @@ export class HistoryStore {
     this.yahooRetryAt = host.now() + Math.max(backoff, error.retryAfterMs);
   }
 
-  // Local customization: the 1D extended-hours series and latest pre-market / after-hours price.
+  // The 1D extended-hours series and latest pre-market / after-hours price.
   // One Yahoo request per stock, only for markets Yahoo has extended data for, reused for a minute
   // (the panel's own cadence), through the same cooldown and spacing as the ranges.
   peekExtended(symbol, now) {

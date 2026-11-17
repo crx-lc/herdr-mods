@@ -1,4 +1,4 @@
-// Local customization (not part of upstream Pulse): where asset logos come from. No Herdr imports,
+// Where asset logos come from. No Herdr imports,
 // so `node --test` runs it.
 //
 // A logo source is an adapter:
@@ -96,10 +96,6 @@ const CORRECTIONS = {
   STRC: "symbol/MSTR",
 };
 
-// Elbstream lookups checked by looking at the image on 2026-11-17.
-export const CHECKED = ["crypto/BTC", "symbol/INTR", "symbol/AZUL", "symbol/PBR", "symbol/BDORY", "symbol/MSTR",
-  "symbol/NU", "symbol/NVDA", "symbol/MSFT", "symbol/NFLX"];
-
 /** The Elbstream lookup path for a normalized watchlist symbol, or null for a monogram. */
 export function elbstreamLookup(symbol) {
   const s = String(symbol ?? "");
@@ -134,7 +130,7 @@ export const ALL_SOURCES = [ALLINVESTVIEW, ELBSTREAM];
  * `key` identifies what is cached; `url` is the image URL when known without a lookup (else the key).
  */
 export function resolveLogo(symbol, sources = LOGO_SOURCES, choice) {
-  // A per-ticker choice (owner's, from the dialog): "none" = monogram; a source id = that source only,
+  // A per-ticker choice (the user's, from the dialog): "none" = monogram; a source id = that source only,
   // asked explicitly; "auto", unset, or a source that can't handle the ticker = the usual order.
   if (choice === "none") return null;
   if (choice && choice !== "auto") {
@@ -166,7 +162,7 @@ export function sourceById(id, sources = ALL_SOURCES) {
 }
 
 /**
- * Local customization: the source "Change" switches a ticker to: the one after the source it would be
+ * The source "Change" switches a ticker to: the one after the source it would be
  * shown from now (its choice, or Auto's pick), among `sources` (those that can show it), wrapping round.
  */
 export function nextLogoSource(symbol, sources = sourcesFor(symbol), choice) {

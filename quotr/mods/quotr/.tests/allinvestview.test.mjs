@@ -1,4 +1,4 @@
-// Local customization tests for the AllInvestView logo adapter (logosource.js) through the cache.
+// Tests for the AllInvestView logo adapter (logosource.js) through the cache.
 // Fixtures follow live search responses read on 2026-11-17.
 // Run: npm test from the repository root, or node --test ".tests/*.test.mjs" in the mod's folder.
 import test from "node:test";

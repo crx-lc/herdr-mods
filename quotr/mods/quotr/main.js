@@ -6,7 +6,7 @@
 import { View, div, image, PathBuilder, Background } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { closeOverlay, exec, nextCommand, openOverlay, props, setShared, settings, shared, theme } from "herdr";
-// Local customization: the logo cache (its folder, and no downloads during herdr-app check).
+// The logo cache (its folder, and no downloads during herdr-app check).
 import { appHome, checking } from "herdr";
 import * as fs from "fs/promises";
 import { CACHE, LogoCache } from "./logocache.js";
@@ -14,53 +14,53 @@ import { nextLogoSource, resolveLogo, sourcesFor } from "./logosource.js";
 import { Watchlist, INTERVAL_MS } from "./watchlist.js";
 import {
   SESSION_LABELS, chartGeometry, formatBandPrice, formatChange, formatPrice, formatStaleDate, formatTime,
-  isCryptoPair, marketSession,
+  USER_AGENT, isCryptoPair, marketSession,
 } from "./quotes.js";
-// Local customization: 1W / 1M / 1Y history in the detail dialog.
+// 1W / 1M / 1Y history in the detail dialog.
 import { HistoryStore, RANGES, RANGE_SPECS, formatDay, sourceName } from "./history.js";
-// Local customization: the chart's hover readout.
+// The chart's hover readout.
 import { UTC_ZONE, formatPointTime, nearestIndex, readoutAt } from "./readout.js";
-// Local customization: pre-market and after-hours for stocks.
+// Pre-market and after-hours for stocks.
 import { SESSION_NAMES, sessionBands, sessionHours } from "./extended.js";
-// Local customization: asset monograms (the fallback under every logo).
+// Asset monograms (the fallback under every logo).
 import { assetLogo } from "./assetlogo.js";
-// Local customization: price tick flashes.
+// Price tick flashes.
 import { createTickMemory, primeTicks, takeTicks } from "./ticks.js";
-// Local customization: external links per platform. Herdr's window() is renamed: `window` is GPUI's
+// External links per platform. Herdr's window() is renamed: `window` is GPUI's
 // drawing global here (window.paint_path).
 import { window as herdrWindow } from "herdr";
 import { detectPlatform, openExternal } from "./opener.js";
-// Local customization: the New York market clock (its own retained view and timer).
+// The New York market clock (its own retained view and timer).
 import { MarketClock } from "./clockview.js";
 
 // The watchlist lives in Herdr's shared state (persisted), so every copy sees one list.
 const STORE = "quotr.watchlist.v1";
-// Local customization: per-ticker logo choices ({ SYMBOL: source id | "none" }; absent = Auto), and a
+// Per-ticker logo choices ({ SYMBOL: source id | "none" }; absent = Auto), and a
 // counter bumped when a chosen logo arrives so every copy redraws.
 const LOGO_CHOICES = "quotr.logos.v1";
 const LOGO_REVISION = "quotr.logos.rev";
 // Saved under the Pulse names before the rename (2026-11-17): copied over once, on first start.
 const RENAMED_KEYS = [[STORE, "pulse.watchlist.v1"], [LOGO_CHOICES, "pulse.logos.v1"]];
-const HEADERS = { "User-Agent": "Herdr-Quotr/1.0", Accept: "application/json" };
+const HEADERS = { "User-Agent": USER_AGENT, Accept: "application/json" };
 // Below this height the panel draws the one-line band.
 const BAND_HEIGHT = 72;
 const LOGO = "mods/quotr/icon.svg";
 // Pulse's blue: the bright one on dark themes, the text-safe one on light.
 const brand = () => (settings().dark === false ? "#1066C6" : "#6AB0FF");
-// Local customization: fetched 1W / 1M / 1Y periods and the dialogs' Yahoo cooldown.
+// Fetched 1W / 1M / 1Y periods and the dialogs' Yahoo cooldown.
 // Deliberately module scope: module code is shared by every copy, so each dialog
 // (a new copy per open) reuses what an earlier one fetched. Plain memory, no host
 // calls; a reload of the mod starts it empty. Exported only so a check harness can seed it.
 export const HISTORY = new HistoryStore();
 
-// Local customization: "13:05" today, "Nov 16 13:05" before; "unknown" without a time.
+// "13:05" today, "Nov 16 13:05" before; "unknown" without a time.
 function stamp(t, now) {
   if (!(t > 0)) return "unknown";
   const day = formatStaleDate(t, now);
   return `${day ? `${day} ` : ""}${formatTime(t)}`;
 }
 
-// Local customization: the last quotes, kept in this copy's localStorage so a reload or restart
+// The last quotes, kept in this copy's localStorage so a reload or restart
 // shows them (with their own times) instead of "Waiting…" while the first refresh runs.
 const SNAPSHOT_KEY = "quotr.quotes.v1";
 function loadSnapshot() {
@@ -74,14 +74,14 @@ function saveSnapshot(quotes, symbols) {
   } catch { /* storage full or unavailable: the next refresh still fills the rows */ }
 }
 
-// Local customization: opens a fixed https link (the logo sources' attribution links) in the system's
+// Opens a fixed https link (the logo sources' attribution links) in the system's
 // browser: macOS `open`, Windows' URL handler, Linux `xdg-open` then `gio open` (opener.js). Never
 // through a shell; not awaited, so a missing or slow opener never holds the UI; failures are silent.
 function openUrl(url) {
   openExternal(url, detectPlatform(herdrWindow), exec).catch(() => {});
 }
 
-// Local customization: logos from the online sources (logosource.js), cached in a hidden
+// Logos from the online sources (logosource.js), cached in a hidden
 // folder of this mod (Herdr's image() takes local paths only). Module scope so the panel's
 // downloads serve the dialogs too; no host call happens until it is used.
 const LOGO_HOST = {
@@ -123,19 +123,19 @@ export default class Quotr extends View {
     if (given.detail) {
       this.detail = given.detail;
       this.overlay = given.overlay;
-      // Local customization: the dialog opens on 1D, the quote's own day, as before.
+      // The dialog opens on 1D, the quote's own day, as before.
       this.range = "1D";
       this.hover = null;
       this.pending = new Set();
       this.historyErrors = {};
-      // Local customization: extended hours, asked for only where Yahoo says it has them.
+      // Extended hours, asked for only where Yahoo says it has them.
       this.extPending = false;
       this.extError = null;
       if (!isCryptoPair(this.detail.symbol) && this.detail.hasPrePost === true) this.loadExtended(cx);
       return;
     }
     this.size = null;
-    // Local customization: the market clock, one for each layout (an entity mounts once per render).
+    // The market clock, one for each layout (an entity mounts once per render).
     this.clockPanel = cx.new(MarketClock, { band: false });
     this.clockBand = cx.new(MarketClock, { band: true });
     this.reordering = false;
@@ -164,9 +164,9 @@ export default class Quotr extends View {
       sleep: () => Promise.resolve(),
       changed: () => {},
     });
-    // Local customization: last quotes from before a reload or restart, until fresh ones arrive.
+    // Last quotes from before a reload or restart, until fresh ones arrive.
     if (!checking()) this.watch.restore(loadSnapshot());
-    // Local customization: tick flashes. The restored prices are the "previous" ones, so the first
+    // Tick flashes. The restored prices are the "previous" ones, so the first
     // refresh after a reload already shows which way each price moved.
     this.ticks = createTickMemory();
     primeTicks(this.ticks, this.watch.quotes, this.watch.preferences.symbols);
@@ -175,9 +175,9 @@ export default class Quotr extends View {
     // The loop owns its own cx for its whole life: sleeping and redrawing go through it.
     cx.spawn(async (cx) => {
       this.watch.host.sleep = (ms) => cx.sleep(ms);
-      // Local customization: missing logos start with each round (see the logo note above).
+      // Missing logos start with each round (see the logo note above).
       this.watch.host.beforeRound = (symbols) => { if (!checking()) this.fetchLogos(cx, symbols); };
-      // Local customization: on Refresh, each symbol's logo is downloaded again, queued right before its quote.
+      // On Refresh, each symbol's logo is downloaded again, queued right before its quote.
       this.watch.host.beforeQuote = (symbol, manual) => { if (manual && !checking()) this.queueLogo(cx, symbol); };
       this.watch.host.changed = () => {
         // Once a round has finished (not on every row), keep its quotes for the next start.
@@ -200,7 +200,7 @@ export default class Quotr extends View {
       };
       await this.watch.run();
     });
-    // Local customization: logos. The cache index is read once; then, at the start of every quote
+    // Logos. The cache index is read once; then, at the start of every quote
     // round (including the one right after a ticker is added), missing logos are fetched beside the
     // quotes, never in their way: each shows as soon as its file is checked; the monogram until then.
     if (!checking()) {
@@ -256,7 +256,7 @@ export default class Quotr extends View {
     });
   }
 
-  // Local customization: the dialog's range selector and its history requests.
+  // The dialog's range selector and its history requests.
   selectRange(range, cx) {
     if (range === this.range) return;
     this.range = range;
@@ -291,7 +291,7 @@ export default class Quotr extends View {
     });
   }
 
-  // Local customization: one extended-hours request for the open stock (cached a minute,
+  // One extended-hours request for the open stock (cached a minute,
   // through the same Yahoo cooldown and spacing). A failure leaves the regular session as is.
   loadExtended(cx) {
     const symbol = this.detail.symbol;
@@ -446,7 +446,7 @@ export default class Quotr extends View {
     return this.size && this.size.height < BAND_HEIGHT ? this.band(root, t) : this.panel(root, t);
   }
 
-  // Local customization: an asset's cached logo (logosource.js / logocache.js), drawn over its
+  // An asset's cached logo (logosource.js / logocache.js), drawn over its
   // initial. The initial is always there underneath, so a symbol without a logo, or a logo file that
   // is missing or won't load, shows a neat monogram; nothing here waits on the network.
   // `logos: false` (the one-line band: no room for the sources' attribution links) shows the monogram only.
@@ -476,7 +476,7 @@ export default class Quotr extends View {
       .when(Boolean(path), (el) => el.child(shape(image(path).absolute().top(0).left(0).w(size).h(size))));
   }
 
-  // Local customization: fetches the logos `symbols` still lack (not present, or past their
+  // Fetches the logos `symbols` still lack (not present, or past their
   // retry wait), one at a time, in its own task: the quote round that called it doesn't wait. One run
   // at a time; a round starting while one runs adds nothing, the next round picks up what's left.
   fetchLogos(cx, symbols) {
@@ -496,7 +496,7 @@ export default class Quotr extends View {
     });
   }
 
-  // Local customization: Refresh re-downloads logos, one at a time, in the order their quotes go out.
+  // Refresh re-downloads logos, one at a time, in the order their quotes go out.
   // The quote never waits; a failed download keeps the current logo; one downloaded in the last minute
   // is skipped, so repeated clicks don't re-download everything.
   queueLogo(cx, symbol) {
@@ -521,7 +521,7 @@ export default class Quotr extends View {
     });
   }
 
-  // Local customization: one attribution link per logo source shown among `symbols`, each with its
+  // One attribution link per logo source shown among `symbols`, each with its
   // count. Both sources ask for a visible link wherever their logos show.
   logoCredits(symbols, t) {
     const counts = new Map();
@@ -542,9 +542,9 @@ export default class Quotr extends View {
     });
   }
 
-  // Local customization: the dialog's per-ticker logo choice. Auto (the usual order), any source that
+  // The dialog's per-ticker logo choice. Auto (the usual order), any source that
   // can show this ticker, or None (monogram). Saved in shared state; the new logo downloads at once.
-  // Local customization: the dialog's logo line: "Logo by … ↗ · Change". Change cycles through the
+  // The dialog's logo line: "Logo by … ↗ · Change". Change cycles through the
   // sources that can show this ticker (in source order, wrapping), saving the choice for it.
   logoChoice(symbol, t) {
     const sources = sourcesFor(symbol);
@@ -595,7 +595,7 @@ export default class Quotr extends View {
       .child(div().text_size(10.5).text_color(t.dim).child("unshaded: regular"));
   }
 
-  // Local customization: pre-market and after hours each keep one theme color, in bands, legend and labels.
+  // Pre-market and after hours each keep one theme color, in bands, legend and labels.
   sessionColor(t, session) {
     return session === "pre" ? t.ansi4 : session === "post" ? t.ansi5 : t.muted;
   }
@@ -605,7 +605,7 @@ export default class Quotr extends View {
   }
 
   // The day's line, scaled to its box; the previous close is a dashed rule.
-  // Local customization: `hover` ({ id, points, zone, daily, currency }) adds the readout;
+  // `hover` ({ id, points, zone, daily, currency }) adds the readout;
   // `quote.series` must then be `points`' closes, in order, so index i is the point drawn at i.
   // `bands` ([{ session, from, to }] in %) shades pre-market and after hours behind the line.
   chart(quote, color, t, { width, height, fill, hover, bands = [] }) {
@@ -636,7 +636,7 @@ export default class Quotr extends View {
       .children(readable ? this.hoverParts(hover, g, color, t) : []);
   }
 
-  // Local customization: pointer tracking for a chart. Redraws only when the nearest point
+  // Pointer tracking for a chart. Redraws only when the nearest point
   // changes (every redraw repaints the window); leaving the chart clears the readout.
   hoverable(el, hover, count) {
     return el.id(hover.id)
@@ -707,7 +707,7 @@ export default class Quotr extends View {
       }));
   }
 
-  // Local customization: top, up, down, bottom, in the sparkline's 56px; the ends that can't move are dimmed.
+  // Top, up, down, bottom, in the sparkline's 56px; the ends that can't move are dimmed.
   moveButtons(symbol, index, count, t) {
     const one = (key, glyph, to, enabled, title) => div().id(`quotr-move-${key}-${symbol}`).flex_none().w(14).h(22)
       .flex().items_center().justify_center().rounded(3).text_size(12)
@@ -744,12 +744,12 @@ export default class Quotr extends View {
         .child(div().flex_none().text_size(13.5).font_semibold().text_color(brand()).child("Quotr"))
         .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.dim)
           .child(`${symbols.length} ${symbols.length === 1 ? "ticker" : "tickers"}`))
-        // Local customization: reorder mode (the rows' sparklines become move buttons).
+        // Reorder mode (the rows' sparklines become move buttons).
         .when(symbols.length > 1 || this.reordering, (el) => el.child(this.button(t, "quotr-reorder",
           this.reordering ? "Done" : "Reorder", (cx) => { this.reordering = !this.reordering; this.notice = ""; cx.notify(); })))
         .child(this.button(t, "quotr-refresh", "Refresh", (cx) => { this.watch.refreshNow(); cx.notify(); }))
         .child(this.button(t, "quotr-pause", paused ? "Resume" : "Pause", (cx) => this.act(cx, () => this.togglePause()))))
-      // Local customization: the New York market clock, between the title and the refresh status.
+      // The New York market clock, between the title and the refresh status.
       .child(this.clockPanel)
       .child(h_flex().items_center().gap(6)
         .child(div().flex_none().w(6).h(6).rounded_full().bg(statusColor)
@@ -769,7 +769,7 @@ export default class Quotr extends View {
       const quote = w.quotes[symbol];
       const failed = w.errors[symbol];
       const stale = quote ? formatStaleDate(quote.timestamp, now) : "";
-      // Local customization: when this row's value was last fetched, if it is older than a few refreshes
+      // When this row's value was last fetched, if it is older than a few refreshes
       // (restored after a reload, paused, or failing): never presented as current.
       const updating = w.inflight.has(symbol);
       const flash = this.flashes?.[symbol];
@@ -785,7 +785,7 @@ export default class Quotr extends View {
           // In reorder mode a click on the row does nothing, so a missed arrow never opens a dialog.
           .on_click(() => { if (!this.reordering) this.openDetail(symbol); })
           .child(h_flex().gap(10).items_center()
-            // Local customization: the asset's logo (or its initial) beside the ticker; no extra height.
+            // The asset's logo (or its initial) beside the ticker; no extra height.
             .child(h_flex().flex_1().min_w(0).gap(8).items_center()
               .child(this.assetIcon(symbol, 31.5, t))
               .child(v_flex().flex_1().min_w(0).gap(1)
@@ -799,7 +799,7 @@ export default class Quotr extends View {
               .child(h_flex().justify_end().items_center().gap(5)
                 .when(updating && Boolean(quote), (el) => el.child(div().flex_none().w(5).h(5).rounded_full().bg(t.working)
                   .loop("opacity", { from: 0.25, to: 0.9, period: 1200 })))
-                // Local customization: ▲/▼ since the previous quote (until the next one), and a tint
+                // ▲/▼ since the previous quote (until the next one), and a tint
                 // behind the price that flashes on the change and fades out.
                 .when(Boolean(quote) && (flash?.dir === "up" || flash?.dir === "down"), (el) => el.child(
                   div().flex_none().text_size(9).text_color(flash.dir === "up" ? t.ansi2 : t.ansi1)
@@ -828,7 +828,7 @@ export default class Quotr extends View {
       .children(rows);
 
     const crypto = symbols.some(isCryptoPair);
-    // Local customization: the "Pulse for Mac" promo row is removed; the sources line stays.
+    // The "Pulse for Mac" promo row is removed; the sources line stays.
     const footer = v_flex().flex_none().px(12).py(10).gap(8).border_t(1).border_color(t.border)
       .child(div().text_size(10.5).text_color(t.dim)
         .child(crypto
@@ -850,7 +850,7 @@ export default class Quotr extends View {
     const stale = formatStaleDate(q.timestamp, now);
     const crypto = isCryptoPair(q.symbol);
     const day = this.range === "1D";
-    // Local customization: extended hours (stocks where Yahoo has them).
+    // Extended hours (stocks where Yahoo has them).
     const ext = crypto ? null : HISTORY.peekExtended(q.symbol, now)?.data ?? null;
     const extLine = ext?.hasPrePost && ext.points.length > 1 ? ext.points : null;
     const extShown = ext?.status === "ok" && Boolean(ext.latest);
@@ -883,10 +883,10 @@ export default class Quotr extends View {
       .child(this.rangeTabs(t))
       .children(day
         ? [
-          // Local customization: with each point's own time, the line is drawn from those
+          // With each point's own time, the line is drawn from those
           // points so the readout names exactly what is drawn. Without times (an older quote,
           // or a source that gave none), the line is drawn as before, with no readout.
-          // Local customization: with extended hours, the line runs from the latest regular
+          // With extended hours, the line runs from the latest regular
           // session's pre-market through its after hours (and the next pre-market), each bar in
           // its own session, shaded; the regular-only line stays the fallback.
           ...(extLine
@@ -910,9 +910,9 @@ export default class Quotr extends View {
         ]
         : this.periodParts(q, t, stat))
       .child(div().text_size(11).text_color(t.dim).child(asOf))
-      // Local customization: the "Pulse for Mac" card is removed from the dialog.
+      // The "Pulse for Mac" card is removed from the dialog.
       .when(Boolean(q.error), (el) => el.child(div().text_size(11).text_color(t.blocked).child(`Cached quote · ${q.error}`)))
-      // Local customization: "Logo by … ↗ · Source: Auto · …": the credit and the per-ticker choice together.
+      // "Logo by … ↗ · Source: Auto · …": the credit and the per-ticker choice together.
       .children(this.logoChoice(q.symbol, t));
   }
 }

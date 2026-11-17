@@ -1,4 +1,4 @@
-// Local customization (not part of upstream Pulse): the hover readout of the detail
+// The hover readout of the detail
 // dialog's chart. No Herdr imports (and none of quotes.js, which imports this), so
 // `node --test` runs it.
 //

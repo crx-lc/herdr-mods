@@ -1,4 +1,4 @@
-// Local customization (not part of upstream Pulse): the monogram shown for every asset, under its
+// The monogram shown for every asset, under its
 // logo when one is cached, alone when none is (see logosource.js / logocache.js). No Herdr imports.
 import { isCryptoPair } from "./quotes.js";
 

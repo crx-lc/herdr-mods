@@ -1,4 +1,4 @@
-// Local customization tests for logo sources (logosource.js), monograms (assetlogo.js) and the
+// Tests for logo sources (logosource.js), monograms (assetlogo.js) and the
 // logo file check (svgcheck.js). Logos come from the online sources only; none ship with the mod.
 // Run: npm test from the repository root, or node --test ".tests/*.test.mjs" in the mod's folder.
 import test from "node:test";
@@ -7,12 +7,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { assetLogo, initialOf } from "../assetlogo.js";
-import { CHECKED, ELBSTREAM, LOGO_SOURCES, elbstreamLookup, resolveLogo, sourceById } from "../logosource.js";
+import { ELBSTREAM, LOGO_SOURCES, elbstreamLookup, resolveLogo, sourceById } from "../logosource.js";
 import { svgProblem } from "../svgcheck.js";
 
 const MOD = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 // A sample list covering crypto, US stocks, ADRs and a preferred share.
-const SAMPLE = ["BTC/USDT", "INTR", "AZUL", "MSFT", "NU", "PBR", "BDORY", "NVDA", "MSTR", "STRC"];
+const SAMPLE = ["BTC/USDT", "AAPL", "MSFT", "NVDA", "TSM", "BRK-B", "PETR4.SA", "0700.HK", "MSTR", "STRC"];
 
 test("AllInvestView, then Elbstream; no logo files ship with the mod", () => {
   assert.deepEqual(LOGO_SOURCES.map((s) => s.id), ["allinvestview", "elbstream"]);
@@ -27,13 +27,13 @@ test("Elbstream: every asset in a sample list resolves to its checked logo", () 
   const urls = Object.fromEntries(SAMPLE.map((s) => [s, resolveLogo(s, [ELBSTREAM])?.url ?? null]));
   assert.deepEqual(urls, {
     "BTC/USDT": "https://api.elbstream.com/logos/crypto/BTC",
-    INTR: "https://api.elbstream.com/logos/symbol/INTR",
-    AZUL: "https://api.elbstream.com/logos/symbol/AZUL",
+    AAPL: "https://api.elbstream.com/logos/symbol/AAPL",
     MSFT: "https://api.elbstream.com/logos/symbol/MSFT",
-    NU: "https://api.elbstream.com/logos/symbol/NU",
-    PBR: "https://api.elbstream.com/logos/symbol/PBR",
-    BDORY: "https://api.elbstream.com/logos/symbol/BDORY",
     NVDA: "https://api.elbstream.com/logos/symbol/NVDA",
+    TSM: "https://api.elbstream.com/logos/symbol/TSM",
+    "BRK-B": "https://api.elbstream.com/logos/symbol/BRK-B",
+    "PETR4.SA": "https://api.elbstream.com/logos/symbol/PETR4.SA",
+    "0700.HK": "https://api.elbstream.com/logos/symbol/0700.HK",
     MSTR: "https://api.elbstream.com/logos/symbol/MSTR",
     STRC: "https://api.elbstream.com/logos/symbol/MSTR", // the issuer's: Elbstream's own STRC is another company
   });
@@ -41,7 +41,7 @@ test("Elbstream: every asset in a sample list resolves to its checked logo", () 
 
 test("automatic rules: any crypto pair by its base asset, no list needed", () => {
   const api = "https://api.elbstream.com/logos/";
-  assert.equal(resolveLogo("XTZ/USDT", [ELBSTREAM])?.url, `${api}crypto/XTZ`, "the owner's example");
+  assert.equal(resolveLogo("XTZ/USDT", [ELBSTREAM])?.url, `${api}crypto/XTZ`, "a pair no list names");
   assert.equal(resolveLogo("ETH/USDT", [ELBSTREAM])?.url, `${api}crypto/ETH`);
   assert.equal(resolveLogo("BTC/BRL", [ELBSTREAM])?.url, `${api}crypto/BTC`, "same coin, other quote currency");
   assert.equal(resolveLogo("1INCH/USDT", [ELBSTREAM])?.url, `${api}crypto/1INCH`);
@@ -64,7 +64,6 @@ test("corrections override the automatic lookup", () => {
   assert.deepEqual(ELBSTREAM.corrections, { STRC: "symbol/MSTR" });
   assert.equal(resolveLogo("STRC", [ELBSTREAM])?.url, "https://api.elbstream.com/logos/symbol/MSTR", "Strategy's preferred: the issuer's logo");
   assert.equal(elbstreamLookup("STRC"), "symbol/MSTR");
-  for (const path of CHECKED) assert.match(path, /^(symbol|crypto)\/[A-Z0-9.\-]+$/);
 });
 
 test("an adapter added later is used after Elbstream, and only https URLs count", () => {

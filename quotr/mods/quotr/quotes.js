@@ -1,10 +1,12 @@
 // Symbols, the two quote sources and number formatting. No Herdr imports, so
 // tests run it under Node. Ported from Pulse CC (plugins/claude-code/hooks).
-// Local customization: `points` (each close with its own source timestamp) and `timeZone`
+// `points` (each close with its own source timestamp) and `timeZone`
 // on quotes, plus decodeKlinePoints, for the detail chart's hover readout.
 import { UTC_ZONE, timedPoints, yahooTimeZone } from "./readout.js";
 
 // The quote sources. Every host the mod contacts is listed in README.md, "Data sources and limits".
+/** Sent with every request the mod makes. */
+export const USER_AGENT = "Herdr-Quotr/1.0";
 export const YAHOO_CHART = "https://query1.finance.yahoo.com/v8/finance/chart/";
 export const BINANCE_TICKERS = "https://data-api.binance.vision/api/v3/ticker/24hr";
 export const BINANCE_KLINES = "https://data-api.binance.vision/api/v3/klines";
@@ -97,7 +99,7 @@ export function decodeYahoo(symbol, response, now) {
     fetchedAt: now,
     delaySeconds: typeof delay === "number" && Number.isFinite(delay) && delay >= 0 ? delay : null,
     series,
-    // Local customization: the same line with Yahoo's own bar times, and the exchange clock.
+    // The same line with Yahoo's own bar times, and the exchange clock.
     points: timedPoints(body.chart.result[0].timestamp, bars.close),
     timeZone: yahooTimeZone(meta),
     // Whether Yahoo has pre-market / after-hours data for this market: the dialog asks for it only then.
@@ -170,7 +172,7 @@ export function decodeKlines(response) {
 }
 
 /**
- * Local customization: the same 24-hour line as decodeKlines, each close with its kline's
+ * The same 24-hour line as decodeKlines, each close with its kline's
  * open time (UTC milliseconds). A kline without a valid open time is skipped.
  */
 export function decodeKlinePoints(response) {

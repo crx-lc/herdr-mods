@@ -1,4 +1,4 @@
-// Local customization tests for the detail chart's hover readout (readout.js, and the
+// Tests for the detail chart's hover readout (readout.js, and the
 // timestamped points it reads from quotes.js, watchlist.js and history.js).
 // Run: npm test from the repository root, or node --test ".tests/*.test.mjs" in the mod's folder.
 import test from "node:test";

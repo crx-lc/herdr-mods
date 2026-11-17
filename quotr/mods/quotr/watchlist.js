@@ -4,11 +4,11 @@ import {
   BINANCE_BATCH, QuoteError, STARTER_SYMBOLS, binanceKlinesUrl, binanceUrl, decodeBinance, decodeKlinePoints, decodeYahoo,
   isCryptoPair, normalizeSymbol, yahooUrl,
 } from "./quotes.js";
-// Local customization: the 24-hour line keeps each kline's time (decodeKlinePoints) for the hover readout.
+// The 24-hour line keeps each kline's time (decodeKlinePoints) for the hover readout.
 
 export const INTERVAL_MS = 60_000;
 // Stock requests start at least this far apart (upstream: 1,000 ms, one at a time).
-// Local customization: two at once, starts 500 ms apart: at most 2 requests a second to Yahoo,
+// Two at once, starts 500 ms apart: at most 2 requests a second to Yahoo,
 // 9 a round for this watchlist; a 429 still stops the round and backs off as before.
 export const YAHOO_SPACING_MS = 500;
 export const YAHOO_CONCURRENCY = 2;
@@ -55,14 +55,14 @@ export class Watchlist {
     this.dirty = true;
     this.lastYahooAt = -Infinity;
     this.wake = null;
-    // Local customization: rows being refreshed now, and the newest request per symbol.
+    // Rows being refreshed now, and the newest request per symbol.
     this.inflight = new Set();
     this.requestSeq = 0;
     this.latestRequest = {};
   }
 
   /**
-   * Local customization: quotes saved before a reload or restart, shown until fresh ones arrive.
+   * Quotes saved before a reload or restart, shown until fresh ones arrive.
    * Only symbols still on the list, only quotes with a time; their own fetchedAt stays, so they
    * read as old as they are.
    */
@@ -108,7 +108,7 @@ export class Watchlist {
   }
 
   /**
-   * Local customization: moves `symbol` to position `to` (0-based, clamped to the list), saved
+   * Moves `symbol` to position `to` (0-based, clamped to the list), saved
    * like any edit so every copy follows. Quotes are untouched; nothing is fetched for a move.
    */
   move(symbol, to) {
@@ -155,7 +155,7 @@ export class Watchlist {
   sync() {
     const preferences = readPreferences(this.host.load());
     if (JSON.stringify(preferences) === JSON.stringify(this.preferences)) return false;
-    // Local customization: another copy's reorder (same symbols, same pause) needs no new round.
+    // Another copy's reorder (same symbols, same pause) needs no new round.
     const same = (a, b) => a.length === b.length && [...a].sort().join("\n") === [...b].sort().join("\n");
     if (preferences.paused === this.preferences.paused && same(preferences.symbols, this.preferences.symbols)) {
       this.adopt(preferences);
@@ -198,7 +198,7 @@ export class Watchlist {
     }
   }
 
-  // Local customization: Binance and Yahoo are different providers, so they refresh side by side;
+  // Binance and Yahoo are different providers, so they refresh side by side;
   // Yahoo through a small pool (YAHOO_CONCURRENCY) whose request starts stay YAHOO_SPACING_MS apart.
   // Existing quotes are never cleared by a refresh: a row keeps its last value until a newer one
   // arrives, and `inflight` says which rows are being updated right now.
@@ -208,7 +208,7 @@ export class Watchlist {
     const symbols = this.preferences.symbols;
     this.loading = true;
     this.message = "";
-    // Local customization: let the host start side work for this round's symbols (missing logos)
+    // Let the host start side work for this round's symbols (missing logos)
     // without waiting for it: quotes never wait on it.
     try { this.host.beforeRound?.(symbols); } catch { /* side work never stops a round */ }
     this.host.changed();
@@ -286,7 +286,7 @@ export class Watchlist {
   }
 
   /**
-   * Local customization: tells the host a symbol's quote request is about to go out (manual: the
+   * Tells the host a symbol's quote request is about to go out (manual: the
    * round came from Refresh). The host may start side work for it (a logo); never waited for.
    */
   beforeQuote(symbol, manual) {
@@ -317,7 +317,7 @@ export class Watchlist {
     const fail = (list, error) => {
       for (const pair of list) this.errors[pair] = error instanceof QuoteError ? error.message : "Could not reach Binance.";
     };
-    for (const pair of pairs) this.inflight.add(pair); // local customization: the rows' updating dot
+    for (const pair of pairs) this.inflight.add(pair); // the rows' updating dot
     for (const pair of pairs) this.beforeQuote(pair, manual);
     this.host.changed();
     try {

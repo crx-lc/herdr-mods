@@ -1,4 +1,4 @@
-// Local customization (not part of upstream Pulse): pre-market and after-hours for stocks,
+// Pre-market and after-hours for stocks,
 // from Yahoo's chart endpoint with includePrePost=true. No Herdr imports, so `node --test`
 // runs it.
 //

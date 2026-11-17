@@ -1,4 +1,4 @@
-// Local customization (not part of upstream Pulse): a local cache for logos from the sources in
+// A local cache for logos from the sources in
 // logosource.js. No Herdr imports (the host is passed in), so `node --test` runs it.
 //
 // Why a local cache: Herdr's image() takes only local paths (no URLs), and a mod's fetch()
@@ -10,6 +10,7 @@
 // after a failure), never during quote refreshes. The source sees the symbol and this machine's
 // IP; nothing else about the watchlist is sent.
 import { svgProblem } from "./svgcheck.js";
+import { USER_AGENT } from "./quotes.js";
 import { ELBSTREAM, LOGO_SOURCES, resolveLogo, sourceById } from "./logosource.js";
 
 export { ELBSTREAM };
@@ -20,7 +21,7 @@ export const CACHE = {
   // next quote round. Offline, curl fails locally, so this sends nothing to the source.
   transientRetryMs: 55_000,
   maxBytes: 300_000,
-  userAgent: "Herdr-Quotr/1.0",
+  userAgent: USER_AGENT,
 };
 
 /** "png" | "jpg" | "svg" from the bytes themselves, or null for anything else (an error page, garbage). */
@@ -93,7 +94,7 @@ const FILE = /^[A-Z0-9_]{1,40}(-[a-z0-9]{1,12})?\.(png|jpg|svg)$/;
  *   copyFile(from, to) (byte-for-byte),
  *   exists(path), mkdir(path), unlink(path),
  *   download(url, toPath) → Promise<{ status, contentType }>   // curl in Herdr, a fake in tests
- *   now() → ms, preference?(symbol) → "auto" | "none" | source id   // the owner's per-ticker choice
+ *   now() → ms, preference?(symbol) → "auto" | "none" | source id   // the user's per-ticker choice
  * }
  */
 export class LogoCache {
@@ -185,7 +186,7 @@ export class LogoCache {
     return !e.file;
   }
 
-  /** The owner's logo choice for `symbol` (host.preference: a source id, "none" or "auto"), if any. */
+  /** The user's logo choice for `symbol` (host.preference: a source id, "none" or "auto"), if any. */
   choice(symbol) {
     try { return this.host.preference?.(symbol); } catch { return undefined; }
   }

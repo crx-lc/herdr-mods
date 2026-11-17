@@ -1,4 +1,4 @@
-// Local customization tests for reordering the watchlist (Watchlist.move and sync).
+// Tests for reordering the watchlist (Watchlist.move and sync).
 // Run: npm test from the repository root, or node --test ".tests/*.test.mjs" in the mod's folder.
 import test from "node:test";
 import assert from "node:assert/strict";

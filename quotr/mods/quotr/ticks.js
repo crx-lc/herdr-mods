@@ -1,4 +1,4 @@
-// Local customization (not part of upstream Pulse): which rows' prices moved since their previous
+// Which rows' prices moved since their previous
 // quote, and which way, for the panel's tick flash and arrow. No Herdr imports, so `node --test` runs it.
 //
 // A tick is a NEW quote object for a symbol (a refresh delivered data), compared with the price of

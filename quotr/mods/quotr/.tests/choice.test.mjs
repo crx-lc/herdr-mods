@@ -1,4 +1,4 @@
-// Local customization tests for per-ticker logo choices (resolveLogo's choice, sourcesFor, the cache).
+// Tests for per-ticker logo choices (resolveLogo's choice, sourcesFor, the cache).
 // Run: npm test from the repository root, or node --test ".tests/*.test.mjs" in the mod's folder.
 import test from "node:test";
 import assert from "node:assert/strict";
