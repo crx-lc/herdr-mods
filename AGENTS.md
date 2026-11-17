@@ -61,6 +61,8 @@ copying that folder. No imports from another mod or from the repo root.
 ## Checks
 
 - `npm test` (Node 22 or later) and `herdr-app check <repo>/<mod>/mods/<mod>` on the repo copy.
+- `npm run typecheck` when `tsc` is installed: it catches a missing name, a bad import or a
+  duplicate object key in view code that neither of the others runs. Local only.
 - For anything `herdr-app check` can't see (requests, links, timers): install and look at the
   running mod, and say in the report what was and wasn't seen live.
 - Report executed checks separately from proposed ones. A prepared workflow is not a CI pass.

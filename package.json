@@ -6,7 +6,8 @@
   "scripts": {
     "test": "node --test \"*/mods/*/.tests/*.test.mjs\" \"scripts/*.test.mjs\"",
     "status": "node scripts/sync.mjs status",
-    "install-mod": "node scripts/sync.mjs install"
+    "install-mod": "node scripts/sync.mjs install",
+    "typecheck": "node scripts/typecheck.mjs"
   },
   "engines": {
     "node": ">=22"

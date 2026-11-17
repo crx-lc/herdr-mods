@@ -107,3 +107,20 @@ test("pull brings live changes back, backing up the repo's versions; refuses whe
   const none = setup({ "main.js": "repo" }, null);
   assert.equal(run({ ...none.base, command: "pull" }), 2);
 });
+
+// --- scripts/typecheck.mjs: which TypeScript diagnostics count ---
+import { realErrors } from "./typecheck.mjs";
+
+test("typecheck keeps real mistakes and drops what is noise in plain JavaScript", () => {
+  const output = [
+    "marketclock.js(54,5): error TS1117: An object literal cannot have multiple properties with the same name.",
+    "dialog.js(12,3): error TS2304: Cannot find name 'SESSION_LABELS'.",
+    "main.js(9,10): error TS2305: Module '\"./quotes.js\"' has no exported member 'formatPrize'.",
+    "main.js(40,7): error TS7006: Parameter 'cx' implicitly has an 'any' type.",
+    "clockview.js(67,33): error TS2345: Argument of type 'string' is not assignable to parameter of type '`#${string}`'.",
+    "main.js(165,35): error TS2339: Property 'assetIcon' does not exist on type 'Quotr'.",
+    "",
+  ].join("\n");
+  assert.deepEqual(realErrors(output).map((l) => /TS\d+/.exec(l)[0]), ["TS1117", "TS2304", "TS2305"]);
+  assert.deepEqual(realErrors(""), []);
+});

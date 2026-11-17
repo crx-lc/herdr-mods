@@ -69,6 +69,10 @@ tests run on GitHub for every push, on Linux and Windows.
 Also run `herdr-app check <mod folder>` after a change: it loads and renders the mod once. It has
 no network and no window, so it can't show whether a request or a link works.
 
+`npm run typecheck` is an optional local check (it needs `npm install -g typescript` and the type
+files Herdr writes into a mod folder): it reports names that don't exist, bad imports and duplicate
+object keys in code the other two checks never run.
+
 Adding a mod, or changing one with an agent: see [AGENTS.md](AGENTS.md).
 
 ## License
