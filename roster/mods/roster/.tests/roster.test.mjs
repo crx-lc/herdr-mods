@@ -210,11 +210,134 @@ test('parent and metadata results remain stable when fixture order changes', () 
   const fixtures = [app('t7', { labels: { 'herdr.project': 'sample' } }), app('t8', { parent: 't7', created_ms: 200 }), app('edge/t7')];
   assert.deepEqual(enrich(fixtures, config), enrich([...fixtures].reverse(), config));
 });
-test('bare App parents use App namespace while full core parents use record core', () => {
-  const rows = identify([app('t7'), app('edge/t7'), app('edge/t8', { parent: 't7', created_ms: 200 }), normalizeFull({ address: 'edge/t9', state: 'live', created_ms: 200, parent: 't7' }, observation, now)]);
-  assert.equal(rows.find(r => r.terminalId === 't8').parent.key, rows.find(r => r.address === 't7').terminalKey);
-  assert.equal(rows.find(r => r.terminalId === 't9').parent.key, rows.find(r => r.address === 'edge/t7').terminalKey);
+test('App and compact bare parents use viewing namespace; full requires explicit evidence', () => {
+  const parents = [app('t7'), app('edge/t7')];
+  for (const adapter of [normalizeApp, normalizeCompact, normalizeFull]) {
+    const raw = { address: 'edge/t8', state: 'live', created_ms: 200, parent: 't7' };
+    const child = identify([...parents, adapter(raw, observation, now)]).find(r => r.terminalId === 't8');
+    assert.equal(child.parent.evidence[0].key, adapter === normalizeFull ? null : identify([parents[0]])[0].terminalKey);
+    assert.equal(child.parent.resolution, adapter === normalizeFull ? 'unresolved' : adapter === normalizeCompact ? 'incarnation-unknown' : 'verified');
+  }
+  const raw = { address: 'edge/t8', state: 'live', created_ms: 200, parent: 't7' };
+  for (const alias of ['', 'edge']) {
+    const full = normalizeFull(raw, { ...observation, parentNamespace: { alias, source: 'caller:tested-contract' } }, now);
+    const child = identify([...parents, full]).find(r => r.terminalId === 't8');
+    assert.equal(child.parent.key, identify([parents[alias ? 1 : 0]])[0].terminalKey);
+  }
 });
 test('malformed repository identifiers cannot establish a provider', () => {
   for (const value of ['./repo#1', 'example/..#1', '-example/repo#1', 'example_/repo#1', 'https://github.com/./repo/issues/1']) assert.equal(parseWorkItem(value), null);
+});
+
+const permutations = values => values.length ? values.flatMap((v, i) => permutations(values.filter((_, j) => i !== j)).map(tail => [v, ...tail])) : [[]];
+test('mixed parent namespaces never invent project inheritance under timestamps or permutations', () => {
+  const parents = [app('t7', { labels: { 'herdr.project': 'sample' } }),
+    app('edge/t7', { labels: { 'herdr.project': 'remote-token' } })];
+  const projectConfig = { projects: config.projects, projectBindings: [config.projectBindings[0],
+    { coreId: 'core-b', token: 'remote-token', projectId: 'project-other' }] };
+  for (const parentNamespace of [undefined, { alias: '', source: 'caller:tested-contract' },
+    { alias: 'edge', source: 'caller:tested-contract' }, { alias: 'missing', source: 'caller:tested-contract' }, { alias: '' }]) {
+    for (const [appTime, fullTime] of [[now, now - 1], [now - 1, now], [now, now]]) {
+      const raw = { address: 'edge/t9', state: 'live', created_ms: 200, parent: 't7' };
+      const children = [normalizeApp(raw, { ...observation, observedAt: appTime }, now),
+        normalizeFull(raw, { ...observation, observedAt: fullTime, parentNamespace }, now)];
+      const expected = parentNamespace?.source ? parentNamespace.alias === '' ? 'verified' : parentNamespace.alias === 'edge' ? 'conflict' : 'unresolved' : 'unresolved';
+      let baseline;
+      for (const input of permutations([...parents, ...children])) {
+        const rows = enrich(input, projectConfig), child = rows.find(r => r.terminalId === 't9');
+        assert.equal(child.parent.resolution, expected);
+        assert.equal(child.project.id, expected === 'verified' ? 'project-7f42' : null);
+        assert.equal(child.parent.evidence.length, 2);
+        if (baseline) assert.deepEqual(rows, baseline); else baseline = rows;
+      }
+    }
+  }
+});
+test('qualified equivalent parent references agree semantically, conflicting viewing namespaces do not', () => {
+  const raw = { address: 'edge/t9', state: 'live', created_ms: 200 };
+  const parents = [app('t7'), app('edge/t7')];
+  const a = normalizeApp({ ...raw, parent: 't7' }, observation, now);
+  const f = normalizeFull({ ...raw, parent: 'alias/t7' }, observation, now);
+  assert.equal(identify([...parents, a, f]).find(r => r.terminalId === 't9').parent.resolution, 'verified');
+  const other = normalizeApp({ ...raw, parent: 't7' }, { ...observation, localAlias: 'edge' }, now);
+  assert.equal(identify([...parents, a, other]).find(r => r.terminalId === 't9').parent.resolution, 'conflict');
+  for (const adapter of [normalizeApp, normalizeCompact]) {
+    const child = adapter({ ...raw, parent: 't7' }, { ...observation, localAlias: 'edge' }, now);
+    assert.equal(identify([...parents, child]).find(r => r.terminalId === 't9').parent.evidence[0].key, identify([parents[1]])[0].terminalKey);
+  }
+});
+test('compact history remains separate from richer incarnations with no label transfer', () => {
+  const current = app('t7', { labels: { 'herdr.role': 'developer', 'herdr.project': 'sample' } });
+  const history = normalizeCompact({ address: 't7', state: 'live', status: 'working' }, observation, now);
+  const child = app('t8', { parent: 't7', created_ms: 200 });
+  const rows = enrich([current, history, child], config);
+  assert.equal(rows.length, 3);
+  const unknownSession = rows.find(r => r.incarnation === null);
+  assert.equal(unknownSession.associationKey, null); assert.equal(unknownSession.role, 'unknown');
+  assert.equal(unknownSession.project.id, null); assert.deepEqual(unknownSession.labels, {});
+  assert.equal(rows.find(r => r.terminalId === 't8').parent.resolution, 'ambiguous');
+  assert.equal(enrich([current, child], config).find(r => r.terminalId === 't8').project.id, 'project-7f42');
+});
+test('lifecycle, freshness and activity disagreements are handled independently', () => {
+  for (const lifeA of ['live', 'finished', 'unknown']) for (const lifeB of ['live', 'finished', 'unknown']) {
+    for (const statusA of ['working', 'idle', 'blocked', 'done', 'error', 'unknown']) for (const statusB of ['working', 'idle', 'blocked', 'done', 'error', 'unknown']) {
+      const freshnessCases = [{}, { observedAt: 1 }, { connection: 'offline' }, { refresh: 'loading', startedAt: now }, { observedAt: null }];
+      for (const freshA of freshnessCases) for (const fresh of freshnessCases) {
+        const a = app('t7', { state: lifeA, status: statusA }, { ...observation, ...freshA });
+        const b = normalizeFull({ address: 't7', state: lifeB, created_ms: 100, status: { state: statusB } }, { ...observation, ...fresh }, now);
+        const row = identify([a, b])[0];
+        assert.equal(row.lifecycle, lifeA === lifeB ? lifeA : 'unknown');
+        assert.equal(row.freshness, a.freshness === b.freshness ? a.freshness : 'unknown');
+        assert.equal(row.appStatus, lifeA === 'live' && lifeB === 'live' && a.freshness === b.freshness && statusA === statusB ? a.appStatus : 'unknown');
+        assert.equal(row.lifecycleConflict, lifeA !== lifeB);
+        assert.equal(row.freshnessConflict, a.freshness !== b.freshness);
+        assert.equal(row.statusConflict, statusA !== statusB);
+        assert.equal(row.statusEvidence.length, 2);
+        assert.deepEqual(identify([b, a]), [row]);
+      }
+    }
+  }
+});
+test('duplicate verified core assertions preserve identity but expose conflicting facts deterministically', () => {
+  const duplicateCores = [cores[1], { ...cores[1], source: 'server-status', hostLabel: 'other-host', name: 'Other name' },
+    { ...cores[1], name: 'Build core' }];
+  let baseline;
+  for (const cs of permutations(duplicateCores)) {
+    const rows = identify([app('edge/t7')], cs), core = rows[0].core;
+    assert.equal(core.id, 'core-b'); assert.equal(core.verified, true);
+    assert.equal(core.hostLabel, null); assert.equal(core.name, null); assert.equal(core.source, 'unknown');
+    assert.deepEqual(core.conflicts, ['source', 'hostLabel', 'name']); assert.equal(core.evidence.length, 3);
+    if (baseline) assert.deepEqual(rows, baseline); else baseline = rows;
+  }
+  const agreeing = identify([app('edge/t7')], [cores[1], { ...cores[1] }])[0];
+  assert.deepEqual(agreeing.core.conflicts, []); assert.equal(agreeing.core.hostLabel, 'build-host');
+  const partial = identify([app('edge/t7')], [cores[1], { ...cores[1], name: 'Other name' }])[0];
+  assert.equal(partial.core.hostLabel, 'build-host'); assert.deepEqual(partial.core.conflicts, ['name']);
+});
+test('config selectors reject nonstring IDs for contexts and process providers', () => {
+  const invalid = [['t7'], { toString: () => 't7' }, 7, true, {}, [], null, undefined];
+  for (const terminalId of invalid) {
+    const cfg = normalizeConfig({ contexts: [{ coreId: 'core-a', terminalId, incarnation: 100, id: 'context-a', label: 'A', source: 'explicit-map' }],
+      processProviders: [{ coreId: 'core-a', terminalId, incarnation: 100, provider: 'github' }] });
+    assert.deepEqual(cfg.contexts, []); assert.deepEqual(cfg.processProviders, []); assert.equal(cfg.rejected.length, 2);
+  }
+  const row = enrich([app()], { contexts: [{ coreId: 'core-a', exclusive: true, id: 'context-a', label: 'A', source: 'explicit-map' }] })[0];
+  assert.equal(row.executionContext.id, 'context-a');
+});
+
+test('App, compact and full child observations retain safe separate incarnation evidence', () => {
+  const parents = [app('t7', { labels: { 'herdr.project': 'sample' } }), app('edge/t7')];
+  const raw = { address: 'edge/t9', state: 'live', created_ms: 200, parent: 't7' };
+  for (const parentNamespace of [undefined, { alias: '', source: 'caller:tested-contract' }, { alias: 'edge', source: 'caller:tested-contract' }]) {
+    const input = [...parents, normalizeApp(raw, observation, now), normalizeCompact(raw, observation, now),
+      normalizeFull(raw, { ...observation, parentNamespace }, now)];
+    const rows = enrich(input, config), children = rows.filter(r => r.terminalId === 't9');
+    assert.equal(children.length, 2);
+    assert.equal(children.find(r => r.incarnation === null).parent.resolution, 'incarnation-unknown');
+    assert.equal(children.find(r => r.incarnation === null).project.id, null);
+    const known = children.find(r => r.incarnation === 200);
+    assert.equal(known.parent.resolution, !parentNamespace ? 'unresolved' : parentNamespace.alias ? 'conflict' : 'verified');
+    assert.equal(known.project.id, parentNamespace?.alias === '' ? 'project-7f42' : null);
+    assert.deepEqual(rows, enrich([...input].reverse(), config));
+  }
 });

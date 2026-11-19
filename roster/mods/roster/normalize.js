@@ -51,6 +51,9 @@ function adapt(source, input, observation, now) {
   }
   return {
     source, address, localAlias: text(o.localAlias) ?? '',
+    parentNamespace: full && typeof o.parentNamespace?.alias === 'string' && text(o.parentNamespace.source)
+      && !/[\s/\x00-\x1f\x7f]/.test(o.parentNamespace.alias)
+      ? { alias: o.parentNamespace.alias, source: text(o.parentNamespace.source) } : null,
     parentReference: text(r.parent), parentMalformed: r.parent != null && !text(r.parent),
     name: text(r.name), tabTitle: text(o.tabTitle), tabNamed: o.tabNamed === true,
     labels, invalidLabels, incarnation: createdMs,

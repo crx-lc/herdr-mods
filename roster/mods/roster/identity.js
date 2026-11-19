@@ -13,14 +13,36 @@ export function identify(row, cores) {
   const matches = cores.filter(c => c.alias === parts.alias);
   const ids = [...new Set(matches.map(c => c.id))];
   const verified = ids.length === 1;
-  const core = verified ? matches.find(c => c.id === ids[0]) : null;
+  const evidence = matches.map(c => ({ ...c })).sort((a, b) => tuple(a).localeCompare(tuple(b)));
+  const facts = {}, conflicts = [];
+  for (const field of ['source', 'hostLabel', 'name']) {
+    const values = [...new Set(evidence.map(c => c[field]))];
+    facts[field] = values.length === 1 ? values[0] : null;
+    if (values.length > 1) conflicts.push(field);
+  }
+  const core = verified ? { id: ids[0], ...facts } : null;
   const terminalKey = verified ? tuple('core', core.id, parts.terminalId) : tuple('provisional', parts.alias, parts.terminalId);
   return { ...row, terminalId: parts.terminalId, terminalKey,
     associationKey: verified && row.incarnation !== null ? tuple(terminalKey, row.incarnation) : null,
     core: { id: core?.id ?? null, alias: parts.alias, verified, source: core?.source ?? 'unknown',
-      hostLabel: core?.hostLabel ?? null, name: core?.name ?? null },
+      hostLabel: core?.hostLabel ?? null, name: core?.name ?? null, conflicts, evidence },
     identityResolution: verified ? 'verified' : ids.length > 1 ? 'ambiguous' : 'provisional',
   };
+}
+
+// Qualify every observation before comparing meaning, never the group's newest source.
+function qualifyParent(row, cores) {
+  const reference = row.parentReference;
+  const namespace = row.source === 'hc-full' ? row.parentNamespace
+    : { alias: row.localAlias, source: `${row.source}:viewing-namespace` };
+  const base = { reference, source: row.source, address: row.address, observedAt: row.observedAt,
+    namespace, key: null, resolution: 'none' };
+  if (!reference) return { ...base, resolution: row.parentMalformed ? 'malformed' : 'none' };
+  const parts = addressParts(reference, namespace?.alias);
+  if (!parts || (!reference.includes('/') && !namespace) || !row.core.verified) return { ...base, resolution: 'unresolved' };
+  const ids = [...new Set(cores.filter(c => c.alias === parts.alias).map(c => c.id))];
+  return ids.length === 1 ? { ...base, key: tuple('core', ids[0], parts.terminalId), resolution: 'qualified' }
+    : { ...base, resolution: ids.length ? 'ambiguous' : 'unresolved' };
 }
 
 // Deduplicate only matching incarnations. Never enrich a new session from old labels.
@@ -34,7 +56,7 @@ export function resolveIdentities(input, coreInput) {
     groups.get(key).push(r);
   }
   const rows = [...groups.values()].map(group => {
-    group.sort((a, b) => (b.observedAt ?? -1) - (a.observedAt ?? -1) || a.address.localeCompare(b.address) || a.source.localeCompare(b.source));
+    group.sort((a, b) => (b.observedAt ?? -1) - (a.observedAt ?? -1) || a.address.localeCompare(b.address) || a.source.localeCompare(b.source) || tuple(a).localeCompare(tuple(b)));
     const row = group[0];
     const variants = [...new Set(group.map(r => tuple(r.labels, r.invalidLabels)))];
     return { ...row, identityEvidence: group.map(r => ({ address: r.address, source: r.source, observedAt: r.observedAt })),
@@ -45,18 +67,26 @@ export function resolveIdentities(input, coreInput) {
   });
   for (const row of rows) {
     const evidence = groups.get(tuple(row.terminalKey, row.incarnation));
-    if (new Set(evidence.map(r => tuple(r.lifecycle, r.rawStatus, r.freshness))).size > 1) {
-      row.appStatus = 'unknown'; row.lifecycle = 'unknown'; row.freshness = 'unknown';
-    }
-    const refs = [...new Set(evidence.map(r => r.parentReference))];
+    row.statusEvidence = evidence.map(r => ({ source: r.source, observedAt: r.observedAt,
+      lifecycle: r.lifecycle, freshness: r.freshness, rawStatus: r.rawStatus, appStatus: r.appStatus }));
+    row.lifecycleConflict = new Set(evidence.map(r => r.lifecycle)).size > 1;
+    row.freshnessConflict = new Set(evidence.map(r => r.freshness)).size > 1;
+    row.statusConflict = new Set(evidence.map(r => r.rawStatus)).size > 1;
+    if (row.lifecycleConflict) row.lifecycle = 'unknown';
+    if (row.freshnessConflict) row.freshness = 'unknown';
+    if (row.lifecycle !== 'live' || row.freshness !== 'current' || row.statusConflict
+      || new Set(evidence.map(r => r.appStatus)).size > 1) row.appStatus = 'unknown';
     const parent = row.parent;
-    if (refs.length > 1) { parent.resolution = 'conflict'; continue; }
-    if (!parent.reference) { if (row.parentMalformed) parent.resolution = 'malformed'; continue; }
-    const parts = addressParts(parent.reference, row.source === 'app' ? row.localAlias : row.core.alias);
-    if (!parts || !row.core.verified) { parent.resolution = 'unresolved'; continue; }
-    const ids = [...new Set(cores.filter(c => c.alias === parts.alias).map(c => c.id))];
-    if (ids.length !== 1) { parent.resolution = ids.length ? 'ambiguous' : 'unresolved'; continue; }
-    const candidates = rows.filter(r => r.core.verified && r.core.id === ids[0] && r.terminalId === parts.terminalId);
+    parent.evidence = evidence.map(r => qualifyParent(r, cores));
+    const qualified = parent.evidence.filter(p => p.resolution === 'qualified');
+    const keys = [...new Set(qualified.map(p => p.key))];
+    const conditions = new Set(parent.evidence.map(p => p.resolution));
+    if (keys.length > 1 || (conditions.has('none') && conditions.size > 1)) { parent.resolution = 'conflict'; continue; }
+    if (conditions.size === 1 && conditions.has('none')) continue;
+    if (conditions.has('malformed')) { parent.resolution = 'malformed'; continue; }
+    if (conditions.has('ambiguous')) { parent.resolution = 'ambiguous'; continue; }
+    if (conditions.has('unresolved')) { parent.resolution = 'unresolved'; continue; }
+    const candidates = rows.filter(r => r.core.verified && r.terminalKey === keys[0]);
     if (candidates.length !== 1) { parent.resolution = candidates.length ? 'ambiguous' : 'orphan'; continue; }
     const target = candidates[0];
     if (target === row) { parent.resolution = 'self'; continue; }

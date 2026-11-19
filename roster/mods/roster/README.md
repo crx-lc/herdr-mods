@@ -58,13 +58,19 @@ invalid reference as a condition without retaining arbitrary private content.
 `connection: offline` when explicitly known, `startedAt`, `loadingLimitMs`
 (default 15000), `ttlMs` (default 90000), `present: false` for an absent retained
 observation, `localAlias` (default empty/local), and explicitly supplied
-`tabTitle`/`tabNamed`. `now` is mandatory for a current freshness claim.
+`tabTitle`/`tabNamed`. For full records only, `parentNamespace: {alias, source}`
+can assert the supported namespace of bare parent references. `alias` must be
+an exact verified mapping alias (empty means local), and `source` must name the
+caller's supporting evidence. Missing/invalid assertions leave bare full parents
+unresolved. Supplying this field is a caller assertion, not source verification
+performed by these modules; never fill it from the record's routing prefix or
+the newest observation. `now` is mandatory for a current freshness claim.
 `freshness(observation, now)` is also exported. Offline takes precedence;
 loading expires; error/expiry/absence yields stale when prior evidence exists,
 otherwise unknown. Future/missing timestamps are unknown. Layout unavailable
 alone is not offline. status_ms never controls freshness.
 
-Normalized output includes source, exact address, localAlias, parentReference,
+Normalized output includes source, exact address, localAlias, parentNamespace, parentReference,
 name/tabTitle/tabNamed, labels/invalidLabels, incarnation, lifecycle,
 rawStatus, appStatus, freshness, observedAt, statusChangedAt and provenance.
 Lifecycle and freshness are independent. Contradictory finish timestamps yield
@@ -88,7 +94,13 @@ coreEntries)` returns new sorted rows. Call it only on adapter output.
 
 Each row adds `terminalId`, `terminalKey`, `associationKey`, `core`,
 `identityResolution`, `identityEvidence`, `metadataConflict`, `metadataEvidence`
-and `parent`. `core` has id/alias/verified/source/hostLabel/name. Verified
+and `parent`. `core` has id/alias/verified/source/hostLabel/name plus sorted
+`evidence` of matching mapping assertions and `conflicts` naming disputed facts.
+Duplicate assertions agreeing on core ID preserve verified identity. Each of
+source/hostLabel/name is retained only when every matching assertion agrees;
+disagreement yields unknown source or null display facts, with conflict and
+original evidence exposed. Missing versus present display facts also disagree.
+Core input order never selects a winner. Verified
 terminalKey is JSON `["core",coreId,terminalId]`; provisional keys are
 `["provisional",alias,terminalId]`. Never persist provisional keys as verified
 identity. Association keys are JSON `[terminalKey,createdMs]` and exist only
@@ -101,17 +113,49 @@ verification. Do not transfer mappings by alias, hostname, title or model.
 Aliases of the same verified core/terminal/incarnation collapse. Different
 incarnations remain separate evidence rows. Missing incarnation does not merge
 with a known one. Conflicting aliases for a core produce provisional identity.
-The newest observation provides routing; ties use address then source.
+The newest observation provides routing; ties use address, source, then serialized normalized facts.
 `identityEvidence` retains all source/address/time observations. Differing
 metadata (including unavailable versus present labels) blocks metadata claims;
-conflicting lifecycle/status/freshness blocks effective status. No older record
-fills a newer session's labels. Inputs with duplicate identities but different
-facts are deliberately conservative, not a supplemental-data join API.
+lifecycle, raw status and freshness are reconciled independently. Agreement on
+live or finished survives a disagreement in another dimension. Lifecycle or
+freshness disagreement makes only that dimension unknown; raw status
+disagreement suppresses effective activity. `lifecycleConflict`,
+`freshnessConflict`, `statusConflict` and `statusEvidence` expose each dimension.
+Effective `appStatus` requires agreement on a current live observation and its
+activity across all observations; fresh plus stale live/working stays live,
+but freshness and effective activity are unknown. No older record fills a
+newer session's labels.
 
-`parent` exposes key/associationKey/resolution/reference/source. Bare App parent IDs
-refer to the App's localAlias (the viewing core), as the App has already
-qualified remote parents. Bare full/compact core parent IDs refer to the
-record's core alias. Qualified IDs refer only to explicitly verified aliases. A hostname or raw remote prefix is never guessed. A unique target must
+`resolveIdentities` is not a supplemental-data join. Before combining current
+richer observations with compact history, callers must exclude compact entries
+already represented by current richer observations using verified core/terminal
+identity at the acquisition boundary. For example, App `t7` on `core-a` with
+created_ms 100 and compact `t7` on that same verified core represent overlapping
+current evidence: keep the App observation and omit the supplemental compact
+entry from that combined set. Keep a distinct finished compact `t9` as history
+when it is not represented. A shared raw `t7` on another core is not overlap.
+When overlap or incarnation cannot be established safely, callers must handle
+the returned ambiguous/duplicate-incarnation evidence without duplicate UI or
+navigation rows. Do not merge null incarnation into a known session, copy labels
+across them, or treat this module as solving history acquisition. Later feed and
+projection stages own that decision, including conservative treatment of reused
+IDs and uncertain recovery; no feed or UI is implemented here.
+
+`parent` exposes key/associationKey/resolution/reference/source and `evidence`
+for every observation (reference, source, address, observedAt, namespace,
+qualified target key and qualification resolution). Each observation is qualified
+before comparing semantic targets. Bare App and compact listing parent IDs refer
+to that observation's localAlias (the viewing namespace). This follows the pinned
+public `terminals()` contract and App source described below; it is not based on
+the remote record's core alias. The bare-parent namespace of optional full
+records is not established by the available evidence: require the caller's
+supported `parentNamespace` assertion or leave it unresolved. Qualified references
+use only verified aliases. A hostname or raw remote prefix is never guessed.
+Different qualified targets conflict even when raw strings match; equivalent
+references through verified aliases may agree. Any unresolved observation blocks
+a verified edge even when another observation has a known target. Conflicting
+absent/present references also block an edge. Routing freshness never chooses
+the namespace. A unique target must
 have known incarnation no newer than the child's. Resolutions include none,
 verified, unresolved, ambiguous, orphan, malformed, conflict, self,
 incarnation-unknown and cycle. Nonverified edges have null keys. All edges in a
@@ -188,7 +232,13 @@ Contracts use the [official manual](https://github.com/herdrdev/herdr-app/blob/3
 and [public types](https://github.com/herdrdev/herdr-app/blob/317e673f1f1568b876cbaa0b41dabeb9153ecbea/defaults/herdr.d.ts)
 pinned at App commit `317e673f1f1568b876cbaa0b41dabeb9153ecbea`, plus hc
 0.1.21's CoreInfo/Terminal/Status/MachineView schema and the compact-list
-observation from the #4 design. This is source/schema evidence, not evidence
+observation from the #4 design. The public `terminals()` documentation describes
+the listing contract with viewing-local bare parents. Inspected App
+[`live_for` and its parent-address test](https://github.com/herdrdev/herdr-app/blob/317e673f1f1568b876cbaa0b41dabeb9153ecbea/src/hc.rs)
+rewrite prefixed parents and preserve bare `t7` on a remote `beta/t6` record.
+These support the App/compact viewing-namespace rule. No inspected hc core/get
+implementation establishes full-record bare-parent behavior; it remains unknown
+without caller-supplied evidence. This is source/schema evidence, not evidence
 about an installed Windows App. No new network sources, packages or assets.
 
 Run `npm test` at repository root. Neutral fixtures cover the three source

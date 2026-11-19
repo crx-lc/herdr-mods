@@ -41,7 +41,7 @@ export function normalizeConfig(value) {
     const coreId = token(r.coreId);
     if (!coreId) return null;
     if (r.terminalId == null && r.incarnation == null) return { coreId, terminalId: null, incarnation: null };
-    return /^t[1-9][0-9]*$/.test(r.terminalId) && stamp(r.incarnation) !== null ? { coreId, terminalId: r.terminalId, incarnation: r.incarnation } : null;
+    return typeof r.terminalId === 'string' && /^t[1-9][0-9]*$/.test(r.terminalId) && stamp(r.incarnation) !== null ? { coreId, terminalId: r.terminalId, incarnation: r.incarnation } : null;
   };
   return {
     projects: entries('projects', r => token(r.id) && text(r.displayName) ? { id: r.id, displayName: text(r.displayName) } : null),
