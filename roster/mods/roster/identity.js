@@ -14,9 +14,12 @@ export function identify(row, cores) {
   const ids = [...new Set(matches.map(c => c.id))];
   const verified = ids.length === 1;
   const evidence = matches.map(c => ({ ...c })).sort((a, b) => tuple(a).localeCompare(tuple(b)));
+  const displayEvidence = verified
+    ? cores.filter(c => c.id === ids[0]).map(c => ({ ...c })).sort((a, b) => tuple(a).localeCompare(tuple(b)))
+    : [];
   const facts = {}, conflicts = [];
   for (const field of ['source', 'hostLabel', 'name']) {
-    const values = [...new Set(evidence.map(c => c[field]))];
+    const values = [...new Set((field === 'source' || !verified ? evidence : displayEvidence).map(c => c[field]))];
     facts[field] = values.length === 1 ? values[0] : null;
     if (values.length > 1) conflicts.push(field);
   }
@@ -25,7 +28,7 @@ export function identify(row, cores) {
   return { ...row, terminalId: parts.terminalId, terminalKey,
     associationKey: verified && row.incarnation !== null ? tuple(terminalKey, row.incarnation) : null,
     core: { id: core?.id ?? null, alias: parts.alias, verified, source: core?.source ?? 'unknown',
-      hostLabel: core?.hostLabel ?? null, name: core?.name ?? null, conflicts, evidence },
+      hostLabel: core?.hostLabel ?? null, name: core?.name ?? null, conflicts, evidence, displayEvidence },
     identityResolution: verified ? 'verified' : ids.length > 1 ? 'ambiguous' : 'provisional',
   };
 }
