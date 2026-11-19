@@ -7,15 +7,19 @@ const token = value => {
   const s = text(value);
   return s && s === value && /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(s) ? s : null;
 };
+const githubRepository = value => {
+  const [owner, repo] = value.split('/');
+  return owner.length <= 39 && /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/.test(owner) && repo.length <= 100 && !['.', '..'].includes(repo);
+};
 const positive = s => /^[1-9][0-9]*$/.test(s) && Number.isSafeInteger(Number(s)) ? Number(s) : null;
 
 export function parseWorkItem(value, kind = 'issue') {
   const s = text(value);
   if (!s || !['issue', 'pr'].includes(kind)) return null;
   let match = /^([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)#([1-9][0-9]*)$/.exec(s);
-  if (match && positive(match[2])) return { provider: 'github', repositoryIdentity: match[1], kind, numberOrId: Number(match[2]), reference: s };
+  if (match && githubRepository(match[1]) && positive(match[2])) return { provider: 'github', repositoryIdentity: match[1], kind, numberOrId: Number(match[2]), reference: s };
   match = /^https:\/\/github\.com\/([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)\/(issues|pull)\/([1-9][0-9]*)$/.exec(s);
-  if (match && positive(match[3]) && (kind === 'pr' ? match[2] === 'pull' : match[2] === 'issues')) return { provider: 'github', repositoryIdentity: match[1], kind, numberOrId: Number(match[3]), reference: s };
+  if (match && githubRepository(match[1]) && positive(match[3]) && (kind === 'pr' ? match[2] === 'pull' : match[2] === 'issues')) return { provider: 'github', repositoryIdentity: match[1], kind, numberOrId: Number(match[3]), reference: s };
   match = /^https:\/\/dev\.azure\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)\/_workitems\/edit\/([1-9][0-9]*)$/.exec(s);
   if (match && kind === 'issue' && positive(match[3])) return { provider: 'azure-devops', repositoryIdentity: `${match[1]}/${match[2]}`, kind: 'issue', numberOrId: Number(match[3]), reference: s };
   match = /^https:\/\/dev\.azure\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)\/_git\/([A-Za-z0-9_.-]+)\/pullrequest\/([1-9][0-9]*)$/.exec(s);

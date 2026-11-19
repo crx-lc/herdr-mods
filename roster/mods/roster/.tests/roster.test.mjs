@@ -215,3 +215,6 @@ test('bare App parents use App namespace while full core parents use record core
   assert.equal(rows.find(r => r.terminalId === 't8').parent.key, rows.find(r => r.address === 't7').terminalKey);
   assert.equal(rows.find(r => r.terminalId === 't9').parent.key, rows.find(r => r.address === 'edge/t7').terminalKey);
 });
+test('malformed repository identifiers cannot establish a provider', () => {
+  for (const value of ['./repo#1', 'example/..#1', '-example/repo#1', 'example_/repo#1', 'https://github.com/./repo/issues/1']) assert.equal(parseWorkItem(value), null);
+});
