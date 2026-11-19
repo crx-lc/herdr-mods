@@ -248,3 +248,55 @@ This module stage has no render, install or live behavior pass. Navigation,
 delegation/attention/counting, UI/filtering, feed acquisition, private settings,
 icons and packaging remain separate work. The full #4 navigation and lifecycle
 producer release requirements remain unchanged.
+
+## Private settings and local icons (R2 helper contract)
+
+`settings.js` exports `parseSettings(raw)`, `readSettings(host)` and
+`setProjectIcon(host, projectId, assetOrNull)`. The v1 document uses the R1
+configuration collections unchanged, with an `icons` array. A neutral example:
+
+```json
+{"version":1,"projects":[{"id":"project-a","displayName":"Sample"}],"projectBindings":[{"coreId":"core-a","token":"sample","projectId":"project-a"},{"coreId":"core-b","token":"sample","projectId":"project-a"}],"contexts":[],"processProviders":[],"projectProviders":[],"icons":[{"projectId":"project-a","asset":"sample.svg"}]}
+```
+
+Only stable project IDs select icons. Renames and explicit bindings across cores
+retain the mapping. Clearing it never deletes an asset. Unknown projects, invalid
+names, malformed JSON, unknown versions and invalid configuration fail without
+writing. Documents are capped at 262144 characters and each collection at 1024
+entries. Errors include `invalid-settings`, `invalid-argument`, `unknown-project`,
+`conflict`, `write-failure`, and `host-failure`.
+
+The future host selects a Roster-specific private App data namespace outside the
+repository and installed mod source. It implements `readSettings()` returning the
+exact stored text or null for absence, and `compareAndSwapSettings(expected,
+next)` returning `ok` or `conflict`. The comparison and write **must be atomic**,
+including creation when expected is null; read-then-unconditional-write is not
+sufficient. Other results fail. `deadline(promise)` must settle within a bounded
+interval even when the operation hangs. A timed-out write may still complete:
+reread before retrying. The host must isolate keys, ensure private permissions,
+and never log or publish values. No storage adapter or personal data is created
+by these modules.
+
+`icons.js` exports `validateIcon(bytes, leafName)` and `iconDescriptor(host,
+project, config)`. `readIcon(leafName, maxBytes)` returns `{bytes: Uint8Array,
+path}` or fails. The host must reject URLs, absolute paths, traversal and symlink
+escapes, resolve the single validated leaf only inside the chosen private Roster
+namespace, enforce the byte limit during reading, and return a local renderer path
+for that same file. It must prevent replacement/escape between validation and
+rendering; otherwise the future view must use an immutable private snapshot. The
+host supplies OS-specific path behavior; these modules do not construct paths.
+No URL or network operation is supported.
+
+Assets are limited to 256 KiB, with PNG dimensions at most 1024 by 1024. PNG
+checks signature, chunk bounds, CRCs, IHDR and IEND, but does not decode image
+data or establish native decoder success. SVG is a conservative ASCII static
+subset: svg, g, path, rect, circle, ellipse, line, polyline and polygon with
+simple geometry, color and stroke attributes; double-quoted attributes only,
+no entities, declarations, CSS, references, scripts, events or external content.
+SVG width and height, when present, are positive unitless values at most 1024.
+Unsupported files fall back. The descriptor always retains name, monogram and
+18px suggested size, including when it also contains a validated image path.
+The future view must keep the neutral fallback and name present even if native
+rendering fails. Native decoding and renderer failure callbacks have not been
+verified; these helpers make no such claim. Local assets are not synchronized
+across devices. No App integration or view is implemented here.
