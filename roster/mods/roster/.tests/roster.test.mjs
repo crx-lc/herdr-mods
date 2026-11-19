@@ -341,3 +341,62 @@ test('App, compact and full child observations retain safe separate incarnation 
     assert.deepEqual(rows, enrich([...input].reverse(), config));
   }
 });
+
+test('core display evidence is independent of routing observations and assertion order', () => {
+  const assertions = [
+    { alias: '', id: 'core-a', verified: true, source: 'local', hostLabel: 'h1', name: 'N1' },
+    { alias: 'alias', id: 'core-a', verified: true, source: 'remote', hostLabel: 'h2', name: 'N2' },
+    { alias: 'other', id: 'core-b', verified: true, source: 'remote', hostLabel: 'h1', name: 'N1' },
+  ];
+  let evidence;
+  for (const cs of permutations(assertions)) for (const [a, b] of [[now, now - 1], [now - 1, now], [now, now]]) {
+    const input = [app('t7', {}, { ...observation, observedAt: a }), app('alias/t7', {}, { ...observation, observedAt: b })];
+    for (const rows of [input, [...input].reverse(), [input[0]], [input[1]]]) {
+      const row = identify(freeze(rows), freeze(cs))[0];
+      assert.equal(row.core.hostLabel, null); assert.equal(row.core.name, null);
+      assert.deepEqual(row.core.conflicts, ['hostLabel', 'name']);
+      assert.equal(row.core.displayEvidence.length, 2);
+      if (evidence) assert.deepEqual(row.core.displayEvidence, evidence); else evidence = row.core.displayEvidence;
+      assert.equal(row.core.source, row.core.alias === '' ? 'local' : 'remote');
+      assert.equal(row.terminalKey, '["core","core-a","t7"]');
+      if (rows.length === 2 && a !== b) assert.equal(row.address, a > b ? 't7' : 'alias/t7');
+    }
+  }
+});
+
+test('partial and ambiguous assertions remain conservative without merging identities', () => {
+  const local = { alias: '', id: 'core-a', verified: true, source: 's', hostLabel: 'host', name: 'Name' };
+  const remote = { ...local, alias: 'alias', source: 'other' };
+  for (const [change, host, name, conflicts] of [
+    [{}, 'host', 'Name', []], [{ name: 'Other' }, 'host', null, ['name']],
+    [{ name: null }, 'host', null, ['name']], [{ hostLabel: null }, null, 'Name', ['hostLabel']],
+  ]) {
+    const core = identify([app()], [local, { ...remote, ...change }])[0].core;
+    assert.deepEqual([core.hostLabel, core.name, core.conflicts], [host, name, conflicts]);
+  }
+  const missing = identify([app()], [{ ...local, hostLabel: null, name: null }, { ...remote, hostLabel: null, name: null }])[0].core;
+  assert.deepEqual([missing.hostLabel, missing.name, missing.conflicts], [null, null, []]);
+  const cs = [local, remote, { ...remote, id: 'core-b', name: 'Different' }, { ...remote, alias: 'ignored', verified: false, name: 'Ignored' }];
+  const rows = identify([app(), app('alias/t7'), app('other/t7')], cs);
+  assert.equal(rows.find(r => r.address === 'alias/t7').identityResolution, 'ambiguous');
+  assert.equal(rows.find(r => r.address === 'alias/t7').associationKey, null);
+  assert.equal(rows.find(r => r.address === 'other/t7').identityResolution, 'provisional');
+  assert.equal(rows.find(r => r.address === 't7').core.displayEvidence.length, 2);
+  assert.equal(rows.find(r => r.address === 't7').core.name, 'Name');
+});
+
+test('display conflicts preserve parent, incarnation and configured metadata mappings', () => {
+  const cs = [{ ...cores[0], name: 'Local' }, { ...cores[2], name: 'Remote' }, cores[1]];
+  const inputs = [app('t7', { labels: { 'herdr.project': 'sample' } }), app('alias/t7', { labels: { 'herdr.project': 'sample' } }),
+    app('t8', { parent: 't7', created_ms: 200 }), app('alias/t7', { created_ms: 300 }), app('edge/t7')];
+  const cfg = { ...config, contexts: [{ coreId: 'core-a', terminalId: 't8', incarnation: 200, id: 'context-a', label: 'A', source: 'verified' }],
+    processProviders: [{ coreId: 'core-a', terminalId: 't8', incarnation: 200, provider: 'github' }] };
+  const rows = enrichMetadata(identify(freeze(inputs), freeze(cs)), freeze(cfg)).rows;
+  const child = rows.find(r => r.terminalId === 't8');
+  assert.equal(child.parent.resolution, 'ambiguous'); // two incarnations of t7
+  assert.equal(child.executionContext.id, 'context-a'); assert.equal(child.providerBadge.id, 'github');
+  const parent = rows.find(r => r.core.id === 'core-a' && r.incarnation === 100);
+  assert.equal(parent.project.id, 'project-7f42'); assert.equal(parent.identityEvidence.length, 2);
+  assert.notEqual(parent.associationKey, rows.find(r => r.core.id === 'core-a' && r.incarnation === 300).associationKey);
+  assert.notEqual(parent.terminalKey, rows.find(r => r.core.id === 'core-b').terminalKey);
+});

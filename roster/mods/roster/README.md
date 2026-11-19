@@ -95,12 +95,16 @@ coreEntries)` returns new sorted rows. Call it only on adapter output.
 Each row adds `terminalId`, `terminalKey`, `associationKey`, `core`,
 `identityResolution`, `identityEvidence`, `metadataConflict`, `metadataEvidence`
 and `parent`. `core` has id/alias/verified/source/hostLabel/name plus sorted
-`evidence` of matching mapping assertions and `conflicts` naming disputed facts.
-Duplicate assertions agreeing on core ID preserve verified identity. Each of
-source/hostLabel/name is retained only when every matching assertion agrees;
-disagreement yields unknown source or null display facts, with conflict and
-original evidence exposed. Missing versus present display facts also disagree.
-Core input order never selects a winner. Verified
+`evidence` of assertions matching the routing alias. `source` is reconciled only
+within that alias: different sources on different aliases are legitimate. For a
+verified identity, sorted `displayEvidence` contains every verified assertion
+for its core ID, including aliases without observations and assertions on an
+ambiguous alias. Each display field is retained only if all those assertions
+agree; a missing value is null and disagrees with a present value. All missing
+values stay null without a conflict. `conflicts` names disputed source or display
+fields. An unverified or ambiguous routing identity has no core-wide display
+evidence or verified display facts. Core input order and observation timestamps
+never select display facts. Verified
 terminalKey is JSON `["core",coreId,terminalId]`; provisional keys are
 `["provisional",alias,terminalId]`. Never persist provisional keys as verified
 identity. Association keys are JSON `[terminalKey,createdMs]` and exist only
