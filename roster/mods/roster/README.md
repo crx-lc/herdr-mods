@@ -1,0 +1,200 @@
+# Roster normalization modules (R1)
+
+This folder contains pure modules for issue #6. It is not an installable mod:
+there is no view, manifest, docking, polling, storage, or activation. Later Roster
+stages supply those pieces. No Herdr, Node, filesystem, process or network API is
+imported. Callers supply JSON-shaped records, current verified mappings and time.
+No module reads ambient state or mutates inputs. Unknowns remain explicit.
+
+## Pipeline and exports
+
+```js
+import { normalizeApp } from './normalize.js';
+import { resolveIdentities } from './identity.js';
+import { enrichMetadata } from './metadata.js';
+
+const observation = { observedAt: 100000, refresh: 'success' };
+const record = normalizeApp({
+  address: 'edge/t7', state: 'live', created_ms: 100,
+  status: 'working', labels: { 'herdr.role': 'developer',
+    'herdr.project': 'sample', 'herdr.issue': 'example/repo#8' },
+}, observation, 100000);
+const identified = resolveIdentities([record], [{
+  alias: 'edge', id: 'core-b', verified: true,
+  source: 'machine-list', hostLabel: 'build-host',
+}]);
+const { rows, rejectedConfig } = enrichMetadata(identified, {
+  projects: [{ id: 'project-7f42', displayName: 'Sample project' }],
+  projectBindings: [{ coreId: 'core-b', token: 'sample', projectId: 'project-7f42' }],
+});
+// rows[0]: Developer #8; GitHub from label:herdr.issue;
+// project-7f42; build-host; Context unknown; live/current/working.
+```
+
+`normalize.js` exports three adapters `(record, observation, now)` returning a
+normalized record or `null` for an invalid routing address:
+
+| Export | Source shape | Optional labels/incarnation | Status input |
+|---|---|---|---|
+| `normalizeApp` | One App `terminals()` snapshot record | labels / created_ms | plain word |
+| `normalizeCompact` | One `hc ls --all --json` compact entry | always unavailable / null | plain word |
+| `normalizeFull` | One optional full Terminal record | labels / created_ms | object with state |
+
+These adapters do not acquire data and do not claim to validate the complete
+upstream schema. They select only needed facts. Do not cast compact entries as
+full Terminals or query children with caller-bearing `get` to fill their gaps.
+Use explicit adapter selection, never automatic shape guessing.
+
+Records accept exact `tN` or `alias/tN` addresses (N positive), state
+`live|finished`, parent string, name string, created_ms/finished_ms/status_ms
+(nonnegative safe integer milliseconds), and optional labels. Only the four
+`herdr.role/project/issue/pr` labels are retained. Invalid optional label keys are
+retained in `invalidLabels`; commands, directories, report messages and other
+private fields are discarded. Text is trimmed and bounded to 1024 characters;
+control characters and nonstrings are rejected. `parentMalformed` preserves an
+invalid reference as a condition without retaining arbitrary private content.
+
+`observation` accepts `observedAt`, `refresh: success|loading|error`,
+`connection: offline` when explicitly known, `startedAt`, `loadingLimitMs`
+(default 15000), `ttlMs` (default 90000), `present: false` for an absent retained
+observation, `localAlias` (default empty/local), and explicitly supplied
+`tabTitle`/`tabNamed`. `now` is mandatory for a current freshness claim.
+`freshness(observation, now)` is also exported. Offline takes precedence;
+loading expires; error/expiry/absence yields stale when prior evidence exists,
+otherwise unknown. Future/missing timestamps are unknown. Layout unavailable
+alone is not offline. status_ms never controls freshness.
+
+Normalized output includes source, exact address, localAlias, parentReference,
+name/tabTitle/tabNamed, labels/invalidLabels, incarnation, lifecycle,
+rawStatus, appStatus, freshness, observedAt, statusChangedAt and provenance.
+Lifecycle and freshness are independent. Contradictory finish timestamps yield
+unknown lifecycle. `done` is a status of a live session, not a finished session.
+Recognized raw words are working/blocked/done/idle/error. Only a current live
+record can expose working/blocked/done/idle as `appStatus`; all other cases use
+unknown. No missing row becomes a fabricated finished session. Caller supplies
+retained observations explicitly; these modules maintain no history.
+
+Small validation helpers `object`, `list`, `text`, `stamp`, `tuple` and
+`addressParts(value, localAlias)` are also exported for the other modules.
+`addressParts` returns `{alias, terminalId}` or null; `tuple` serializes an array
+with JSON so delimiters in identifiers cannot collide.
+
+## Identity and parents
+
+`normalizeCores(entries)` accepts verified assertions
+`{alias, id, verified:true, source, hostLabel?, name?}`; empty alias means local.
+It drops unverified/invalid entries. `resolveIdentities(normalizedRecords,
+coreEntries)` returns new sorted rows. Call it only on adapter output.
+
+Each row adds `terminalId`, `terminalKey`, `associationKey`, `core`,
+`identityResolution`, `identityEvidence`, `metadataConflict`, `metadataEvidence`
+and `parent`. `core` has id/alias/verified/source/hostLabel/name. Verified
+terminalKey is JSON `["core",coreId,terminalId]`; provisional keys are
+`["provisional",alias,terminalId]`. Never persist provisional keys as verified
+identity. Association keys are JSON `[terminalKey,createdMs]` and exist only
+with verified core and known incarnation. Terminal mappings must match that
+incarnation; core rebuilds must have a different core ID. If recovery does not
+supply a changed incarnation, these modules cannot prove session continuity:
+the caller must invalidate sensitive associations rather than claim recovery
+verification. Do not transfer mappings by alias, hostname, title or model.
+
+Aliases of the same verified core/terminal/incarnation collapse. Different
+incarnations remain separate evidence rows. Missing incarnation does not merge
+with a known one. Conflicting aliases for a core produce provisional identity.
+The newest observation provides routing; ties use address then source.
+`identityEvidence` retains all source/address/time observations. Differing
+metadata (including unavailable versus present labels) blocks metadata claims;
+conflicting lifecycle/status/freshness blocks effective status. No older record
+fills a newer session's labels. Inputs with duplicate identities but different
+facts are deliberately conservative, not a supplemental-data join API.
+
+`parent` exposes key/associationKey/resolution/reference/source. Bare App parent IDs
+refer to the App's localAlias (the viewing core), as the App has already
+qualified remote parents. Bare full/compact core parent IDs refer to the
+record's core alias. Qualified IDs refer only to explicitly verified aliases. A hostname or raw remote prefix is never guessed. A unique target must
+have known incarnation no newer than the child's. Resolutions include none,
+verified, unresolved, ambiguous, orphan, malformed, conflict, self,
+incarnation-unknown and cycle. Nonverified edges have null keys. All edges in a
+cycle are cut; traversal is iterative and bounded. Original reference remains
+available. Lifetime parent references cannot prove active assignments or
+historical parent incarnations; no delegation semantics are produced here.
+
+## Metadata and explicit configuration
+
+`normalizeConfig(input)` returns new projects/projectBindings/contexts/
+processProviders/projectProviders arrays plus `rejected` entries `{field,index}`.
+Missing/nonarray collections are empty. IDs/tokens use 1–128 ASCII letters,
+digits, dot, underscore or hyphen, starting with a letter/digit. Invalid array
+entries are rejected, not partially applied. No persistence or icons are handled.
+
+`enrichMetadata(identityRows, rawConfig)` returns `{rows,rejectedConfig}`;
+`rawConfig` always has the shape below, even if previously normalized.
+
+| Collection | Entry |
+|---|---|
+| projects | `{id, displayName}` |
+| projectBindings | `{coreId, token, projectId}` exact core/project token |
+| contexts | `{coreId, id, label, source: verified|explicit-map, exclusive:true}` for an asserted single-context core, or `{coreId, terminalId, incarnation, id, label, source}` |
+| processProviders | `{coreId, terminalId, incarnation, provider}` |
+| projectProviders | `{projectId, provider, applicable:true}` |
+
+Provider is `github|azure-devops`. A multi-context core without exact terminal
+assertions stays Context unknown. Terminal assertions override core defaults;
+conflicting assertions at the same scope remain unknown. Machine/core identity
+and hostLabel remain separate from executionContext `{id,label,source,evidence}`.
+Viewing host, SSH login, LLM family/model and GitHub login are not evidence.
+
+Metadata adds role/roleSource, displayLabel, workItem/workItemResolution/
+workItemEvidence, project, executionContext, providerBadge. Accepted roles are
+coordinator/planner/developer/reviewer/watcher/supervisor. Only validated labels
+establish roles. Known tasks format Planner #12, Developer #8, Reviewer PR #9.
+Unknown role uses meaningful explicitly named nonnumeric tab title, then the
+terminal's core name (`name`), verified core display name, then exact address.
+All of that fallback is display only. No role is inferred from the title.
+
+`parseWorkItem(value, kind='issue')` returns provider/repositoryIdentity/kind/
+numberOrId/reference or null. Supported full references are `example/repo#12`
+(the field determines issue versus PR), exact HTTPS github.com owner/repo
+issues/N or pull/N, dev.azure.com organization/project/_workitems/edit/N, and
+organization/project/_git/repo/pullrequest/N. N must be a positive safe integer.
+URL query/fragment suffixes, bare numbers and other hosts/shapes are unknown.
+For ADO work items, repositoryIdentity denotes organization/project scope; a
+work item need not belong to a Git repository. No ADO service is contacted.
+Both issue and PR fields together are conservatively conflicting, even when
+one is malformed. Valid candidate task evidence remains available.
+
+Project `{id,displayName,source,resolution,evidence}` comes only from an exact
+verified core/token binding with one project definition. Equal tokens, names
+or shared Space never merge projects. Multiple bindings/definitions conflict;
+missing binding stays unbound. An unlabeled child may inherit a verified
+parent's known membership with parent association provenance. Invalid,
+conflicting or explicit unbound child metadata never inherits. Explicit child
+membership conflicting with its parent retains its own ID, marks
+parent-conflict, and does not silently change projects. Renaming displayName
+preserves ID and exact pair bindings across cores. Unassigned is display text,
+not a persistent project ID.
+
+Provider precedence is a validated linked work item, exact process mapping,
+then explicitly applicable project default. Malformed/competing task evidence
+blocks defaults. Conflicting process mappings block project fallback. Mixed
+GitHub/ADO tasks retain their own provider. Unknown is null/unbadged.
+`providerBadge` has id/source/accessibleName. Provider never comes from an LLM
+family. Raw labels, invalid keys and metadataEvidence remain on rows for later
+consumers to explain unresolved metadata.
+
+## Evidence, limits and verification
+
+Contracts use the [official manual](https://github.com/herdrdev/herdr-app/blob/317e673f1f1568b876cbaa0b41dabeb9153ecbea/defaults/AGENTS.md)
+and [public types](https://github.com/herdrdev/herdr-app/blob/317e673f1f1568b876cbaa0b41dabeb9153ecbea/defaults/herdr.d.ts)
+pinned at App commit `317e673f1f1568b876cbaa0b41dabeb9153ecbea`, plus hc
+0.1.21's CoreInfo/Terminal/Status/MachineView schema and the compact-list
+observation from the #4 design. This is source/schema evidence, not evidence
+about an installed Windows App. No new network sources, packages or assets.
+
+Run `npm test` at repository root. Neutral fixtures cover the three source
+shapes, identity and incarnation collisions, parents/cycles, metadata conflicts,
+project renames, mixed providers, contexts, lifecycle/freshness and immutability.
+This module stage has no render, install or live behavior pass. Navigation,
+delegation/attention/counting, UI/filtering, feed acquisition, private settings,
+icons and packaging remain separate work. The full #4 navigation and lifecycle
+producer release requirements remain unchanged.
