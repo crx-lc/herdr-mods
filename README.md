@@ -64,7 +64,8 @@ npm test
 
 Runs every mod's `.tests` and the sync script's tests with Node's built-in test runner. It needs
 Node 22 or later (the test script uses glob patterns, which older versions don't expand). The same
-tests run on GitHub for every push, on Linux and Windows.
+tests run on GitHub for pushes to main and pull requests, on Linux with Node 22 and the current
+LTS, and on Windows with Node 22.
 
 Also run `herdr-app check <mod folder>` after a change: it loads and renders the mod once. It has
 no network and no window, so it can't show whether a request or a link works.
