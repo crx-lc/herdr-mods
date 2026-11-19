@@ -249,7 +249,7 @@ delegation/attention/counting, UI/filtering, feed acquisition, private settings,
 icons and packaging remain separate work. The full #4 navigation and lifecycle
 producer release requirements remain unchanged.
 
-## Private settings and local icons (R2 helper contract)
+## Private settings and local icons (R4 / #7 helper contract)
 
 `settings.js` exports `parseSettings(raw)`, `readSettings(host)` and
 `setProjectIcon(host, projectId, assetOrNull)`. The v1 document uses the R1
@@ -293,7 +293,7 @@ data or establish native decoder success. SVG is a conservative ASCII static
 subset: svg, g, path, rect, circle, ellipse, line, polyline and polygon with
 simple geometry, color and stroke attributes; double-quoted attributes only,
 no entities, declarations, CSS, references, scripts, events or external content.
-SVG width and height, when present, are positive unitless values at most 1024.
+Individual SVG tags are limited to 8192 bytes to bound synchronous parsing. SVG width and height, when present, are positive unitless values at most 1024.
 Unsupported files fall back. The descriptor always retains name, monogram and
 18px suggested size, including when it also contains a validated image path.
 The future view must keep the neutral fallback and name present even if native

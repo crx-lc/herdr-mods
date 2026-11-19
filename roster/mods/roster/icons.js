@@ -29,14 +29,21 @@ function png(b) {
 // Deliberately small XML subset: no entities, declarations, namespaces other
 // than the standard root xmlns, CSS, text, references or event attributes.
 function svg(b) {
-  let s; try { s = new TextDecoder('utf-8', { fatal: true }).decode(b); } catch { return false; }
-  if (/[^\x09\x0a\x0d\x20-\x7e]/.test(s) || /[&!?]/.test(s)) return false;
+  let s = '';
+  for (let i = 0; i < b.length; i += 4096) {
+    const part = b.subarray(i, i + 4096);
+    for (const c of part) if (!(c === 9 || c === 10 || c === 13 || (c >= 32 && c <= 126)) || c === 38 || c === 33 || c === 63) return false;
+    s += String.fromCharCode(...part);
+  }
   const stack = []; let pos = 0, root = false;
   const tag = /<\/?[A-Za-z][^<>]*>/g; let m;
   while ((m = tag.exec(s))) {
     if (s.slice(pos, m.index).trim()) return false; pos = tag.lastIndex;
     const closing = /^<\//.test(m[0]), self = /\/>$/.test(m[0]);
-    const t = /^<\/?([A-Za-z]+)([\s\S]*?)\/?\s*>$/.exec(m[0]); if (!t) return false;
+    // Bound per-tag parsing, including attribute expressions, independently of file size.
+    if (m[0].length > 8192) return false;
+    const t = /^<\/?([A-Za-z]+)([^>]*)>$/.exec(m[0]); if (!t) return false;
+    if (self) t[2] = t[2].slice(0, -1);
     const name = t[1]; if (!['svg','g','path','rect','circle','ellipse','line','polyline','polygon'].includes(name)) return false;
     if (closing) { if (self || t[2].trim() || stack.pop() !== name) return false; continue; }
     if (!root) { if (name !== 'svg') return false; root = true; } else if (!stack.length || name === 'svg') return false;
@@ -65,8 +72,8 @@ export function validateIcon(bytes, name) {
 }
 export async function iconDescriptor(host, project, config) {
   const name = typeof project?.displayName === 'string' && project.displayName.trim() ? project.displayName : 'Unassigned';
-  const fallback = { name, monogram: name.trim().charAt(0).toUpperCase() || '?', size: 18 };
-  const mapping = config?.icons?.find(i => i.projectId === project?.id);
+  const fallback = { name, monogram: Array.from(name.trim())[0].toUpperCase() || '?', size: 18 };
+  const mapping = Array.isArray(config?.icons) ? config.icons.find(i => i && typeof i === 'object' && i.projectId === project?.id && assetName(i.asset)) : null;
   if (!mapping || !assetName(mapping.asset)) return { ...fallback, image: null };
   try {
     // Host reads a single leaf within its private namespace and returns a local

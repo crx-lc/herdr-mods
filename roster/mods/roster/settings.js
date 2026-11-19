@@ -30,7 +30,9 @@ export async function setProjectIcon(host, projectId, asset) {
   if (!config.projects.some(p => p.id === projectId)) throw new Error('unknown-project');
   const next = { ...config, icons: config.icons.filter(i => i.projectId !== projectId) };
   if (asset !== null) next.icons.push({ projectId, asset });
-  const result = await bounded(host, () => host.compareAndSwapSettings(raw, JSON.stringify(next)));
+  const serialized = JSON.stringify(next);
+  parseSettings(serialized); // Never commit a document that this helper cannot read back.
+  const result = await bounded(host, () => host.compareAndSwapSettings(raw, serialized));
   if (result === 'conflict') throw new Error('conflict');
   if (result !== 'ok') throw new Error('write-failure');
   return next;
