@@ -1,6 +1,6 @@
-# Roster normalization modules (R1)
+# Roster pure modules (R1–R4)
 
-This folder contains pure modules for issue #6. It is not an installable mod:
+This folder contains pure modules for issues #6–#9. It is not an installable mod:
 there is no view, manifest, docking, polling, storage, or activation. Later Roster
 stages supply those pieces. No Herdr, Node, filesystem, process or network API is
 imported. Callers supply JSON-shaped records, current verified mappings and time.
@@ -248,9 +248,9 @@ about an installed Windows App. No new network sources, packages or assets.
 Run `npm test` at repository root. Neutral fixtures cover the three source
 shapes, identity and incarnation collisions, parents/cycles, metadata conflicts,
 project renames, mixed providers, contexts, lifecycle/freshness and immutability.
-This module stage has no render, install or live behavior pass. Navigation,
-UI/filtering, feed acquisition, private settings,
-icons and packaging remain separate work. The full #4 navigation and lifecycle
+This module stage has no render, install or live behavior pass. Native navigation,
+UI, feed acquisition and packaging remain separate work. Pure projection/filtering,
+settings and icon helpers are documented below. The full #4 navigation and lifecycle
 producer release requirements remain unchanged.
 
 ## Private settings and local icons (R4 / #7 helper contract)
@@ -442,6 +442,188 @@ fetches anything. The consumer adds conservative duplicate-address and text
 bounds beyond upstream parity. No licenses/assets from upstream are bundled.
 
 These helpers remain a noninstallable module stage. No App check, typecheck,
-installation, live probe, full UI, navigation or workstation release gate is
+installation, live probe, full UI, native navigation or workstation release gate is
 claimed. Full #4/#10/#11 gates still apply. No settings, Quotr, shipped Agents,
 native notifications, input, approvals or lifecycle are changed.
+
+## Projects, Status and local navigation plans (R3 / #9)
+
+`projection.js` and `navigation.js` extend the R1 → `reduceRoster` pipeline.
+They accept the actual R2 result; they do not infer assignments, reproduce the
+waiting reducer, acquire data, import a host API or execute commands. This is
+still a noninstallable module stage. No manifest, view or activation is supplied.
+
+```js
+import { projectRoster, transition } from './projection.js';
+import { moveCursor, actionIntent } from './navigation.js';
+
+const projected = projectRoster(reduced); // default Projects; routes disabled
+const state = transition(projected.state, { type: 'view', view: 'status' });
+// Reproject with current host assertions to enable local navigation:
+const options = { navigation: { generation: 'refresh-7', routes: [{
+  associationKey: reduced.rows[0].associationKey,
+  coreId: reduced.rows[0].core.id, address: reduced.rows[0].address,
+  verified: true, source: 'current-pane-snapshot', generation: 'refresh-7',
+  presentation: 'pane', // or explicitly verified 'pane-less'
+}] } };
+const next = projectRoster(reduced, state, options);
+const cursor = moveCursor(next.order, null, 'next');
+// Read these independently from the host's current store at activation time:
+const current = { state: currentViewState, generation: currentAcquisitionGeneration,
+  scopes: currentScopeAssertions }; // scopes defaults to []
+const plan = actionIntent(currentReduced, next, cursor, currentNavigationEvidence, current);
+// plan.intent is data only; no focus/peek/native command was invoked.
+```
+
+`projectRoster(reduced, state?, options?)` returns `{state, binding, instances, order,
+counts}`. Input rows must be the unique R1 evidence rows passed through R2.
+`viewState(input?)` normalizes state; `transition(state,event)` handles `view`,
+`filters` (coreIds/contextIds independently), and `fold` (key/collapsed).
+State contains only view, coreIds, contextIds and folds. Fold booleans are keyed
+by the exact returned instance key. True collapses; false expands; omitted
+uses defaults. Switching, filtering, folding and moving the cursor are pure
+operations and emit zero focus, peek, relaunch or native terminal commands.
+
+Projects uses stable project IDs, verified actual parents inside that same
+placement, and separate explicit Unassigned groups carrying R1's resolution.
+Filtered, cross-project and unavailable parents retain context rather than a
+fabricated nesting edge. Orphans, ambiguous parents and cycles remain explicit;
+traversal is iterative, including a defensive cycle cut. Projects and parent
+rows start expanded; finished roots/children live in a collapsed Done section
+under their actual project/parent. A nonfinished branch whose direct parent has
+finished is lifted to a placement root, with its exact verified parent retained
+in `context.parent`. It is never nested under a guessed surviving ancestor.
+This rule also applies through multiple finished ancestors and when history is
+expanded: each identity still has only one tree occurrence. A live branch below
+a finished child of a live parent is likewise a placement root. Finished-only
+history remains collapsed; expanding history never duplicates the lifted rows.
+Project folds hide lifted branches; their own parent folds hide their nested
+children. Historical parent/Done folds affect history, not lifted live roots.
+Filtered parents retain exact context without nesting. Live OSC done stays distinct from finished.
+Every fold, including nested Done, has its own key. Flat Status is global Needs you,
+contextual Child needs you (when present), Working, Done (initially collapsed), Idle, Offline, Stale, Unknown. It retains
+project, parent, host/core and execution-context facts on each row. Loading is
+Unknown here, never an infinite spinner. A raw error retains explicit Error
+text under Unknown, with native raw status intact; R2 does not authorize an
+error attention target or a synthetic permission prompt.
+
+Global actionable Needs you always precedes the trees/groups, unaffected by
+folds or filters. R2's contextual Child needs you remains nonactionable with
+actual child association keys; it creates no extra attention target or stop.
+Own attention and waiting precedence are exactly R2's. Waiting is Working,
+contributes zero actual workers, and retains pending/delegation facts. Projects
+uses compact waiting only when all confirmed delegate children are visibly
+nested under that parent; otherwise it supplies the full R2 detail. Status
+always uses full waiting detail. Tooltip/detail and semantic icons remain for
+the later accessible view; no animation or GPUI behavior is claimed.
+
+`options.scopes` accepts explicit host assertions `{associationKey, coreId,
+verified:true, scope:'core-wide', source}` for the exact incarnation. R1 has no
+service-scope field, so role Supervisor alone never proves core-wide scope.
+A known project wins over a conflicting scope assertion. Only a unique verified
+scope assertion on an otherwise unassigned row puts it in Infrastructure. It
+appears once there per R1 identity, never per project. Several real Supervisor
+terminals remain separate with core/alias/identity context. Only distinct
+simultaneously current, live Supervisor evidence identities on the same verified
+core receive `multiple-supervisors`. Finished prior runs, stale/offline evidence,
+unknown or ambiguous cores and equal names on different cores do not warn. `health:'unknown'` is intentional:
+this stage accepts no health evidence and never turns liveness into Healthy.
+
+Machine filters use `coreIds`, independent of readable host labels; context
+filters use R1 `executionContext.id`. Null collection means all; empty means
+none; `[null]` explicitly selects unknown core/context. Two cores with one
+hostname remain distinct; a multi-context core can be filtered per terminal.
+Outside-filter global attention retains project/parent/core/context plus
+`outsideFilters` reasons `core-outside-filter` and/or `context-outside-filter`.
+Those instances are explanatory and disabled for navigation. Clearing filters
+makes a current valid target navigable again; it never silently navigates to
+an outside-filter contextual terminal.
+
+Counts are distinct `(terminalKey, incarnation)` evidence identities, never
+rendered-instance totals. `all` covers the input set; `filtered` covers matches
+before folding; `visible` covers terminal instances actually materialized,
+including globally exposed outside-filter attention. `outsideFilterAttention`
+covers just that exception. Each has identities/working/waiting/needsYou;
+section `counts` uses its own member scope before folds. Working is R2's actual
+current working criterion, while waiting is a separate contextual count. A
+Working section containing three workers and one waiting Coordinator therefore
+has working 3 and waiting 1, not working 4. NeedsYou counts actionable identities,
+not contextual parents. Finished Done headers also expose their direct count.
+
+The acquisition caller **must omit overlapping compact history** already
+represented by a richer live observation, as R1 requires. Projection cannot
+prove that a null-incarnation compact row and a known incarnation are one run.
+It preserves those separate evidence identities with `identityDiagnostic`,
+disables ambiguous current routes, and does not guess a merge. Counts of such
+an unsanitized set are evidence counts, not a claim of distinct real sessions;
+do not present them as a confirmed agent census. The regression fixture shows
+both this failure boundary and the correctly acquired one-worker result.
+
+Visible terminal instances include row, context, placement, status, display,
+outsideFilters and guarded navigation. Deterministic JSON tuple keys include
+view, section/tree ancestry and full evidence identity; equal titles, same IDs
+on different cores, repeated attention/tree and nested Done cannot collide.
+`navigationOrder(instances)` scans actual visible instances, skipping headers,
+context-only/outside-filter/disabled rows. First visible navigable identity
+wins; repeated instances add no stops. `moveCursor(order,key,direction)` wraps
+next/previous locally and returns a key or null, never an action. Unknown old
+cursor starts at the first/last current stop. No setAgentOrder call occurs.
+
+`navigationTarget(row,rows,evidence)` requires verified R1 core/incarnation,
+current live lifecycle/freshness, a valid current address in identityEvidence,
+no competing nonfinished incarnation, and exactly one matching route assertion.
+The evidence contract above is a **trusted host assertion**, not verification
+performed by this module and not an invented App API. The host must obtain it
+from current routing/core and pane observations; never set presentation from
+role, parent, title or whether an agent appeared in a filtered list. Invalidate
+it on refresh generation, disconnect, reconnect, route/core recovery and pane
+changes. The route must match generation/core/association/address/source and
+explicit pane or pane-less presence. Bare local routing is preserved exactly;
+remote routes keep their prefix; every intention also carries the core ID,
+terminal ID, incarnation and association key. The later view may map focus to
+supported `pane.focus` and peek to `terminal.peek`, only at explicit activation.
+`actionIntent(reduced,projection,instanceKey,evidence,current)` requires an
+independent caller assertion `current:{state,generation,scopes?}` at activation.
+The projection's `binding` captures canonical view/filter/fold state and acquisition
+generation. Absent current state/generation, state mismatch (even within the same
+acquisition) or any generation mismatch fails closed with
+`projection-state-changed`. The supplied current state must be a plain data
+object (ordinary or null prototype). Valid partial states, including `{}`, are accepted: omitted fields
+use the same defaults as `viewState`. Supplied fields must be `view` (`projects`
+or `status`), `coreIds`/`contextIds` (null or arrays of null or nonempty string IDs,
+at most 1024 characters, without surrounding whitespace or control characters),
+and `folds` (a plain data object mapping keys to booleans). Unknown fields,
+accessors, symbols and malformed shapes fail closed before canonicalization.
+Valid state is then canonicalized for comparison, so duplicate filter IDs and
+filter ordering do not matter. UI `viewState` normalization is unchanged. The host
+must read current state and generation independently from its current store, never copy the saved
+projection's binding back as proof of currency. Advance acquisition generation on
+every refresh or routing/pane invalidation, and serialize activation with these
+reads; immediately before executing a returned plan, revalidate host state and
+target. A pure function cannot detect unseen host changes or a host asserting
+stale data as current.
+
+After matching that binding, activation rebuilds the projection from current R2
+rows, current state, routes and current scope assertions (default `[]`). A vanished
+key/identity, changed contextual attention, core/context, parent, placement or
+route cannot rely on old `outsideFilters`/`contextOnly` flags. Current scope
+assertions are needed for Infrastructure keys. Exact current target checks still
+apply; the result is `{enabled,reason,intent}`, with null intent when disabled.
+This adds no host calls or external App capability. Reproject after any state or
+acquisition change before retrying an explicit action.
+No sending, keys, run, kill, keep, label, native status or lifecycle plan exists.
+
+### Native navigation remains a release dependency
+
+Current `setAgentOrder` is only an ordering hint. At the pinned App revision
+above, native code appends omitted pane candidates, excludes pane-less children
+from candidates, and advances from the root parent instead of the actual current
+terminal. Neutral source-derived simulations demonstrate all three failures:
+`[t1]` becomes `[t1,t2]` despite hidden t2; pane-less `edge/t7` cannot enter the
+native candidate set; selecting that child after t1 can select the same child
+again. These simulations and the local array tests are **not** a strict global
+navigation acceptance pass or evidence about an installed App. No key rebinding,
+pane creation, upstream change or native override is included. #10 must integrate
+a supported exact navigation capability; #11 retains workstation/UI/release
+gates. No App check, typecheck, install, sync or live probe is part of this round.
+No new packages, assets, network sources or external runtime imports are added.
