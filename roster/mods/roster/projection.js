@@ -1,5 +1,5 @@
 import { tuple } from './normalize.js';
-import { rowIdentity, navigationTarget, navigationOrder } from './navigation.js';
+import { rowIdentity, navigationTarget, navigationOrder } from './navigation-rows.js';
 
 const compare = (a, b) => a < b ? -1 : a > b ? 1 : 0;
 const sortRows = rows => [...rows].sort((a, b) => compare(rowIdentity(a), rowIdentity(b)));
@@ -35,6 +35,7 @@ function status(row) {
   if (row.freshness !== 'current') return 'Unknown';
   if (finished(row)) return 'Done';
   if (!current(row)) return 'Unknown';
+  if (row.roster.state === 'child-needs-you') return 'Child needs you';
   if (row.roster.group === 'Needs you') return 'Needs you';
   if (row.roster.group === 'Working') return 'Working';
   if (row.appStatus === 'done') return 'Done';
@@ -83,7 +84,8 @@ export function projectRoster(reduced, inputState = {}, { scopes = [], navigatio
       navigation: outsideFilters.length || contextOnly ? { enabled: false, reason: outsideFilters.length ? 'outside-current-filters' : 'context-only', target: null }
         : navigationTarget(row, rows, navigation),
       health: 'unknown',
-      diagnostic: row.role === 'supervisor' && rows.filter(r => r.role === 'supervisor' && r.core.id === row.core.id).length > 1 ? 'multiple-supervisors' : null,
+      diagnostic: row.role === 'supervisor' && current(row) && row.core.verified
+        && distinct(rows.filter(r => r.role === 'supervisor' && current(r) && r.core.verified && r.core.id === row.core.id)).length > 1 ? 'multiple-supervisors' : null,
       display: { ...row.roster.display, error: row.rawStatus === 'error' && !row.statusConflict ? 'Error' : null } });
     return key;
   }
@@ -94,7 +96,7 @@ export function projectRoster(reduced, inputState = {}, { scopes = [], navigatio
     for (const row of attention) terminal(row, ['attention'], 1);
   }
   if (state.view === 'status') {
-    for (const label of ['Needs you', 'Working', 'Done', 'Idle', 'Offline', 'Stale', 'Unknown']) {
+    for (const label of ['Child needs you', 'Working', 'Done', 'Idle', 'Offline', 'Stale', 'Unknown']) {
       const members = filtered.filter(r => status(r) === label && !r.roster.actionable);
       if (!members.length) continue;
       const path = ['status', label];
@@ -108,7 +110,10 @@ export function projectRoster(reduced, inputState = {}, { scopes = [], navigatio
       const parentOf = new Map();
       for (const row of members) {
         const p = row.parent.resolution === 'verified' ? byAssociation.get(row.parent.associationKey) : null;
-        if (p && p !== row && memberKeys.has(rowIdentity(p))) parentOf.set(rowIdentity(row), rowIdentity(p));
+        // Lift live branches to this placement's roots across a finished edge.
+        // Keep the exact original parent in context; never invent a new edge.
+        // This applies even when history is expanded, so no identity duplicates.
+        if (p && p !== row && memberKeys.has(rowIdentity(p)) && !(finished(p) && !finished(row))) parentOf.set(rowIdentity(row), rowIdentity(p));
       }
       // Defensive cut even if a caller bypasses R1's cycle removal.
       for (const row of members) {
@@ -148,7 +153,8 @@ export function projectRoster(reduced, inputState = {}, { scopes = [], navigatio
     i.display.compact = allBelow;
   }
   const visible = instances.filter(i => i.kind === 'terminal').map(i => i.row);
-  return { state, instances, order: navigationOrder(instances), counts: {
+  return { state, binding: { state: viewState(state), generation: navigation.generation ?? null },
+    instances, order: navigationOrder(instances), counts: {
     all: counts(rows), filtered: counts(filtered), visible: counts(visible),
     outsideFilterAttention: counts(attention.filter(r => filterReasons(r, state).length)) } };
 }

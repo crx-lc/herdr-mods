@@ -5,7 +5,7 @@ import { resolveIdentities } from '../identity.js';
 import { enrichMetadata } from '../metadata.js';
 import { reduceRoster } from '../attention.js';
 import { projectRoster, transition, viewState } from '../projection.js';
-import { navigationOrder, navigationTarget, moveCursor, actionIntent, rowIdentity } from '../navigation.js';
+import { navigationOrder, navigationTarget, moveCursor, actionIntent as guardedActionIntent, rowIdentity } from '../navigation.js';
 const freeze = x => { if (x && typeof x === 'object') { Object.values(x).forEach(freeze); Object.freeze(x); } return x; };
 const cores = [{ alias: '', id: 'core-a', verified: true, source: 'fixture', hostLabel: 'same-host' },
   { alias: 'edge', id: 'core-b', verified: true, source: 'fixture', hostLabel: 'same-host' }];
@@ -21,6 +21,7 @@ const reducedOf = raws => reduceRoster(rowsOf(raws));
 const evidence = reduced => ({ generation: 'g1', routes: reduced.rows.map(r => ({ associationKey: r.associationKey, coreId: r.core.id,
   address: r.address, generation: 'g1', verified: true, source: 'current-pane-snapshot', presentation: r.address.includes('/') ? 'pane-less' : 'pane' })) });
 const project = (r, state, options = {}) => projectRoster(r, state, { navigation: evidence(r), ...options });
+const actionIntent = (r, p, key, e) => guardedActionIntent(r, p, key, e, { state: p.state, generation: e.generation });
 const terminals = p => p.instances.filter(i => i.kind === 'terminal');
 const find = (p, address) => terminals(p).find(i => i.row.address === address);
 const section = (p, label) => p.instances.find(i => i.kind === 'section' && i.label === label);
@@ -116,7 +117,8 @@ function delegated(statuses = ['working', 'working', 'working']) {
   const doc = { schema: 'herdr-agents/delegations', version: 1, owner: 'herdr-agents', producer: { core: 'core-a', terminal: record(producer) },
     revision: 1, updatedAt: '2000-01-01T00:00:00Z', assignments: children.map(t => ({ id: t.labels['herdr.launch'], role: t.labels['herdr.role'],
       project: 'a', item: null, child: record(t), state: 'active', revision: 1, ended: null })) };
-  const terminals = [producer, ...children];
+  const actionIntent = (r, p, key, e) => guardedActionIntent(r, p, key, e, { state: p.state, generation: e.generation });
+const terminals = [producer, ...children];
   return reduceRoster(rowsOf(terminals), { terminals, machines: [{ name: null, layout: 'ready' }], documents: [{ producer, text: JSON.stringify(doc) }] });
 }
 
@@ -139,7 +141,7 @@ test('R2 child attention retains actual identity and no extra actionable target;
   for (const view of ['projects', 'status']) {
     const p = project(r, { view }), parent = find(p, 't1');
     assert.equal(parent.row.roster.state, 'child-needs-you'); assert.equal(parent.contextOnly, true);
-    assert.equal(parent.status, 'Needs you'); assert.equal(p.counts.all.working, 2); assert.equal(p.counts.all.needsYou, 1);
+    assert.equal(parent.status, 'Child needs you'); assert.equal(p.counts.all.working, 2); assert.equal(p.counts.all.needsYou, 1);
     assert.equal(parent.row.roster.children[0].associationKey, find(p, 't2').row.associationKey);
     assert.equal(actionIntent(r, p, parent.key, evidence(r)).enabled, false);
     assert.deepEqual(p.order.map(i => i.target.address), ['t2', 't3', 't4']);
@@ -311,4 +313,141 @@ test('deep actual ancestry traverses iteratively with each terminal rendered onc
   assert.equal(terminals(p).length, 150);
   assert.equal(Math.max(...terminals(p).map(i => i.depth)), 150);
   assert.equal(new Set(p.instances.map(i => i.key)).size, p.instances.length);
+});
+
+test('finished ancestor never conceals live branches by default; expanding history adds no duplicates', () => {
+  const r = reducedOf([raw('t1', 'done', { state: 'finished', finished_ms: 500 }),
+    raw('t2', 'working', { parent: 't1', created_ms: 200 }), raw('t3', 'idle', { parent: 't1', created_ms: 300 })]);
+  const p = project(r), status = project(r, { view: 'status' });
+  assert.deepEqual(terminals(p).map(i => i.row.address), ['t2', 't3']);
+  assert.deepEqual(p.order.map(i => i.target.address), ['t2', 't3']);
+  assert.equal(p.counts.visible.working, p.counts.filtered.working);
+  assert.equal(find(status, 't2').status, find(p, 't2').status);
+  assert.equal(find(p, 't2').context.parent.associationKey, r.rows.find(r => r.address === 't1').associationKey);
+  assert.equal(find(p, 't2').context.parentResolution, 'verified');
+  const expanded = project(r, fold(p, section(p, 'Done').key, false));
+  assert.equal(terminals(expanded).length, 3);
+  assert.equal(new Set(terminals(expanded).map(i => i.identity)).size, 3);
+  assert.equal(section(expanded, 'Done').count, 1);
+});
+
+test('multiple finished ancestors, mixed branches and filtered parents preserve exact context and explicit folds', () => {
+  const r = reducedOf([raw('t1'), raw('t2', 'done', { state: 'finished', parent: 't1', created_ms: 200 }),
+    raw('t3', 'done', { state: 'finished', parent: 't2', created_ms: 300 }),
+    raw('t4', 'working', { parent: 't3', created_ms: 400 }),
+    raw('t5', 'idle', { parent: 't4', created_ms: 500 }), raw('t6', 'working', { parent: 't1', created_ms: 600 })]);
+  const p = project(r);
+  assert.deepEqual(new Set(terminals(p).map(i => i.row.address)), new Set(['t1', 't4', 't5', 't6']));
+  assert.equal(find(p, 't4').depth, 1); // lifted root, no invented t1 -> t4 link
+  assert.equal(find(p, 't4').context.parent.associationKey, r.rows.find(r => r.address === 't3').associationKey);
+  assert.equal(find(p, 't5').depth, 2);
+  const f = project(r, fold(p, find(p, 't4').key));
+  assert.equal(find(f, 't5'), undefined); assert.ok(find(f, 't6'));
+  assert.equal(terminals(project(r, fold(p, section(p, 'Equal title').key))).length, 0);
+  const changed = structuredClone(r); changed.rows.find(r => r.address === 't4').executionContext.id = 'context-b';
+  const filtered = project(changed, { contextIds: ['context-a'] });
+  assert.equal(find(filtered, 't5').depth, 1);
+  assert.equal(find(filtered, 't5').context.parent.associationKey, r.rows.find(r => r.address === 't4').associationKey);
+});
+
+test('Supervisor diagnostics require simultaneous current live distinct identities on the same verified core', () => {
+  const supervisor = (address, extra = {}) => raw(address, 'idle', { labels: { 'herdr.role': 'supervisor' }, ...extra });
+  for (const extra of [{ state: 'finished', finished_ms: 150 },
+    { observation: { ...observation, refresh: 'error' } }, { observation: { ...observation, connection: 'offline' } }]) {
+    const p = project(reducedOf([supervisor('t1', extra), supervisor('t2', { created_ms: 200 })]));
+    assert.equal(find(p, 't2').diagnostic, null); assert.equal(find(p, 't2').health, 'unknown');
+  }
+  const two = project(reducedOf([supervisor('t1'), supervisor('t2'), supervisor('edge/t1')]));
+  assert.equal(find(two, 't1').diagnostic, 'multiple-supervisors');
+  assert.equal(find(two, 't2').diagnostic, 'multiple-supervisors');
+  assert.equal(find(two, 'edge/t1').diagnostic, null);
+  assert.ok(terminals(project(reducedOf([supervisor('t1'), supervisor('edge/t1')]))).every(i => i.diagnostic === null));
+  for (const cs of [[], [...cores, { alias: '', id: 'other', verified: true, source: 'conflict' }]]) {
+    const unknown = project(reduceRoster(rowsOf([supervisor('t1'), supervisor('t2')], cs)));
+    assert.ok(terminals(unknown).every(i => !i.row.core.verified && i.diagnostic === null && i.health === 'unknown'));
+  }
+  const duplicate = reducedOf([supervisor('t1'), supervisor('t1')]);
+  assert.equal(find(project(duplicate), 't1').diagnostic, null);
+});
+
+test('Status has one global Needs you and a distinct nonactionable Child needs you section', () => {
+  const r = reducedOf([raw('t1'), raw('t2', 'blocked', { parent: 't1', created_ms: 200 })]);
+  const p = project(r, { view: 'status' });
+  assert.deepEqual(p.instances.filter(i => i.kind === 'section').map(i => i.label), ['Needs you', 'Child needs you']);
+  assert.equal(section(p, 'Child needs you').counts.needsYou, 0);
+  assert.equal(section(p, 'Child needs you').counts.working, 0);
+  assert.equal(find(p, 't1').contextOnly, true);
+  assert.equal(find(p, 't1').row.roster.children[0].associationKey, find(p, 't2').row.associationKey);
+  assert.deepEqual(p.order.map(i => i.target.address), ['t2']);
+  const own = project(reducedOf([raw('t1', 'blocked'), raw('t2', 'blocked', { parent: 't1', created_ms: 200 })]), { view: 'status' });
+  assert.equal(section(own, 'Child needs you'), undefined); assert.equal(own.counts.all.needsYou, 2);
+});
+
+test('explicit action rejects absent independent state, same-generation transitions and newer acquisitions', () => {
+  const r = reducedOf([raw('t1'), raw('t2', 'working', { parent: 't1', created_ms: 200 })]);
+  const p = project(r), key = find(p, 't2').key, e = evidence(r);
+  assert.equal(guardedActionIntent(r, p, key, e).enabled, false);
+  assert.equal(guardedActionIntent(r, p, key, e, { generation: 'g1' }).enabled, false);
+  const current = { state: viewState(), generation: 'g1' };
+  assert.equal(guardedActionIntent(r, p, key, e, current).enabled, true);
+  for (const event of [{ type: 'filters', coreIds: ['core-b'] }, { type: 'filters', contextIds: ['context-b'] },
+    { type: 'view', view: 'status' }, { type: 'fold', key: find(p, 't1').key, collapsed: true },
+    { type: 'fold', key: section(p, 'Equal title').key, collapsed: true }]) {
+    const state = transition(current.state, event);
+    assert.equal(guardedActionIntent(r, p, key, e, { ...current, state }).reason, 'projection-state-changed');
+  }
+  const newer = { generation: 'g2', routes: e.routes.map(x => ({ ...x, generation: 'g2' })) };
+  assert.equal(guardedActionIntent(r, p, key, newer, { ...current, generation: 'g2' }).enabled, false);
+  assert.equal(guardedActionIntent(r, p, key, e, { ...current, generation: 'g2' }).enabled, false);
+  const refreshed = projectRoster(r, current.state, { navigation: newer });
+  assert.equal(guardedActionIntent(r, refreshed, key, newer, { ...current, generation: 'g2' }).enabled, true);
+});
+
+test('activation recomputes eligibility when rows, context, attention, identity or route change within generation', () => {
+  const r = reducedOf([raw('t1'), raw('t2', 'working', { parent: 't1', created_ms: 200 })]);
+  const state = viewState({ coreIds: ['core-a'], contextIds: ['context-a'] }), e = evidence(r), p = project(r, state);
+  const current = { state, generation: 'g1' }, key = find(p, 't1').key;
+  for (const edit of [x => x.rows[0].executionContext.id = 'context-b', x => x.rows[0].core.id = 'core-b',
+    x => x.rows[0].roster.state = 'child-needs-you', x => x.rows.splice(0, 1),
+    x => x.rows[0].incarnation = 900, x => x.rows[0].address = 'other/t1']) {
+    const changed = structuredClone(r); edit(changed);
+    assert.equal(guardedActionIntent(changed, p, key, e, current).enabled, false);
+  }
+  const blocked = reducedOf([raw('t1', 'blocked')]), attention = project(blocked, state);
+  assert.equal(guardedActionIntent(r, attention, find(attention, 't1').key, e, current).enabled, false); // vanished attention key
+  const routeGone = { generation: 'g1', routes: [] };
+  assert.equal(guardedActionIntent(r, p, key, routeGone, current).enabled, false);
+  const forged = structuredClone(p); find(forged, 't1').contextOnly = false; find(forged, 't1').outsideFilters = [];
+  const changed = structuredClone(r); changed.rows[0].roster.state = 'child-needs-you';
+  assert.equal(guardedActionIntent(changed, forged, key, e, current).enabled, false);
+  // Supplied canonical state is independent of the stored token, including folds.
+  const badBinding = structuredClone(p); badBinding.binding.state.folds[key] = true;
+  assert.equal(guardedActionIntent(r, badBinding, key, e, current).enabled, false);
+  assert.equal(guardedActionIntent(r, p, key, e, current).enabled, true);
+});
+
+test('seeded worlds expose every eligible nonfinished row in default Projects independently of input order', () => {
+  let seed = 34891;
+  const rnd = n => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed % n; };
+  for (let world = 0; world < 250; world++) {
+    const raws = Array.from({ length: 2 + rnd(15) }, (_, n) => {
+      const done = rnd(3) === 0;
+      return raw(`t${(n + 1).toString(36)}`, ['working', 'idle', 'blocked'][rnd(3)], {
+        state: done ? 'finished' : 'live', created_ms: 100 + n, ...(done ? { finished_ms: 900 } : {}),
+        parent: n && rnd(4) ? `t${(1 + rnd(n)).toString(36)}` : undefined });
+    });
+    const r = freeze(reducedOf(raws));
+    for (const state of [{}, { coreIds: ['core-a'] }, { contextIds: ['context-a'] }, { coreIds: [] }]) {
+      const p = project(r, state), eligible = r.rows.filter(x => x.lifecycle !== 'finished' && state.coreIds?.length !== 0);
+      for (const row of eligible) {
+        const i = terminals(p).find(i => i.identity === rowIdentity(row));
+        assert.ok(i, `world ${world}: missing ${row.address}`);
+        if (row.parent.resolution === 'verified') assert.equal(i.context.parent.associationKey, row.parent.associationKey);
+      }
+      assert.equal(new Set(p.instances.map(i => i.key)).size, p.instances.length);
+      assert.equal(new Set(p.order.map(i => i.identity)).size, p.order.length);
+      assert.equal(p.counts.filtered.working, p.counts.visible.working);
+      assert.deepEqual(project(reducedOf([...raws].reverse()), state), p);
+    }
+  }
 });

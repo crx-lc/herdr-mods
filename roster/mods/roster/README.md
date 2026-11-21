@@ -468,11 +468,14 @@ const options = { navigation: { generation: 'refresh-7', routes: [{
 }] } };
 const next = projectRoster(reduced, state, options);
 const cursor = moveCursor(next.order, null, 'next');
-const plan = actionIntent(reduced, next, cursor, options.navigation);
+// Read these independently from the host's current store at activation time:
+const current = { state: currentViewState, generation: currentAcquisitionGeneration,
+  scopes: currentScopeAssertions }; // scopes defaults to []
+const plan = actionIntent(currentReduced, next, cursor, currentNavigationEvidence, current);
 // plan.intent is data only; no focus/peek/native command was invoked.
 ```
 
-`projectRoster(reduced, state?, options?)` returns `{state, instances, order,
+`projectRoster(reduced, state?, options?)` returns `{state, binding, instances, order,
 counts}`. Input rows must be the unique R1 evidence rows passed through R2.
 `viewState(input?)` normalizes state; `transition(state,event)` handles `view`,
 `filters` (coreIds/contextIds independently), and `fold` (key/collapsed).
@@ -487,9 +490,18 @@ Filtered, cross-project and unavailable parents retain context rather than a
 fabricated nesting edge. Orphans, ambiguous parents and cycles remain explicit;
 traversal is iterative, including a defensive cycle cut. Projects and parent
 rows start expanded; finished roots/children live in a collapsed Done section
-under their actual project/parent. Live OSC done stays distinct from finished.
-Every fold, including nested Done, has its own key. Flat Status is Needs you,
-Working, Done (initially collapsed), Idle, Offline, Stale, Unknown. It retains
+under their actual project/parent. A nonfinished branch whose direct parent has
+finished is lifted to a placement root, with its exact verified parent retained
+in `context.parent`. It is never nested under a guessed surviving ancestor.
+This rule also applies through multiple finished ancestors and when history is
+expanded: each identity still has only one tree occurrence. A live branch below
+a finished child of a live parent is likewise a placement root. Finished-only
+history remains collapsed; expanding history never duplicates the lifted rows.
+Project folds hide lifted branches; their own parent folds hide their nested
+children. Historical parent/Done folds affect history, not lifted live roots.
+Filtered parents retain exact context without nesting. Live OSC done stays distinct from finished.
+Every fold, including nested Done, has its own key. Flat Status is global Needs you,
+contextual Child needs you (when present), Working, Done (initially collapsed), Idle, Offline, Stale, Unknown. It retains
 project, parent, host/core and execution-context facts on each row. Loading is
 Unknown here, never an infinite spinner. A raw error retains explicit Error
 text under Unknown, with native raw status intact; R2 does not authorize an
@@ -511,8 +523,10 @@ service-scope field, so role Supervisor alone never proves core-wide scope.
 A known project wins over a conflicting scope assertion. Only a unique verified
 scope assertion on an otherwise unassigned row puts it in Infrastructure. It
 appears once there per R1 identity, never per project. Several real Supervisor
-terminals remain separate with core/alias/identity context; same-core multiples
-have `multiple-supervisors` diagnostics. `health:'unknown'` is intentional:
+terminals remain separate with core/alias/identity context. Only distinct
+simultaneously current, live Supervisor evidence identities on the same verified
+core receive `multiple-supervisors`. Finished prior runs, stale/offline evidence,
+unknown or ambiguous cores and equal names on different cores do not warn. `health:'unknown'` is intentional:
 this stage accepts no health evidence and never turns liveness into Healthy.
 
 Machine filters use `coreIds`, independent of readable host labels; context
@@ -568,10 +582,28 @@ explicit pane or pane-less presence. Bare local routing is preserved exactly;
 remote routes keep their prefix; every intention also carries the core ID,
 terminal ID, incarnation and association key. The later view may map focus to
 supported `pane.focus` and peek to `terminal.peek`, only at explicit activation.
-`actionIntent(reduced,freshProjection,instanceKey,evidence)` revalidates the
-current rows and returns `{enabled,reason,intent}`; disabled intent is null.
-Call with a freshly rebuilt projection/current evidence on activation; a saved
-projection is not authority that a formerly visible instance is still visible.
+`actionIntent(reduced,projection,instanceKey,evidence,current)` requires an
+independent caller assertion `current:{state,generation,scopes?}` at activation.
+The projection's `binding` captures canonical view/filter/fold state and acquisition
+generation. Absent current state/generation, state mismatch (even within the same
+acquisition) or any generation mismatch fails closed with
+`projection-state-changed`. The supplied current state is canonicalized before
+comparison, so filter ordering does not matter. The host must read current state
+and generation independently from its current store, never copy the saved
+projection's binding back as proof of currency. Advance acquisition generation on
+every refresh or routing/pane invalidation, and serialize activation with these
+reads; immediately before executing a returned plan, revalidate host state and
+target. A pure function cannot detect unseen host changes or a host asserting
+stale data as current.
+
+After matching that binding, activation rebuilds the projection from current R2
+rows, current state, routes and current scope assertions (default `[]`). A vanished
+key/identity, changed contextual attention, core/context, parent, placement or
+route cannot rely on old `outsideFilters`/`contextOnly` flags. Current scope
+assertions are needed for Infrastructure keys. Exact current target checks still
+apply; the result is `{enabled,reason,intent}`, with null intent when disabled.
+This adds no host calls or external App capability. Reproject after any state or
+acquisition change before retrying an explicit action.
 No sending, keys, run, kill, keep, label, native status or lifecycle plan exists.
 
 ### Native navigation remains a release dependency
