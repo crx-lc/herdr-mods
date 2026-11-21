@@ -243,7 +243,7 @@ run native Windows checks or independently audit raw Windows logs. That run at
 `10c9d66` does not validate the new package checker on macOS or any new runtime;
 runtime code is unchanged. Source pins above do not prove installed Desktop parity.
 
-The share artifact [Projects preview](../../preview.png) is the supplied real
+The share artifact [Projects preview](https://github.com/crx-lc/herdr-mods/blob/main/roster/preview.png) is the supplied real
 Windows crop, copied byte-for-byte: 240×820, SHA-256
 `60d483878d8436296fb47ce9275d3766b05215bb9080fb435b173557c3eb6790`.
 It shows neutral Coordinator / Developer #42 / Reviewer PR #43 sample labels,
