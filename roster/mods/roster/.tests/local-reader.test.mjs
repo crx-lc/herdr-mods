@@ -5,7 +5,7 @@ import { publishedLocalPath } from '../local-reader.js';
 import { fakeHost, fixture, prove } from './sidebar-fixtures.mjs';
 function admitted() {
   const world = fixture(), f = fakeHost([world.producer, ...world.children]), calls = [];
-  const evidence = prove(f.host, { admissions: [{ address: 't1', coreId: 'core-a', verified: true, continuity: true, generation: 1,
+  const evidence = prove(f.host, { admissions: [{ address: 't1', coreId: 'core-a', verified: true, continuity: true, generation: 2,
     producer: JSON.stringify(world.producer), source: 'independent-process-and-connection' }] });
   f.host.readTextFile = async (path, options) => { assert.equal(path, '/sample/delegations.json'); assert.deepEqual(options, { on: null }); calls.push(path); return JSON.stringify(world.doc); };
   const c = new Controller(f.host); c.render(); return { ...f, ...world, c, calls, evidence };
@@ -42,7 +42,7 @@ test('hung native calls retain slots after deadline across repeated refreshes, a
   await c.refresh(); assert.equal(c.reader.outstanding, 1);
   // Admit same producer in next generation, but never allow timeout to free its native slot.
   for (let i = 1; i <= 8; i++) {
-    host.now = () => 1000 + i * 10000; await c.refresh();
+    host.now = () => 1000 + i * 10000; evidence.admissions[0].generation = i + 2; await c.refresh();
   }
   assert.equal(calls, 2); assert.equal(c.reader.outstanding, 2); assert.notEqual(c.feed.reduced.rows[0].roster.state, 'waiting');
   settles.forEach(resolve => resolve(null)); await Promise.resolve(); await Promise.resolve(); assert.equal(c.reader.outstanding, 0);
@@ -61,4 +61,15 @@ test('superseded generation/fingerprint and disconnect completion never resurrec
 });
 test('reader refresh throttle creates no automatic retries', async () => {
   const { c, calls } = admitted(); await c.refresh(); await c.refresh(); assert.equal(calls.length, 1);
+});
+
+test('refresh advances generation and removes prior waiting immediately while replacement read is unsettled', async () => {
+  const { c, host, evidence } = admitted(); await c.refresh(); const generation = c.feed.generation;
+  assert.equal(c.feed.reduced.rows.find(r => r.address === 't1').roster.state, 'waiting');
+  let complete; host.now = () => 11000; evidence.admissions[0].generation = generation + 1;
+  host.readTextFile = () => new Promise(resolve => complete = resolve);
+  const read = c.refresh(); assert.equal(c.feed.generation, generation + 1); assert.equal(c.feed.documents.length, 0);
+  assert.ok(c.feed.reduced.rows.every(r => r.roster.state !== 'waiting')); assert.deepEqual(c.feed.navigation.routes, []);
+  await Promise.resolve(); await Promise.resolve(); complete(null); await read;
+  assert.equal(c.feed.history[0].revision, 1);
 });

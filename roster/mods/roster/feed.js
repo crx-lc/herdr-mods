@@ -13,9 +13,9 @@ export function capture(host) {
 export const emptyEvidence = () => ({ cores: [], documents: [], routes: [], scopes: [], correlations: [], admissions: [] });
 export class Feed {
   constructor() { this.generation = 0; this.fingerprint = null; this.previous = new Map(); this.history = []; this.documents = []; }
-  update(snapshot, now, evidence = emptyEvidence()) {
+  update(snapshot, now, evidence = emptyEvidence(), { refresh = false } = {}) {
     const fingerprint = JSON.stringify([snapshot, evidence]);
-    if (fingerprint !== this.fingerprint) {
+    if (refresh || fingerprint !== this.fingerprint) {
       this.generation++; this.fingerprint = fingerprint; this.documents = [];
     }
     this.snapshot = snapshot; this.evidence = evidence;

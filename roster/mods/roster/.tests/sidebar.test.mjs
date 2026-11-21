@@ -150,7 +150,7 @@ test('single reviewer and unknown purpose use exact full detail; ended and last 
 
 test('native timer deadline bounds actual view read and retains native slot', async () => {
   const world = fixture(), f = fakeHost([world.producer, ...world.children]);
-  prove(f.host, { admissions: [{ address: 't1', coreId: 'core-a', verified: true, continuity: true, generation: 1,
+  prove(f.host, { admissions: [{ address: 't1', coreId: 'core-a', verified: true, continuity: true, generation: 2,
     producer: JSON.stringify(world.producer), source: 'independent-fixture' }] });
   f.host.readTextFile = () => new Promise(() => {});
   const { view, cx, timers } = viewOf(f); f.host.deadline = p => timerDeadline(cx, p); view.controller.render();

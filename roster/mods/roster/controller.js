@@ -4,10 +4,10 @@ import { actionIntent } from './navigation.js';
 import { LocalReader } from './local-reader.js';
 export class Controller {
   constructor(host) { this.host = host; this.feed = new Feed(); this.state = viewState(); this.cursor = null; this.reader = new LocalReader(host); }
-  observe() {
+  observe(refresh = false) {
     const snapshot = capture(this.host);
-    const evidence = this.host.evidence ? this.host.evidence(snapshot, this.feed.generation) : emptyEvidence();
-    this.feed.update(snapshot, this.host.now(), evidence);
+    const evidence = this.host.evidence ? this.host.evidence(snapshot, this.feed.generation + (refresh ? 1 : 0)) : emptyEvidence();
+    this.feed.update(snapshot, this.host.now(), evidence, { refresh });
     return this.feed;
   }
   render() {
@@ -24,6 +24,9 @@ export class Controller {
     return plan;
   }
   async refresh(deadline) {
+    if (this.host.now() - this.reader.last < 10000) return false;
+    // A fresh acquisition invalidates old documents/routes before any await.
+    this.observe(true);
     const admitted = await this.reader.refresh(this.feed, this.host.now(), deadline);
     if (admitted) {
       // Same capture and proof, no additional getters; assess fresh text immediately.
