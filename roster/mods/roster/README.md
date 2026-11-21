@@ -1,629 +1,182 @@
-# Roster pure modules (R1–R4)
+# Roster
 
-This folder contains pure modules for issues #6–#9. It is not an installable mod:
-there is no view, manifest, docking, polling, storage, or activation. Later Roster
-stages supply those pieces. No Herdr, Node, filesystem, process or network API is
-imported. Callers supply JSON-shaped records, current verified mappings and time.
-No module reads ambient state or mutates inputs. Unknowns remain explicit.
+To add the mod, ask an agent in Herdr:
 
-## Pipeline and exports
-
-```js
-import { normalizeApp } from './normalize.js';
-import { resolveIdentities } from './identity.js';
-import { enrichMetadata } from './metadata.js';
-
-const observation = { observedAt: 100000, refresh: 'success' };
-const record = normalizeApp({
-  address: 'edge/t7', state: 'live', created_ms: 100,
-  status: 'working', labels: { 'herdr.role': 'developer',
-    'herdr.project': 'sample', 'herdr.issue': 'example/repo#8' },
-}, observation, 100000);
-const identified = resolveIdentities([record], [{
-  alias: 'edge', id: 'core-b', verified: true,
-  source: 'machine-list', hostLabel: 'build-host',
-}]);
-const { rows, rejectedConfig } = enrichMetadata(identified, {
-  projects: [{ id: 'project-7f42', displayName: 'Sample project' }],
-  projectBindings: [{ coreId: 'core-b', token: 'sample', projectId: 'project-7f42' }],
-});
-// rows[0]: Developer #8; GitHub from label:herdr.issue;
-// project-7f42; build-host; Context unknown; live/current/working.
+```text
+Read ~/.config/herdr-app/AGENTS.md, then add this mod: https://github.com/crx-lc/herdr-mods/tree/main/roster
 ```
 
-`normalize.js` exports three adapters `(record, observation, now)` returning a
-normalized record or `null` for an invalid routing address:
+Roster is an opt-in sidebar with Projects and Status views. It starts with
+`place:none`: installation alone adds no panel or layout change. The current
+Desktop adapter displays provisional terminal rows, native status, validated
+role/work-item labels and accessible GitHub/Azure DevOps badges. Unknown identity,
+project and execution context stay explicit. Counts describe observed identities,
+not a verified census across aliases.
 
-| Export | Source shape | Optional labels/incarnation | Status input |
-|---|---|---|---|
-| `normalizeApp` | One App `terminals()` snapshot record | labels / created_ms | plain word |
-| `normalizeCompact` | One `hc ls --all --json` compact entry | always unavailable / null | plain word |
-| `normalizeFull` | One optional full Terminal record | labels / created_ms | object with state |
+**Current limits:** stock Desktop snapshots do not independently establish permanent
+Core identity or uninterrupted remote connection generations. Production therefore
+supplies empty Core mappings, documents, routes, scopes and correlations. **Open
+terminal actions and authoritative delegation waiting are disabled by default.**
+Core-based project/context mappings remain unbound. Equal names or aliases do not
+establish identity. This is a reviewable passive fallback for Refs #10, not proof
+that every original acceptance criterion is met.
 
-These adapters do not acquire data and do not claim to validate the complete
-upstream schema. They select only needed facts. Do not cast compact entries as
-full Terminals or query children with caller-bearing `get` to fill their gaps.
-Use explicit adapter selection, never automatic shape guessing.
+## Using the sidebar
 
-Records accept exact `tN` or `alias/tN` addresses (N lowercase base-36, nonzero first digit), state
-`live|finished`, parent string, name string, created_ms/finished_ms/status_ms
-(nonnegative safe integer milliseconds), and optional labels. Only the four
-`herdr.role/project/issue/pr` labels are retained. Invalid optional label keys are
-retained in `invalidLabels`; commands, directories, report messages and other
-private fields are discarded. Text is trimmed and bounded to 1024 characters;
-control characters and nonstrings are rejected. `parentMalformed` preserves an
-invalid reference as a condition without retaining arbitrary private content.
+After installation and the usual isolated App checks, explicitly open a copy with
+`openOverlay({mod:'roster'})` from an authorized mod/agent, or place a copy in a
+personal layout. No live installation or activation was performed for this change.
+Projects groups known project memberships and verified parent relationships;
+otherwise rows appear under explicit Unassigned groups. Status separates Needs
+you, contextual Child needs you, Working, Done, Idle, Offline, Stale and Unknown.
+Only terminals in the current snapshot are displayed; vanished observations are
+omitted, including superseded incarnations at a reused address. No finished state
+is invented. Done starts folded. No supplementary terminal history is acquired.
 
-`observation` accepts `observedAt`, `refresh: success|loading|error`,
-`connection: offline` when explicitly known, `startedAt`, `loadingLimitMs`
-(default 15000), `ttlMs` (default 90000), `present: false` for an absent retained
-observation, `localAlias` (default empty/local), and explicitly supplied
-`tabTitle`/`tabNamed`. For full records only, `parentNamespace: {alias, source}`
-can assert the supported namespace of bare parent references. `alias` must be
-an exact verified mapping alias (empty means local), and `source` must name the
-caller's supporting evidence. Missing/invalid assertions leave bare full parents
-unresolved. Supplying this field is a caller assertion, not source verification
-performed by these modules; never fill it from the record's routing prefix or
-the newest observation. `now` is mandatory for a current freshness claim.
-`freshness(observation, now)` is also exported. Offline takes precedence;
-loading expires; error/expiry/absence yields stale when prior evidence exists,
-otherwise unknown. Future/missing timestamps are unknown. Layout unavailable
-alone is not offline. status_ms never controls freshness.
+Projects/Status, group and child folds, and independent Machine/Context filters
+change only the sidebar. Global Needs you survives filters and folds; an entry
+outside filters explains why it cannot be opened. Contextual Child needs you
+creates no second actionable parent. Provider badges represent work items, never
+an LLM or group. Every row keeps project name/fallback, host/route description,
+execution context, provider accessibility name and disabled-action explanation.
 
-Normalized output includes source, exact address, localAlias, parentNamespace, parentReference,
-name/tabTitle/tabNamed, labels/invalidLabels, incarnation, lifecycle,
-rawStatus, appStatus, freshness, observedAt, statusChangedAt and provenance.
-Lifecycle and freshness are independent. Contradictory finish timestamps yield
-unknown lifecycle. `done` is a status of a live session, not a finished session.
-Recognized raw words are working/blocked/done/idle/error. Only a current live
-record can expose working/blocked/done/idle as `appStatus`; all other cases use
-unknown. No missing row becomes a fabricated finished session. Caller supplies
-retained observations explicitly; these modules maintain no history.
+Click gives the sidebar its own keyboard focus. Up/Down moves a visible cursor
+through its controls; Enter activates the selected control and retains its position
+when that control survives. A removed control selects the nearest current position.
+The explicit `focus` command also gives it focus. Selected row detail is visible as a keyboard-focus
+tooltip as well as a hover tooltip and accessibility label. No global key binding,
+`setAgentOrder`, terminal input, approval, status, notification or lifecycle changes
+are made. Native GPUI focus/accessibility behavior still needs desktop validation.
 
-Small validation helpers `object`, `list`, `text`, `stamp`, `tuple` and
-`addressParts(value, localAlias)` are also exported for the other modules.
-`addressParts` returns `{alias, terminalId}` or null; `tuple` serializes an array
-with JSON so delimiters in identifiers cannot collide.
+With independently verified injected evidence, the actual merged navigation guard
+maps eligible explicit actions to `pane.focus {terminal:exactAddress}` or
+`terminal.peek {terminal:exactAddress}`. It checks the current model pane snapshot
+and its completeness, generation, readiness, identity and current view state.
+Activation recaptures the six getters once; old callbacks, observed disconnects
+and changed model routes fail closed. The shipped adapter cannot supply these
+proofs, and no experimental Core reader is bundled.
 
-## Identity and parents
+## Selected Agents-slot opt-in and undo
 
-`normalizeCores(entries)` accepts verified assertions
-`{alias, id, verified:true, source, hostLabel?, name?}`; empty alias means local.
-It drops unverified/invalid entries. `resolveIdentities(normalizedRecords,
-coreEntries)` returns new sorted rows. Call it only on adapter output.
+“Choose an existing Agents slot…” inspects the current layout only when clicked.
+Select one exact existing slot. Roster first writes a preservation copy of the
+**current effective tree**, then a private restoration record, then a separate
+working layout with only that slot's content replaced, and switches to that copy.
+The original layout file, shipped Agents source, other slots and Quotr remain
+untouched. The working/preserved layout names are `roster-<token>` and
+`roster-preserved-<token>`; restoration records use the private App data file
+`data/roster/restoration-<token>.json` (shared across the mod's different props). Keep these local; never commit them.
 
-Each row adds `terminalId`, `terminalKey`, `associationKey`, `core`,
-`identityResolution`, `identityEvidence`, `metadataConflict`, `metadataEvidence`
-and `parent`. `core` has id/alias/verified/source/hostLabel/name plus sorted
-`evidence` of assertions matching the routing alias. `source` is reconciled only
-within that alias: different sources on different aliases are legitimate. For a
-verified identity, sorted `displayEvidence` contains every verified assertion
-for its core ID, including aliases without observations and assertions on an
-ambiguous alias. Each display field is retained only if all those assertions
-agree; a missing value is null and disagrees with a present value. All missing
-values stay null without a conflict. `conflicts` names disputed source or display
-fields. An unverified or ambiguous routing identity has no core-wide display
-evidence or verified display facts. Core input order and observation timestamps
-never select display facts. Verified
-terminalKey is JSON `["core",coreId,terminalId]`; provisional keys are
-`["provisional",alias,terminalId]`. Never persist provisional keys as verified
-identity. Association keys are JSON `[terminalKey,createdMs]` and exist only
-with verified core and known incarnation. Terminal mappings must match that
-incarnation; core rebuilds must have a different core ID. If recovery does not
-supply a changed incarnation, these modules cannot prove session continuity:
-the caller must invalidate sensitive associations rather than claim recovery
-verification. Do not transfer mappings by alias, hostname, title or model.
+“Restore Agents in this slot” reloads the record after restart, verifies that the
+current slot is still exactly owned, and restores only its original content in
+the latest working layout file. Unrelated intervening edits survive. It does not
+restore a stale whole tree or switch back to a stale original. Removed/replaced
+slots, changed layouts and concurrent edits cause refusal. Expected-text writes
+are the documented native guard, **not an OS-wide atomic compare-and-swap
+promise**. Two-second operation deadlines bound UI waiting; a timed-out write can still
+settle later, so inspect and reread before retrying. Failed steps can leave
+preservation/working files for inspection;
+there is no automatic cleanup or rollback claim. Backups and private restoration
+records can contain personal layout data.
 
-Aliases of the same verified core/terminal/incarnation collapse. Different
-incarnations remain separate evidence rows. Missing incarnation does not merge
-with a known one. Conflicting aliases for a core produce provisional identity.
-The newest observation provides routing; ties use address, source, then serialized normalized facts.
-`identityEvidence` retains all source/address/time observations. Differing
-metadata (including unavailable versus present labels) blocks metadata claims;
-lifecycle, raw status and freshness are reconciled independently. Agreement on
-live or finished survives a disagreement in another dimension. Lifecycle or
-freshness disagreement makes only that dimension unknown; raw status
-disagreement suppresses effective activity. `lifecycleConflict`,
-`freshnessConflict`, `statusConflict` and `statusEvidence` expose each dimension.
-Effective `appStatus` requires agreement on a current live observation and its
-activity across all observations; fresh plus stale live/working stays live,
-but freshness and effective activity are unknown. No older record fills a
-newer session's labels.
+## Delegation boundary and waiting
 
-`resolveIdentities` is not a supplemental-data join. Before combining current
-richer observations with compact history, callers must exclude compact entries
-already represented by current richer observations using verified core/terminal
-identity at the acquisition boundary. For example, App `t7` on `core-a` with
-created_ms 100 and compact `t7` on that same verified core represent overlapping
-current evidence: keep the App observation and omit the supplemental compact
-entry from that combined set. Keep a distinct finished compact `t9` as history
-when it is not represented. A shared raw `t7` on another core is not overlap.
-When overlap or incarnation cannot be established safely, callers must handle
-the returned ambiguous/duplicate-incarnation evidence without duplicate UI or
-navigation rows. Do not merge null incarnation into a known session, copy labels
-across them, or treat this module as solving history acquisition. Later feed and
-projection stages own that decision, including conservative treatment of reused
-IDs and uncertain recovery; no feed or UI is implemented here.
+`local-reader.js` discovers only the exact published `herdr.delegations` label,
+behind independently supplied Core, process and continuity admission for the exact
+producer observation and generation. Production has no such admission, so it reads
+zero files. The boundary rejects relative, URL, network/UNC, control-containing
+and over-4096-character paths. Only local `readTextFile(path,{on:null})` is allowed.
+**Remote native text reads remain prohibited**, even with ready machines: at the
+source pin they invoke startup-capable `hc exec`. There are no runtime hc commands,
+schema/discovery calls, ambient Core probes or directory scanning.
 
-`parent` exposes key/associationKey/resolution/reference/source and `evidence`
-for every observation (reference, source, address, observedAt, namespace,
-qualified target key and qualification resolution). Each observation is qualified
-before comparing semantic targets. Bare App and compact listing parent IDs refer
-to that observation's localAlias (the viewing namespace). This follows the pinned
-public `terminals()` contract and App source described below; it is not based on
-the remote record's core alias. The bare-parent namespace of optional full
-records is not established by the available evidence: require the caller's
-supported `parentNamespace` assertion or leave it unresolved. Qualified references
-use only verified aliases. A hostname or raw remote prefix is never guessed.
-Different qualified targets conflict even when raw strings match; equivalent
-references through verified aliases may agree. Any unresolved observation blocks
-a verified edge even when another observation has a known target. Conflicting
-absent/present references also block an edge. Routing freshness never chooses
-the namespace. A unique target must
-have known incarnation no newer than the child's. Resolutions include none,
-verified, unresolved, ambiguous, orphan, malformed, conflict, self,
-incarnation-unknown and cycle. Nonverified edges have null keys. All edges in a
-cycle are cut; traversal is iterative and bounded. Original reference remains
-available. Lifetime parent references cannot prove active assignments or
-historical parent incarnations; no delegation semantics are produced here.
+A read has a two-second UI deadline via `cx.timer.after`, at most 16 candidates,
+two outstanding native reads, 1 MiB per file and 4 MiB accepted text per refresh.
+A timed-out read still occupies its slot until the native operation actually
+settles. Refresh attempts are at least ten seconds apart and triggered only by
+observations that render; there is no automatic retry loop or loading spinner.
+Superseded generation/fingerprint results are rejected. No stale text fallback is
+used; revision high-water history survives failures and observed reconnects.
 
-## Metadata and explicit configuration
+Acquisition generations advance before proof stamping on refresh or selected
+terminal/process, identity, readiness, pane membership or proof changes. Injected
+`evidence(snapshot,generation)` must be synchronous and pure: proof-only changes
+may resample it once at the newly allocated generation. Derived stamps do not
+feed back into the fingerprint. Focus, scrolling, selection and agent display
+changes preserve admitted text without another file read. Even throttled refresh
+attempts observe real invalidations before returning. Unobserved disconnects cannot
+be detected by the public snapshot API.
 
-`normalizeConfig(input)` returns new projects/projectBindings/contexts/
-processProviders/projectProviders arrays plus `rejected` entries `{field,index}`.
-Missing/nonarray collections are empty. IDs/tokens use 1–128 ASCII letters,
-digits, dot, underscore or hyphen, starting with a letter/digit. Invalid array
-entries are rejected, not partially applied. No persistence or icons are handled.
+The feed holds only current snapshot rows; it keeps no vanished-row map. For N
+current rows and I displayed instances, the view builds one O(N) parent-key set
+and makes O(1) presence checks per instance (O(N + I) for that work). Pure reducers
+retain their existing current-scope costs and revision high-water semantics; no
+whole-pipeline linear-time or bounded high-water-history claim is made.
 
-`enrichMetadata(identityRows, rawConfig)` returns `{rows,rejectedConfig}`;
-`rawConfig` always has the shape below, even if previously normalized.
+Both views use `normalizeApp → resolveIdentities → enrichMetadata → reduceRoster
+→ projectRoster`. R2 permits partial waiting; the host boundary first assesses
+with R2, retains its history, removes parent documents whose delegation knowledge
+is incomplete, then reruns R2. It never edits display strings to hide a semantic
+claim. With complete injected evidence, an idle waiting Coordinator belongs to
+Working but contributes zero workers: three genuinely working delegates count
+three. Hidden children use full waiting text; visible direct children allow a
+distinct **static** ◈ marker with full hover/focus/accessibility detail. No pulse,
+animation or reduced-motion detection is claimed.
 
-| Collection | Entry |
-|---|---|
-| projects | `{id, displayName}` |
-| projectBindings | `{coreId, token, projectId}` exact core/project token |
-| contexts | `{coreId, id, label, source: verified|explicit-map, exclusive:true}` for an asserted single-context core, or `{coreId, terminalId, incarnation, id, label, source}` |
-| processProviders | `{coreId, terminalId, incarnation, provider}` |
-| projectProviders | `{projectId, provider, applicable:true}` |
+## Private settings and icons
 
-Provider is `github|azure-devops`. A multi-context core without exact terminal
-assertions stays Context unknown. Terminal assertions override core defaults;
-conflicting assertions at the same scope remain unknown. Machine/core identity
-and hostLabel remain separate from executionContext `{id,label,source,evidence}`.
-Viewing host, SSH login, LLM family/model and GitHub login are not evidence.
+`settings.js` retains `parseSettings`, `readSettings`, `setProjectIcon` and `bounded`.
+V1 settings contain projects/projectBindings/contexts/processProviders/
+projectProviders and icons keyed by stable project ID. The pure host contract
+requires private storage, bounded operations and an atomic settings compare-and-
+swap. That settings adapter is **not enabled** by the production sidebar.
 
-Metadata adds role/roleSource, displayLabel, workItem/workItemResolution/
-workItemEvidence, project, executionContext, providerBadge. Accepted roles are
-coordinator/planner/developer/reviewer/watcher/supervisor. Only validated labels
-establish roles. Known tasks format Planner #12, Developer #8, Reviewer PR #9.
-Unknown role uses meaningful explicitly named nonnumeric tab title, then the
-terminal's core name (`name`), verified core display name, then exact address.
-All of that fallback is display only. No role is inferred from the title.
+`icons.js` retains `validateIcon` and `iconDescriptor`. A host must enforce a private
+leaf namespace, containment, no symlink escape, bounded reads and safe immutable
+rendering of the same validated bytes. PNG/static SVG checks cap assets at
+256 KiB and dimensions at 1024. Native decoding is not proven by validation.
+The production adapter cannot prove these host guarantees and reads no private
+assets/settings. It always displays an 18 logical-pixel monogram with the project
+name. A configured image picker, asset adapter and native icon display remain
+unproven; no safety check was weakened to show an image.
 
-`parseWorkItem(value, kind='issue')` returns provider/repositoryIdentity/kind/
-numberOrId/reference or null. Supported full references are `example/repo#12`
-(the field determines issue versus PR), exact HTTPS github.com owner/repo
-issues/N or pull/N, dev.azure.com organization/project/_workitems/edit/N, and
-organization/project/_git/repo/pullrequest/N. N must be a positive safe integer.
-URL query/fragment suffixes, bare numbers and other hosts/shapes are unknown.
-For ADO work items, repositoryIdentity denotes organization/project scope; a
-work item need not belong to a Git repository. No ADO service is contacted.
-Both issue and PR fields together are conservatively conflicting, even when
-one is malformed. Valid candidate task evidence remains available.
+Detailed pure exports and data shapes are in [MODULES.md](MODULES.md).
 
-Project `{id,displayName,source,resolution,evidence}` comes only from an exact
-verified core/token binding with one project definition. Equal tokens, names
-or shared Space never merge projects. Multiple bindings/definitions conflict;
-missing binding stays unbound. An unlabeled child may inherit a verified
-parent's known membership with parent association provenance. Invalid,
-conflicting or explicit unbound child metadata never inherits. Explicit child
-membership conflicting with its parent retains its own ID, marks
-parent-conflict, and does not silently change projects. Renaming displayName
-preserves ID and exact pair bindings across cores. Unassigned is display text,
-not a persistent project ID.
+## Modules, data sources and limits
 
-Provider precedence is a validated linked work item, exact process mapping,
-then explicitly applicable project default. Malformed/competing task evidence
-blocks defaults. Conflicting process mappings block project fallback. Mixed
-GitHub/ADO tasks retain their own provider. Unknown is null/unbadged.
-`providerBadge` has id/source/accessibleName. Provider never comes from an LLM
-family. Raw labels, invalid keys and metadataEvidence remain on rows for later
-consumers to explain unresolved metadata.
+The installable tree is self-contained. `main.js` imports only Herdr/gpui-kit and
+the local view; `view.js` draws and wires the host-injected controller, feed,
+local reader and layout logic. Pure logic has no Herdr imports. Existing identity,
+metadata, delegation, attention, projection, settings, icons and navigation
+contracts remain the implementation; there is no parallel semantic reducer.
 
-## Evidence, limits and verification
+`normalizeApp`, `normalizeFull` and `normalizeCompact` select explicitly different
+record shapes. `resolveIdentities` accepts only independent verified alias/Core
+assertions, deduplicates exact incarnations and preserves uncertain relationships.
+`enrichMetadata` accepts explicit Core/project/context/provider configuration.
+`reduceRoster` consumes published delegations v1 with monotonic revision history;
+`projectRoster`, `transition` and `actionIntent` retain the actual view/state and
+navigation guard. Trusted injected host evidence is a test/extension seam, not a
+new public Desktop API or a proof that installed Desktop exports those facts.
 
-Contracts use the [official manual](https://github.com/herdrdev/herdr-app/blob/317e673f1f1568b876cbaa0b41dabeb9153ecbea/defaults/AGENTS.md)
-and [public types](https://github.com/herdrdev/herdr-app/blob/317e673f1f1568b876cbaa0b41dabeb9153ecbea/defaults/herdr.d.ts)
-pinned at App commit `317e673f1f1568b876cbaa0b41dabeb9153ecbea`, plus hc
-0.1.21's CoreInfo/Terminal/Status/MachineView schema and the compact-list
-observation from the #4 design. The public `terminals()` documentation describes
-the listing contract with viewing-local bare parents. Inspected App
-[`live_for` and its parent-address test](https://github.com/herdrdev/herdr-app/blob/317e673f1f1568b876cbaa0b41dabeb9153ecbea/src/hc.rs)
-rewrite prefixed parents and preserve bare `t7` on a remote `beta/t6` record.
-These support the App/compact viewing-namespace rule. No inspected hc core/get
-implementation establishes full-record bare-parent behavior; it remains unknown
-without caller-supplied evidence. This is source/schema evidence, not evidence
-about an installed Windows App. No new network sources, packages or assets.
+Source references: [App manual/types and implementation at 317e673](https://github.com/herdrdev/herdr-app/tree/317e673f1f1568b876cbaa0b41dabeb9153ecbea),
+[Core at c751780](https://github.com/herdrdev/herdr-core/tree/c7517808d64f06609e4ecf0db1757005373cc3a3),
+and [herdr-agents delegations v1 at 55c71df](https://github.com/crx-lc/herdr-agents/tree/55c71df91dbd60cf07358bbcaebba5586870fd44/contracts/delegations).
+These pins are source evidence, not installed Desktop version proof. No network
+source, external asset, dependency or Better Sidebar code/assets is bundled.
 
-Run `npm test` at repository root. Neutral fixtures cover the three source
-shapes, identity and incarnation collisions, parents/cycles, metadata conflicts,
-project renames, mixed providers, contexts, lifecycle/freshness and immutability.
-This module stage has no render, install or live behavior pass. Native navigation,
-UI, feed acquisition and packaging remain separate work. Pure projection/filtering,
-settings and icon helpers are documented below. The full #4 navigation and lifecycle
-producer release requirements remain unchanged.
+Run `npm test` in the repository. For optional offline published contract parity,
+set `ROSTER_DELEGATION_FIXTURES` to the separately downloaded pinned evidence
+folder containing `reader-cases.json` and `delegation-read.mjs`; tests never fetch.
+Strict Node fake-host tests exercise the actual entry, controller, reducers,
+native-call arguments, keyboard/tooltip data, read budgets and layout operations.
+They do not establish QuickJS/GPUI/native Windows behavior.
 
-## Private settings and local icons (R4 / #7 helper contract)
-
-`settings.js` exports `parseSettings(raw)`, `readSettings(host)` and
-`setProjectIcon(host, projectId, assetOrNull)`. The v1 document uses the R1
-configuration collections unchanged, with an `icons` array. A neutral example:
-
-```json
-{"version":1,"projects":[{"id":"project-a","displayName":"Sample"}],"projectBindings":[{"coreId":"core-a","token":"sample","projectId":"project-a"},{"coreId":"core-b","token":"sample","projectId":"project-a"}],"contexts":[],"processProviders":[],"projectProviders":[],"icons":[{"projectId":"project-a","asset":"sample.svg"}]}
-```
-
-Only stable project IDs select icons. Renames and explicit bindings across cores
-retain the mapping. Clearing it never deletes an asset. Unknown projects, invalid
-names, malformed JSON, unknown versions and invalid configuration fail without
-writing. Documents are capped at 262144 characters and each collection at 1024
-entries. Errors include `invalid-settings`, `invalid-argument`, `unknown-project`,
-`conflict`, `write-failure`, and `host-failure`.
-
-The future host selects a Roster-specific private App data namespace outside the
-repository and installed mod source. It implements `readSettings()` returning the
-exact stored text or null for absence, and `compareAndSwapSettings(expected,
-next)` returning `ok` or `conflict`. The comparison and write **must be atomic**,
-including creation when expected is null; read-then-unconditional-write is not
-sufficient. Other results fail. `deadline(promise)` must settle within a bounded
-interval even when the operation hangs. A timed-out write may still complete:
-reread before retrying. The host must isolate keys, ensure private permissions,
-and never log or publish values. No storage adapter or personal data is created
-by these modules.
-
-`icons.js` exports `validateIcon(bytes, leafName)` and `iconDescriptor(host,
-project, config)`. `readIcon(leafName, maxBytes)` returns `{bytes: Uint8Array,
-path}` or fails. The host must reject URLs, absolute paths, traversal and symlink
-escapes, resolve the single validated leaf only inside the chosen private Roster
-namespace, enforce the byte limit during reading, and return a local renderer path
-for that same file. It must prevent replacement/escape between validation and
-rendering; otherwise the future view must use an immutable private snapshot. The
-host supplies OS-specific path behavior; these modules do not construct paths.
-No URL or network operation is supported.
-
-Assets are limited to 256 KiB, with PNG dimensions at most 1024 by 1024. PNG
-checks signature, chunk bounds, CRCs, IHDR and IEND, but does not decode image
-data or establish native decoder success. SVG is a conservative ASCII static
-subset: svg, g, path, rect, circle, ellipse, line, polyline and polygon with
-simple geometry, color and stroke attributes; double-quoted attributes only,
-no entities, declarations, CSS, references, scripts, events or external content.
-Individual SVG tags are limited to 8192 bytes to bound synchronous parsing. SVG width and height, when present, are positive unitless values at most 1024.
-Unsupported files fall back. The descriptor always retains name, monogram and
-18px suggested size, including when it also contains a validated image path.
-The future view must keep the neutral fallback and name present even if native
-rendering fails. Native decoding and renderer failure callbacks have not been
-verified; these helpers make no such claim. Local assets are not synchronized
-across devices. No App integration or view is implemented here.
-
-## Delegation and attention (R2 / #8)
-
-The producer is **herdr-agents**, schema **herdr-agents/delegations**, version
-**1**, pinned at [`55c71df91dbd60cf07358bbcaebba5586870fd44`](https://github.com/crx-lc/herdr-agents/tree/55c71df91dbd60cf07358bbcaebba5586870fd44/contracts/delegations).
-The published README and `bin/delegation-read.mjs` define validation and live
-continuity. This is an independent consumer implementation; upstream source and
-fixtures are downloaded only as external verification evidence, not bundled.
-No runtime imports or dependencies on that repository exist.
-
-`delegations.js` exports:
-
-- `assessDelegations({text, producer, terminals, machines, lastRevision?, coreId?})`:
-  returns `{status:'unknown',why}` or `{status:'ok',revision,assignments}`. Each
-  assignment has id/role/project/item/child and state active/ended/unknown, with
-  reason/by for ended and why for unknown. Optional unknown v1 fields are ignored.
-  Whole-document schema/version/shape/duplicate/revision checks precede every
-  continuity check. Producer requires live address/created/pid, launcher root,
-  matching run and ready machine; keep is intentionally irrelevant for producers.
-  Workers additionally require keep false, matching launch ID, expected parent
-  and same core. Unknown core ID is omitted, never inferred from machine names.
-  Cross-core v1 children are unknown. Duplicate live child addresses fail closed.
-- `consumeDelegations(input, history=[])`: returns `{result,history}` without
-  changing input/history. History is an array of `{key,revision}` records keyed
-  by producer core (when explicitly supplied), local terminal ID, creation, pid
-  and run. Otherwise the routing namespace remains provisional. Preserve the
-  highest accepted revision across disconnects, read failures and reconnects.
-  Verified aliases share history; unrelated incarnations do not. Callers own
-  history lifetime; do not discard an incarnation's history while it can recur.
-  `updatedAt` age is informational and has no freshness TTL.
-- `readDelegations(host, producer, generation)`: only reads the absolute
-  `herdr.delegations` label path, on the machine derived from producer.address
-  (`null` for bare/local, remote prefix otherwise). The host supplies
-  `readTextFile(path,{on})`, `deadline(promise)` and `generation()`. A deadline
-  must settle even if a read hangs; implement it with `cx.timer.after`, never
-  `cx.sleep`. The host changes its token on every refresh, disconnect, reconnect
-  or discovery-path change. A superseded completion yields unknown, never a
-  cached result. Success is `{status:'read',text,generation}`; missing, rejected,
-  nontext or oversized answers fail conservatively when acquired/assessed.
-  Malformed JSON is rejected by assessment. Text is capped at 1 MiB characters
-  (the App additionally enforces its 1 MiB byte read limit); paths at 4096.
-- `machineOf(address)` and `qualifyChild(address, producerAddress)` support that
-  exact documented routing namespace, without hostname/core inference.
-
-Discovery belongs to the future host: take labeled producers from `terminals()`
-and readiness from `machines()`, read separately, then reduce with current live
-observations. Reads do not grant current status. On disconnect clear successful
-read observations immediately, retain revision history, and acquire new text on
-reconnect. Never pass cached pre-disconnect text as a new observation. This
-module has no polling, loading UI, producer writes or native actions.
-
-`attention.js` exports `reduceRoster(metadataRows, options={})`. Options are
-`documents:[{producer,text,generation?}]`, current raw `terminals`, `machines`,
-`history`, optional `correlations`, and `generation` (default null for entirely
-synchronous injected fixtures). Omitted, undefined or null current generation
-accepts only untagged, undefined or null-generation fixture documents; tagged
-documents fail closed. An explicit current generation requires an exact document
-token match. Async hosts must supply a non-null generation and matching
-acquisition tokens. Old generations produce no waiting. Return
-`{rows,targets,counts,assessments,history}`. Every row retains its native fields and adds `roster`; no native status is rewritten.
-
-R1 adapters now accept lowercase base-36 terminal IDs such as `t4z` and `t7a`
-as well as existing numeric IDs. Explicit configuration selectors use the same
-syntax. Noncompact normalized rows add `process:{pid,run}`; compact rows use
-null. Identity resolution retains every observation's process in
-`processEvidence`. This does not change R1 identity keys or resolve its
-uncertain incarnation boundaries. Delegation joins require all process evidence
-to match live pid/run, a unique verified R1 identity, creation time, current live
-status, a verified direct parent association and matching explicit core ID.
-Without supplied verified core mappings, the low-level reader can assess
-continuity but the reducer leaves delegation associations unknown. A mod cannot
-manufacture core IDs. Conflicting/old process evidence cannot supply activity to
-a new run with the same address or creation time. R1 status and metadata
-conflicts remain authoritative. Aliases are joined through R1 identity evidence.
-
-`roster.delegation` exposes knowledge known/partial/unknown, pendingCount,
-workingCount, delegates `{id,associationKey,role,working}`, and unresolved IDs.
-Knowledge is unknown when required evidence is missing or all outstanding
-assignments are unresolved; a mix of confirmed and unresolved delegates is
-partial. Counts are confirmed lower bounds when knowledge is partial/unknown. Ended,
-finished, reused or R1 done children are never pending; an active idle/blocked
-worker can be pending without working. Missing R1 child evidence is unresolved.
-Waiting needs an idle Coordinator, confirmed pending assignments and at least
-one genuinely working linked agent. An idle parent contributes zero to
-`counts.working`; that count measures actual current working agents, including
-work unrelated to an assignment. `counts.needsYou` counts actionable targets.
-
-| Roster state | Group | Collapsed label | Expanded semantic icon / tooltip |
-|---|---|---|---|
-| waiting | Working | Waiting for delegate | delegation-waiting / detail below |
-| needs-you | Needs you | Needs you | needs-you |
-| child-needs-you | Needs you | Child needs you | child-needs-you |
-
-For waiting, `display.tooltip` and `display.detail` preserve `Waiting for
-Developer`, `Waiting for Reviewer`, `Waiting on 1 agent` for an unknown role, or
-`Waiting on N agents`. Delegation purpose comes from the confirmed published
-`assignment.role`: only `developer` and `reviewer` yield named detail. Missing or
-unrecognized assignment roles stay generic, even if child labels or names
-suggest a role. A child's missing or mismatching role label never overrides the
-assignment; its own R1 row role and metadata remain unchanged. The semantic
-icon is a distinct token for the later view to map to an accessible glyph; it is not an App icon API or a bundled asset. No UI is built.
-
-Own blocked attention wins. Contextual direct-child attention replaces waiting
-only on a current idle parent; a working parent retains state working and group
-Working while exposing the same blocked-child context. `roster.children`
-preserves each verified direct child's
-associationKey/address/terminalKey/incarnation. Contextual Child needs you
-is not actionable; only the child's own entry appears in `targets`. Inferred
-ancestry cannot create a direct child attention edge. Existing R1 verified
-parent evidence supports direct-child context, not proof of an assignment.
-Null or malformed raw terminal/machine entries supply no evidence. Irrelevant
-invalid entries do not invalidate other valid observations; missing required
-evidence remains unknown and cannot produce waiting.
-Targets preserve exact identity; unverified rows remain explicit via terminalKey
-and null associationKey.
-
-Watcher attention remains by default: v1 supplies no suppression correlation.
-The optional trusted host assertion has `{verified:true,soleCause:true,source,
-generation,delivery,targetDelivery,watcher:{associationKey,pid,run},
-target:{associationKey,pid,run}}`. Suppression requires a current non-null
-matching generation, identical nonempty delivery IDs, current blocked live
-Watcher and target on ready machines, and exact process/association matches.
-The host must independently verify the sole cause and delivery relationship;
-setting this assertion from names, wording, ancestry or v1 data is invalid.
-Missing, partial, mismatched, stale or disconnected evidence retains the
-Watcher's entry. Suppression changes only Roster attention metadata/targets.
-
-Run `npm test` for independent neutral regression fixtures. For offline exact
-upstream parity, download `bin/delegation-read.mjs` and all
-`contracts/delegations/v1/*` at the pinned SHA into a separate evidence directory,
-then run `ROSTER_DELEGATION_FIXTURES=<directory> npm test` (or set that environment
-variable in the platform's shell). `.tests/pinned-parity.test.mjs` compares full
-results with the reference reader and every published world's expected result;
-it skips explicitly when those external verification files are absent. No test
-fetches anything. The consumer adds conservative duplicate-address and text
-bounds beyond upstream parity. No licenses/assets from upstream are bundled.
-
-These helpers remain a noninstallable module stage. No App check, typecheck,
-installation, live probe, full UI, native navigation or workstation release gate is
-claimed. Full #4/#10/#11 gates still apply. No settings, Quotr, shipped Agents,
-native notifications, input, approvals or lifecycle are changed.
-
-## Projects, Status and local navigation plans (R3 / #9)
-
-`projection.js` and `navigation.js` extend the R1 → `reduceRoster` pipeline.
-They accept the actual R2 result; they do not infer assignments, reproduce the
-waiting reducer, acquire data, import a host API or execute commands. This is
-still a noninstallable module stage. No manifest, view or activation is supplied.
-
-```js
-import { projectRoster, transition } from './projection.js';
-import { moveCursor, actionIntent } from './navigation.js';
-
-const projected = projectRoster(reduced); // default Projects; routes disabled
-const state = transition(projected.state, { type: 'view', view: 'status' });
-// Reproject with current host assertions to enable local navigation:
-const options = { navigation: { generation: 'refresh-7', routes: [{
-  associationKey: reduced.rows[0].associationKey,
-  coreId: reduced.rows[0].core.id, address: reduced.rows[0].address,
-  verified: true, source: 'current-pane-snapshot', generation: 'refresh-7',
-  presentation: 'pane', // or explicitly verified 'pane-less'
-}] } };
-const next = projectRoster(reduced, state, options);
-const cursor = moveCursor(next.order, null, 'next');
-// Read these independently from the host's current store at activation time:
-const current = { state: currentViewState, generation: currentAcquisitionGeneration,
-  scopes: currentScopeAssertions }; // scopes defaults to []
-const plan = actionIntent(currentReduced, next, cursor, currentNavigationEvidence, current);
-// plan.intent is data only; no focus/peek/native command was invoked.
-```
-
-`projectRoster(reduced, state?, options?)` returns `{state, binding, instances, order,
-counts}`. Input rows must be the unique R1 evidence rows passed through R2.
-`viewState(input?)` normalizes state; `transition(state,event)` handles `view`,
-`filters` (coreIds/contextIds independently), and `fold` (key/collapsed).
-State contains only view, coreIds, contextIds and folds. Fold booleans are keyed
-by the exact returned instance key. True collapses; false expands; omitted
-uses defaults. Switching, filtering, folding and moving the cursor are pure
-operations and emit zero focus, peek, relaunch or native terminal commands.
-
-Projects uses stable project IDs, verified actual parents inside that same
-placement, and separate explicit Unassigned groups carrying R1's resolution.
-Filtered, cross-project and unavailable parents retain context rather than a
-fabricated nesting edge. Orphans, ambiguous parents and cycles remain explicit;
-traversal is iterative, including a defensive cycle cut. Projects and parent
-rows start expanded; finished roots/children live in a collapsed Done section
-under their actual project/parent. A nonfinished branch whose direct parent has
-finished is lifted to a placement root, with its exact verified parent retained
-in `context.parent`. It is never nested under a guessed surviving ancestor.
-This rule also applies through multiple finished ancestors and when history is
-expanded: each identity still has only one tree occurrence. A live branch below
-a finished child of a live parent is likewise a placement root. Finished-only
-history remains collapsed; expanding history never duplicates the lifted rows.
-Project folds hide lifted branches; their own parent folds hide their nested
-children. Historical parent/Done folds affect history, not lifted live roots.
-Filtered parents retain exact context without nesting. Live OSC done stays distinct from finished.
-Every fold, including nested Done, has its own key. Flat Status is global Needs you,
-contextual Child needs you (when present), Working, Done (initially collapsed), Idle, Offline, Stale, Unknown. It retains
-project, parent, host/core and execution-context facts on each row. Loading is
-Unknown here, never an infinite spinner. A raw error retains explicit Error
-text under Unknown, with native raw status intact; R2 does not authorize an
-error attention target or a synthetic permission prompt.
-
-Global actionable Needs you always precedes the trees/groups, unaffected by
-folds or filters. R2's contextual Child needs you remains nonactionable with
-actual child association keys; it creates no extra attention target or stop.
-Own attention and waiting precedence are exactly R2's. Waiting is Working,
-contributes zero actual workers, and retains pending/delegation facts. Projects
-uses compact waiting only when all confirmed delegate children are visibly
-nested under that parent; otherwise it supplies the full R2 detail. Status
-always uses full waiting detail. Tooltip/detail and semantic icons remain for
-the later accessible view; no animation or GPUI behavior is claimed.
-
-`options.scopes` accepts explicit host assertions `{associationKey, coreId,
-verified:true, scope:'core-wide', source}` for the exact incarnation. R1 has no
-service-scope field, so role Supervisor alone never proves core-wide scope.
-A known project wins over a conflicting scope assertion. Only a unique verified
-scope assertion on an otherwise unassigned row puts it in Infrastructure. It
-appears once there per R1 identity, never per project. Several real Supervisor
-terminals remain separate with core/alias/identity context. Only distinct
-simultaneously current, live Supervisor evidence identities on the same verified
-core receive `multiple-supervisors`. Finished prior runs, stale/offline evidence,
-unknown or ambiguous cores and equal names on different cores do not warn. `health:'unknown'` is intentional:
-this stage accepts no health evidence and never turns liveness into Healthy.
-
-Machine filters use `coreIds`, independent of readable host labels; context
-filters use R1 `executionContext.id`. Null collection means all; empty means
-none; `[null]` explicitly selects unknown core/context. Two cores with one
-hostname remain distinct; a multi-context core can be filtered per terminal.
-Outside-filter global attention retains project/parent/core/context plus
-`outsideFilters` reasons `core-outside-filter` and/or `context-outside-filter`.
-Those instances are explanatory and disabled for navigation. Clearing filters
-makes a current valid target navigable again; it never silently navigates to
-an outside-filter contextual terminal.
-
-Counts are distinct `(terminalKey, incarnation)` evidence identities, never
-rendered-instance totals. `all` covers the input set; `filtered` covers matches
-before folding; `visible` covers terminal instances actually materialized,
-including globally exposed outside-filter attention. `outsideFilterAttention`
-covers just that exception. Each has identities/working/waiting/needsYou;
-section `counts` uses its own member scope before folds. Working is R2's actual
-current working criterion, while waiting is a separate contextual count. A
-Working section containing three workers and one waiting Coordinator therefore
-has working 3 and waiting 1, not working 4. NeedsYou counts actionable identities,
-not contextual parents. Finished Done headers also expose their direct count.
-
-The acquisition caller **must omit overlapping compact history** already
-represented by a richer live observation, as R1 requires. Projection cannot
-prove that a null-incarnation compact row and a known incarnation are one run.
-It preserves those separate evidence identities with `identityDiagnostic`,
-disables ambiguous current routes, and does not guess a merge. Counts of such
-an unsanitized set are evidence counts, not a claim of distinct real sessions;
-do not present them as a confirmed agent census. The regression fixture shows
-both this failure boundary and the correctly acquired one-worker result.
-
-Visible terminal instances include row, context, placement, status, display,
-outsideFilters and guarded navigation. Deterministic JSON tuple keys include
-view, section/tree ancestry and full evidence identity; equal titles, same IDs
-on different cores, repeated attention/tree and nested Done cannot collide.
-`navigationOrder(instances)` scans actual visible instances, skipping headers,
-context-only/outside-filter/disabled rows. First visible navigable identity
-wins; repeated instances add no stops. `moveCursor(order,key,direction)` wraps
-next/previous locally and returns a key or null, never an action. Unknown old
-cursor starts at the first/last current stop. No setAgentOrder call occurs.
-
-`navigationTarget(row,rows,evidence)` requires verified R1 core/incarnation,
-current live lifecycle/freshness, a valid current address in identityEvidence,
-no competing nonfinished incarnation, and exactly one matching route assertion.
-The evidence contract above is a **trusted host assertion**, not verification
-performed by this module and not an invented App API. The host must obtain it
-from current routing/core and pane observations; never set presentation from
-role, parent, title or whether an agent appeared in a filtered list. Invalidate
-it on refresh generation, disconnect, reconnect, route/core recovery and pane
-changes. The route must match generation/core/association/address/source and
-explicit pane or pane-less presence. Bare local routing is preserved exactly;
-remote routes keep their prefix; every intention also carries the core ID,
-terminal ID, incarnation and association key. The later view may map focus to
-supported `pane.focus` and peek to `terminal.peek`, only at explicit activation.
-`actionIntent(reduced,projection,instanceKey,evidence,current)` requires an
-independent caller assertion `current:{state,generation,scopes?}` at activation.
-The projection's `binding` captures canonical view/filter/fold state and acquisition
-generation. Absent current state/generation, state mismatch (even within the same
-acquisition) or any generation mismatch fails closed with
-`projection-state-changed`. The supplied current state must be a plain data
-object (ordinary or null prototype). Valid partial states, including `{}`, are accepted: omitted fields
-use the same defaults as `viewState`. Supplied fields must be `view` (`projects`
-or `status`), `coreIds`/`contextIds` (null or arrays of null or nonempty string IDs,
-at most 1024 characters, without surrounding whitespace or control characters),
-and `folds` (a plain data object mapping keys to booleans). Unknown fields,
-accessors, symbols and malformed shapes fail closed before canonicalization.
-Valid state is then canonicalized for comparison, so duplicate filter IDs and
-filter ordering do not matter. UI `viewState` normalization is unchanged. The host
-must read current state and generation independently from its current store, never copy the saved
-projection's binding back as proof of currency. Advance acquisition generation on
-every refresh or routing/pane invalidation, and serialize activation with these
-reads; immediately before executing a returned plan, revalidate host state and
-target. A pure function cannot detect unseen host changes or a host asserting
-stale data as current.
-
-After matching that binding, activation rebuilds the projection from current R2
-rows, current state, routes and current scope assertions (default `[]`). A vanished
-key/identity, changed contextual attention, core/context, parent, placement or
-route cannot rely on old `outsideFilters`/`contextOnly` flags. Current scope
-assertions are needed for Infrastructure keys. Exact current target checks still
-apply; the result is `{enabled,reason,intent}`, with null intent when disabled.
-This adds no host calls or external App capability. Reproject after any state or
-acquisition change before retrying an explicit action.
-No sending, keys, run, kill, keep, label, native status or lifecycle plan exists.
-
-### Native navigation remains a release dependency
-
-Current `setAgentOrder` is only an ordering hint. At the pinned App revision
-above, native code appends omitted pane candidates, excludes pane-less children
-from candidates, and advances from the root parent instead of the actual current
-terminal. Neutral source-derived simulations demonstrate all three failures:
-`[t1]` becomes `[t1,t2]` despite hidden t2; pane-less `edge/t7` cannot enter the
-native candidate set; selecting that child after t1 can select the same child
-again. These simulations and the local array tests are **not** a strict global
-navigation acceptance pass or evidence about an installed App. No key rebinding,
-pane creation, upstream change or native override is included. #10 must integrate
-a supported exact navigation capability; #11 retains workstation/UI/release
-gates. No App check, typecheck, install, sync or live probe is part of this round.
-No new packages, assets, network sources or external runtime imports are added.
+Remaining original acceptance gaps: installed Core-qualified local/remote/pane-less
+navigation; authoritative runtime waiting and observed remote continuity;
+Core-bound project/context associations; private configured icons; actual stock
+Windows opt-in/undo, accessibility, narrow-sidebar screenshot and App rendering.
+No App check, typecheck, live install/sync, owner layout/settings/Quotr access or
+real remote probe was run. There is no fabricated `preview.png`. Packaging and
+isolated stock Desktop acceptance belong to the separate #11 delivery. Global
+shortcut changes are outside the current scope; the old Phase 2/#18 gate is retired.
