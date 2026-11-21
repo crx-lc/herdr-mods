@@ -45,7 +45,7 @@ upstream schema. They select only needed facts. Do not cast compact entries as
 full Terminals or query children with caller-bearing `get` to fill their gaps.
 Use explicit adapter selection, never automatic shape guessing.
 
-Records accept exact `tN` or `alias/tN` addresses (N positive), state
+Records accept exact `tN` or `alias/tN` addresses (N lowercase base-36, nonzero first digit), state
 `live|finished`, parent string, name string, created_ms/finished_ms/status_ms
 (nonnegative safe integer milliseconds), and optional labels. Only the four
 `herdr.role/project/issue/pr` labels are retained. Invalid optional label keys are
@@ -249,7 +249,7 @@ Run `npm test` at repository root. Neutral fixtures cover the three source
 shapes, identity and incarnation collisions, parents/cycles, metadata conflicts,
 project renames, mixed providers, contexts, lifecycle/freshness and immutability.
 This module stage has no render, install or live behavior pass. Navigation,
-delegation/attention/counting, UI/filtering, feed acquisition, private settings,
+UI/filtering, feed acquisition, private settings,
 icons and packaging remain separate work. The full #4 navigation and lifecycle
 producer release requirements remain unchanged.
 
@@ -304,3 +304,144 @@ The future view must keep the neutral fallback and name present even if native
 rendering fails. Native decoding and renderer failure callbacks have not been
 verified; these helpers make no such claim. Local assets are not synchronized
 across devices. No App integration or view is implemented here.
+
+## Delegation and attention (R2 / #8)
+
+The producer is **herdr-agents**, schema **herdr-agents/delegations**, version
+**1**, pinned at [`55c71df91dbd60cf07358bbcaebba5586870fd44`](https://github.com/crx-lc/herdr-agents/tree/55c71df91dbd60cf07358bbcaebba5586870fd44/contracts/delegations).
+The published README and `bin/delegation-read.mjs` define validation and live
+continuity. This is an independent consumer implementation; upstream source and
+fixtures are downloaded only as external verification evidence, not bundled.
+No runtime imports or dependencies on that repository exist.
+
+`delegations.js` exports:
+
+- `assessDelegations({text, producer, terminals, machines, lastRevision?, coreId?})`:
+  returns `{status:'unknown',why}` or `{status:'ok',revision,assignments}`. Each
+  assignment has id/role/project/item/child and state active/ended/unknown, with
+  reason/by for ended and why for unknown. Optional unknown v1 fields are ignored.
+  Whole-document schema/version/shape/duplicate/revision checks precede every
+  continuity check. Producer requires live address/created/pid, launcher root,
+  matching run and ready machine; keep is intentionally irrelevant for producers.
+  Workers additionally require keep false, matching launch ID, expected parent
+  and same core. Unknown core ID is omitted, never inferred from machine names.
+  Cross-core v1 children are unknown. Duplicate live child addresses fail closed.
+- `consumeDelegations(input, history=[])`: returns `{result,history}` without
+  changing input/history. History is an array of `{key,revision}` records keyed
+  by producer core (when explicitly supplied), local terminal ID, creation, pid
+  and run. Otherwise the routing namespace remains provisional. Preserve the
+  highest accepted revision across disconnects, read failures and reconnects.
+  Verified aliases share history; unrelated incarnations do not. Callers own
+  history lifetime; do not discard an incarnation's history while it can recur.
+  `updatedAt` age is informational and has no freshness TTL.
+- `readDelegations(host, producer, generation)`: only reads the absolute
+  `herdr.delegations` label path, on the machine derived from producer.address
+  (`null` for bare/local, remote prefix otherwise). The host supplies
+  `readTextFile(path,{on})`, `deadline(promise)` and `generation()`. A deadline
+  must settle even if a read hangs; implement it with `cx.timer.after`, never
+  `cx.sleep`. The host changes its token on every refresh, disconnect, reconnect
+  or discovery-path change. A superseded completion yields unknown, never a
+  cached result. Success is `{status:'read',text,generation}`; missing, rejected,
+  nontext or oversized answers fail conservatively when acquired/assessed.
+  Malformed JSON is rejected by assessment. Text is capped at 1 MiB characters
+  (the App additionally enforces its 1 MiB byte read limit); paths at 4096.
+- `machineOf(address)` and `qualifyChild(address, producerAddress)` support that
+  exact documented routing namespace, without hostname/core inference.
+
+Discovery belongs to the future host: take labeled producers from `terminals()`
+and readiness from `machines()`, read separately, then reduce with current live
+observations. Reads do not grant current status. On disconnect clear successful
+read observations immediately, retain revision history, and acquire new text on
+reconnect. Never pass cached pre-disconnect text as a new observation. This
+module has no polling, loading UI, producer writes or native actions.
+
+`attention.js` exports `reduceRoster(metadataRows, options={})`. Options are
+`documents:[{producer,text,generation?}]`, current raw `terminals`, `machines`,
+`history`, optional `correlations`, and `generation` (default null for entirely
+synchronous injected fixtures). Omitted, undefined or null current generation
+accepts only untagged, undefined or null-generation fixture documents; tagged
+documents fail closed. An explicit current generation requires an exact document
+token match. Async hosts must supply a non-null generation and matching
+acquisition tokens. Old generations produce no waiting. Return
+`{rows,targets,counts,assessments,history}`. Every row retains its native fields and adds `roster`; no native status is rewritten.
+
+R1 adapters now accept lowercase base-36 terminal IDs such as `t4z` and `t7a`
+as well as existing numeric IDs. Explicit configuration selectors use the same
+syntax. Noncompact normalized rows add `process:{pid,run}`; compact rows use
+null. Identity resolution retains every observation's process in
+`processEvidence`. This does not change R1 identity keys or resolve its
+uncertain incarnation boundaries. Delegation joins require all process evidence
+to match live pid/run, a unique verified R1 identity, creation time, current live
+status, a verified direct parent association and matching explicit core ID.
+Without supplied verified core mappings, the low-level reader can assess
+continuity but the reducer leaves delegation associations unknown. A mod cannot
+manufacture core IDs. Conflicting/old process evidence cannot supply activity to
+a new run with the same address or creation time. R1 status and metadata
+conflicts remain authoritative. Aliases are joined through R1 identity evidence.
+
+`roster.delegation` exposes knowledge known/partial/unknown, pendingCount,
+workingCount, delegates `{id,associationKey,role,working}`, and unresolved IDs.
+Knowledge is unknown when required evidence is missing or all outstanding
+assignments are unresolved; a mix of confirmed and unresolved delegates is
+partial. Counts are confirmed lower bounds when knowledge is partial/unknown. Ended,
+finished, reused or R1 done children are never pending; an active idle/blocked
+worker can be pending without working. Missing R1 child evidence is unresolved.
+Waiting needs an idle Coordinator, confirmed pending assignments and at least
+one genuinely working linked agent. An idle parent contributes zero to
+`counts.working`; that count measures actual current working agents, including
+work unrelated to an assignment. `counts.needsYou` counts actionable targets.
+
+| Roster state | Group | Collapsed label | Expanded semantic icon / tooltip |
+|---|---|---|---|
+| waiting | Working | Waiting for delegate | delegation-waiting / detail below |
+| needs-you | Needs you | Needs you | needs-you |
+| child-needs-you | Needs you | Child needs you | child-needs-you |
+
+For waiting, `display.tooltip` and `display.detail` preserve `Waiting for
+Developer`, `Waiting for Reviewer`, `Waiting on 1 agent` for an unknown role, or
+`Waiting on N agents`. Delegation purpose comes from the confirmed published
+`assignment.role`: only `developer` and `reviewer` yield named detail. Missing or
+unrecognized assignment roles stay generic, even if child labels or names
+suggest a role. A child's missing or mismatching role label never overrides the
+assignment; its own R1 row role and metadata remain unchanged. The semantic
+icon is a distinct token for the later view to map to an accessible glyph; it is not an App icon API or a bundled asset. No UI is built.
+
+Own blocked attention wins. Contextual direct-child attention replaces waiting
+only on a current idle parent; a working parent retains state working and group
+Working while exposing the same blocked-child context. `roster.children`
+preserves each verified direct child's
+associationKey/address/terminalKey/incarnation. Contextual Child needs you
+is not actionable; only the child's own entry appears in `targets`. Inferred
+ancestry cannot create a direct child attention edge. Existing R1 verified
+parent evidence supports direct-child context, not proof of an assignment.
+Null or malformed raw terminal/machine entries supply no evidence. Irrelevant
+invalid entries do not invalidate other valid observations; missing required
+evidence remains unknown and cannot produce waiting.
+Targets preserve exact identity; unverified rows remain explicit via terminalKey
+and null associationKey.
+
+Watcher attention remains by default: v1 supplies no suppression correlation.
+The optional trusted host assertion has `{verified:true,soleCause:true,source,
+generation,delivery,targetDelivery,watcher:{associationKey,pid,run},
+target:{associationKey,pid,run}}`. Suppression requires a current non-null
+matching generation, identical nonempty delivery IDs, current blocked live
+Watcher and target on ready machines, and exact process/association matches.
+The host must independently verify the sole cause and delivery relationship;
+setting this assertion from names, wording, ancestry or v1 data is invalid.
+Missing, partial, mismatched, stale or disconnected evidence retains the
+Watcher's entry. Suppression changes only Roster attention metadata/targets.
+
+Run `npm test` for independent neutral regression fixtures. For offline exact
+upstream parity, download `bin/delegation-read.mjs` and all
+`contracts/delegations/v1/*` at the pinned SHA into a separate evidence directory,
+then run `ROSTER_DELEGATION_FIXTURES=<directory> npm test` (or set that environment
+variable in the platform's shell). `.tests/pinned-parity.test.mjs` compares full
+results with the reference reader and every published world's expected result;
+it skips explicitly when those external verification files are absent. No test
+fetches anything. The consumer adds conservative duplicate-address and text
+bounds beyond upstream parity. No licenses/assets from upstream are bundled.
+
+These helpers remain a noninstallable module stage. No App check, typecheck,
+installation, live probe, full UI, navigation or workstation release gate is
+claimed. Full #4/#10/#11 gates still apply. No settings, Quotr, shipped Agents,
+native notifications, input, approvals or lifecycle are changed.
