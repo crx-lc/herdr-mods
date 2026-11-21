@@ -1,65 +1,142 @@
 # Roster
 
-An optional native sidebar with Projects and Status views, role-first terminal
-rows, provider badges and clear unknown/disabled states. No running screenshot
-has been captured; no preview image is supplied.
+A passive, explicitly opt-in Projects/Status sidebar for stock Herdr Desktop.
+The current adapter keeps terminal identities provisional and project/context
+associations unknown. This recipe describes the merged implementation, not full
+[#4](https://github.com/crx-lc/herdr-mods/issues/4) release acceptance.
+
+![Roster](preview.png)
+
+Real external Windows Projects crop, 240×820, copied byte-for-byte; SHA-256
+`60d483878d8436296fb47ce9275d3766b05215bb9080fb435b173557c3eb6790`.
+Neutral Coordinator / Developer #42 / Reviewer PR #43 only. This tall sidebar
+capture does not demonstrate usability in the default-height Agents slot.
 
 ## What you see
 
-A theme-colored column with 13px text, Projects/Status controls, independent
-Machine/Context filters and scrollable rows. Needs you appears globally above the
-project tree. Status groups retain project and parent context. Project monograms
-are 18 logical pixels with persistent names. Every row shows its host/route and
-execution-context fallback. Waiting uses full text or a distinct static ◈ marker;
-full detail is available by hover, keyboard focus and accessibility label.
+A theme-colored sidebar (`surface`/`foreground`, 13px text, 6px padding,
+4px gaps). Projects and Status buttons precede separate Machine/Context filters,
+including explicit unknown options. Group headers fold; Done starts folded.
+Rows show display label, observed state, validated work-item provider badge,
+Unassigned/project name, host/route and Context unknown. Every project keeps an
+18px monogram/name fallback. Open-unavailable reasons remain visible. Global
+Needs you stays visible through filters/folds. Contextual Child needs you is a
+separate, nonactionable context entry when independently verified ancestry exists.
+
+Hover detail and visible selected-control detail provide context. The code
+declares accessibility labels, but stock Desktop 0.1.16 does not expose them to
+Windows UIA/Narrator. An independently proven injected waiting parent can show
+a static ◈ when its delegates are directly visible, otherwise full waiting text. Production
+has no admitted delegation evidence and makes no authoritative waiting claim.
+The footer offers choosing an existing Agents slot and, in a token-owned working
+copy, restoring Agents in that slot. Layout results/refusals appear as text.
 
 ## How it behaves
 
-Installation is inert (`place:none`). Click for local keyboard focus, Up/Down to
-move the cursor, Enter to activate. Mode/filter/fold changes never focus a
-terminal. Done starts folded. Working counts actual workers, not waiting parents.
-Vanished snapshot rows are omitted; no prior incarnations accumulate. Enter on a
-control retains its position, with nearest-position fallback if it disappears.
-Blocked attention wins; contextual Child needs you does not create another target.
-Unknown identity disables Open. No global shortcuts or native terminal states change.
+`place:none` makes installation inert. Explicitly show a copy only after authorized
+isolated checks; installation instructions are not permission to activate it.
+Rendering captures six stock getters once: terminals, machines, panes, spaces,
+agents and focused. Only current snapshot observations appear; vanished rows and
+superseded incarnations are omitted. No supplementary history is acquired.
+Equal names, remote aliases, viewing machine and account/model do not prove identity.
+Projects stay unbound and contexts unknown without Core-qualified configuration.
 
-An explicit selected existing Agents slot can be replaced in a separate working
-layout only after preserving the current effective tree and private restoration
-data. Undo verifies ownership and merges only that slot into the latest working
-file. Concurrent changes fail conservatively. The original layout and Quotr stay
-untouched. These operations were tested only on strict fake hosts.
+Projects/Status, filters and folds affect this copy. Click focuses it; Up/Down
+select a visible control, Enter activates it; `focus` focuses the handle. Preserve
+surviving cursor keys and choose a nearby position when a control disappears.
+Never bind global next/previous or call setAgentOrder. Production Open is disabled:
+no independently bound Core identity, endpoint or uninterrupted remote epoch is
+available. Injected tests may prove exact focus/peek plans; that is not a native
+capability claim. Native terminal statuses, input, approvals and lifecycle stay native.
+
+Explicit opt-in inspects one current Agents slot, preserves the effective tree,
+saves a private restoration record, creates a separate working layout replacing
+only that slot, then switches. Undo rereads its record after restart and restores
+only the still-owned slot in the latest working tree. Refuse mismatches/concurrent
+changes. Two-second UI deadlines do not cancel late native writes; expected-text
+writes are not OS-wide CAS. Partial failures can leave files for inspection.
 
 ## Built from
 
-Self-contained `mods/roster`: thin `main.js`/`view.js`, passive `desktop.js`, injected
-`controller.js`, `feed.js`, `local-reader.js`, `layout.js`, and the actual R1/R2/R3/R4
-modules. Capture terminals, machines, panes, spaces, agents and focused once,
-synchronously, then normalize, resolve identity, enrich metadata, reduce and
-project. Explicit actions use actual actionIntent and exact pane.focus/terminal.peek
-addresses. Use gpui-kit builders and a focus handle allocated in init. Use native
-expected-text read/write APIs only behind explicit layout selection. No external
-assets, packages, hc commands or network acquisitions.
+One self-contained `mods/roster/`: `mod.json` has `place:none`, `focusable:true`;
+`main.js` wires gpui-kit/Herdr to `view.js`. `desktop.js` exposes stock snapshots
+and guarded layout I/O. `controller.js` connects `feed.js`, `local-reader.js`,
+projection and action guards. Pure modules have no Herdr imports:
+`normalize.js`, `identity.js`, `metadata.js`, `delegations.js`, `attention.js`,
+`projection.js`, `navigation-rows.js`, `navigation.js`, `settings.js`, `icons.js`,
+and `layout.js`. Keep the actual reducer chain and independent evidence contracts;
+see `mods/roster/MODULES.md` for data shapes.
+
+Production supplies empty Core mappings, admissions, documents, routes, scopes and
+correlations. Thus it acquires zero delegation files, performs zero terminal
+actions, and reads no private settings/images. Local-reader admission requires
+independent process/Core/continuity proof; only local text reads are allowed with
+bounded candidates/bytes, two native slots and `cx.timer.after` deadlines. Never
+enable native remote readTextFile: it can start a Core at the inspected revision.
+No experimental acquisition reader, runtime hc probe or network request is shipped.
+
+Only explicit layout controls read/write layouts and private App data restoration
+records. Never bundle those records or personal assets. No third-party assets,
+packages or network sources are added. Source pins in the installed README are
+reference contracts, not installed Desktop evidence. Repository-only scripts and
+`.tests` do not ship. `node scripts/roster-package.mjs` lists exactly the 20 files
+that would ship, validates eager import closure, and performs no install/sync.
 
 ## Watch out
 
-Desktop snapshots cannot prove permanent Core identity or remote epochs. Default
-proof arrays are empty: provisional rows, no authoritative waiting or enabled
-Open, unbound projects/contexts. Never infer facts from producer files, names,
-aliases, model or viewing machine. Local contract reads require independent exact
-identity/process/continuity admission; remote native reads are prohibited. Bound
-reads to two outstanding native operations and a two-second timer deadline;
-timeout does not release a nonsettled native slot. Preserve revision history and
-rerun R2 without incomplete parent documents. Icons always use truthful monograms
-until a private contained immutable asset adapter can be proven. Do not weaken R4.
-No animation or native atomicity guarantee; no screenshot/Windows pass is implied.
+**Both external Windows failures remain open:** existing PR19 header controls
+consume a default approximately 330×350 Agents slot, leaving only one line of rows
+or none; no scrolling or default-size usability guarantee follows from the tall
+preview. Stock Desktop 0.1.16 exposes no mod `accessibility_label` to UIA/Narrator
+(platform gap). Visible labels/keyboard detail do not prove assistive technology
+exposure. Badges/monograms on separate lines were also observed, not counted as a
+third failure. Runtime fixes are outside packaging; retain #10/#11/#4 acceptance.
+
+Stock snapshots cannot prove permanent Core/remote-epoch binding. Unknown must
+remain unknown; do not enable actions, authoritative waiting or private images to
+make a demonstration look complete. Host fixtures exercise stronger contracts;
+production must not adopt invented fixture proof. Waiting parents count zero
+workers; three genuine working delegates count three under admitted contracts.
+
+The original layout file and shipped Agents source are not rewritten by opt-in;
+the external Windows report records preservation/restart/undo passes. Keep Quotr,
+other slots/settings and private data intact. Timed-out writes may settle later:
+reread before retry. Do not promise automatic cleanup or whole-tree rollback.
+
+Node tests and Windows Node CI cannot prove QuickJS/GPUI layout, focus, tooltip,
+accessibility or native image decoding. Herdr check alone cannot see later async
+states or actual layout; sample-state checks need an effective deliberate break.
+Do not claim any App/typecheck/Windows/visual run without its actual evidence.
 
 ## Done when
 
-Strict fake-host tests pass for coherent captures, exact injected actions, stale
-callbacks, waiting/attention semantics and accessibility data, sidebar keys,
-zero-action state changes, hangs/resource budgets, selected-slot preservation,
-undo/restart and concurrent edits. Run default and pinned-fixture npm tests and
-a failing deliberate-break control with restored pass. Separately validate stock
-Desktop rendering, real identity/routes/delegations, configured local icons,
-Windows accessibility and reversible opt-in in an isolated profile before claiming
-those original acceptance criteria. Do not activate in the owner's live layout.
+Repository packaging is reviewable when `npm test`, optional offline pinned
+contract parity when available, and the read-only inventory pass, with negative
+controls rejecting missing/forbidden files, links and escaping references. Record
+actual commands/counts separately from planned workstation checks.
+
+The [external Windows summary](https://github.com/crx-lc/herdr-mods/issues/11#issuecomment-7070369048)
+at merged main `10c9d66`, stock Windows 11 / App 0.1.16 / hc 0.1.21, reports
+22 checks: 17 pass, 2 fail, 3 not verifiable, and isolation 3/3 pass. Real repo
+App check plus two sample-state checks passed with three deliberate-break failures.
+Selected-slot opt-in, preservation-first, untouched source layout, byte-identical
+undo after restart, chosen-state restarts and Quotr/settings preservation passed.
+Sidebar keys/Enter, hover/focus tooltips and static rendering passed; OS reduced-motion
+toggle was not tested. Owner 431 config files reportedly remained byte-identical,
+list SHA-256 `D349EC390426AF8064D570E897D93201380FCE1EBFE45AF222E802AD72007546`.
+Only the posted summary and source crops were supplied, not raw Windows logs;
+this Linux worker neither reran native checks nor independently audited those logs.
+The source Projects/Status crops stay in private evidence; preview is a share
+artifact outside the installed package, with no editing/generation or private mapping
+import. The Windows run does not validate the revised checker on macOS; macOS
+portability is inferred from Linux linked-ancestor controls. Runtime is unchanged.
+
+Full acceptance remains open in [#11](https://github.com/crx-lc/herdr-mods/issues/11),
+[#10](https://github.com/crx-lc/herdr-mods/issues/10) and
+[#4](https://github.com/crx-lc/herdr-mods/issues/4): both failures above need resolution.
+Core-qualified local/remote/pane-less actions, authoritative waiting/delegateWorking,
+remote continuity and configured private images remain **not verifiable** due to
+#10 proof gaps, not waived. Source pins do not prove installed Desktop capability.
+This packaging and tall capture do not establish release readiness or authorize
+live activation. This worker executed Node/default/pinned/package checks only;
+no App, typecheck, native Windows/macOS, live install/sync or workstation run.
