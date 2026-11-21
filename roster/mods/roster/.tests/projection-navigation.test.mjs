@@ -451,3 +451,65 @@ test('seeded worlds expose every eligible nonfinished row in default Projects in
     }
   }
 });
+
+
+test('activation validates independently asserted state before applying UI defaults', () => {
+  const r = freeze(reducedOf([raw('t1', 'working')])), e = freeze(evidence(r)), p = freeze(project(r));
+  const key = find(p, 't1').key, before = JSON.stringify({ r, e, p });
+  const malformed = [true, 1, 'status', [], { view: 'bogus' }, null, undefined,
+    { view: null }, { view: 1 }, { coreIds: 'core-a' }, { contextIds: {} },
+    { coreIds: [true] }, { coreIds: [1] }, { contextIds: [[]] }, { contextIds: [{}] },
+    { coreIds: [''] }, { coreIds: [' core-a'] }, { contextIds: ['bad\n'] },
+    { coreIds: [undefined] }, { coreIds: Array(1) }, { folds: null }, { folds: [] },
+    { folds: true }, { folds: { arbitrary: 1 } }, { folds: { arbitrary: null } },
+    { unknown: true }, new Date(0), Object.create({ view: 'projects' }),
+    { get view() { throw new Error('must not read accessor'); } }, { [Symbol('view')]: 'projects' }];
+  const accessorIds = [];
+  Object.defineProperty(accessorIds, '0', { get() { throw new Error('must not read ID accessor'); } });
+  malformed.push({ coreIds: accessorIds });
+  for (const state of malformed) {
+    if (state?.coreIds === accessorIds) { Object.freeze(accessorIds); Object.freeze(state); }
+    else if (state && Object.getOwnPropertyDescriptor(state, 'view')?.get) Object.freeze(state);
+    else freeze(state);
+    assert.deepEqual(guardedActionIntent(r, p, key, e, { state, generation: 'g1' }),
+      { enabled: false, reason: 'projection-state-changed', intent: null });
+  }
+  // Partial {} explicitly means the default Projects state; full normalized state also works.
+  for (const state of [{}, { view: 'projects' }, viewState(), Object.create(null)]) {
+    assert.equal(guardedActionIntent(r, p, key, e, freeze({ state, generation: 'g1' })).enabled, true);
+  }
+  for (const state of [{ view: 'status' }, { coreIds: ['core-a'], contextIds: ['context-a'] },
+    { coreIds: null, contextIds: null, folds: { arbitrary: false } },
+    { coreIds: ['core-a', null, 'core-a'], contextIds: [null, 'context-a'], folds: { arbitrary: true } }]) {
+    const current = freeze({ state, generation: 'g1' }), projected = freeze(project(r, state));
+    const prior = JSON.stringify(current);
+    assert.equal(guardedActionIntent(r, projected, find(projected, 't1').key, e, current).enabled, true);
+    assert.equal(JSON.stringify(current), prior);
+  }
+  assert.equal(JSON.stringify({ r, e, p }), before);
+});
+
+test('Infrastructure activation requires current exact scope facts rather than saved projection scopes', () => {
+  const r = freeze(reducedOf([raw('t1', 'idle', { labels: { 'herdr.role': 'supervisor' } })]));
+  const row = r.rows[0], e = freeze(evidence(r));
+  const scopes = freeze([{ associationKey: row.associationKey, coreId: row.core.id,
+    verified: true, scope: 'core-wide', source: 'explicit-service-scope' }]);
+  const p = freeze(project(r, {}, { scopes })), instance = find(p, 't1'), key = instance.key;
+  assert.equal(instance.placement.label, 'Infrastructure');
+  assert.equal(instance.navigation.enabled, true);
+  const current = freeze({ state: viewState(), generation: 'g1', scopes });
+  const before = JSON.stringify({ r, e, p, current });
+  const success = guardedActionIntent(r, p, key, e, current);
+  assert.equal(success.enabled, true);
+  assert.equal(success.intent.coreId, row.core.id);
+  assert.equal(success.intent.associationKey, row.associationKey);
+  for (const currentScopes of [undefined, [], [{ ...scopes[0], scope: 'project' }],
+    [{ ...scopes[0], coreId: 'core-b' }], [{ ...scopes[0], verified: false }],
+    [{ ...scopes[0], associationKey: 'other' }], [{ ...scopes[0], source: '' }]]) {
+    const changed = freeze({ state: current.state, generation: 'g1', ...(currentScopes ? { scopes: currentScopes } : {}) });
+    const prior = JSON.stringify(changed);
+    assert.equal(guardedActionIntent(r, p, key, e, changed).enabled, false);
+    assert.equal(JSON.stringify(changed), prior);
+  }
+  assert.equal(JSON.stringify({ r, e, p, current }), before);
+});

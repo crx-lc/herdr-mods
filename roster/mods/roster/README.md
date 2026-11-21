@@ -587,9 +587,16 @@ independent caller assertion `current:{state,generation,scopes?}` at activation.
 The projection's `binding` captures canonical view/filter/fold state and acquisition
 generation. Absent current state/generation, state mismatch (even within the same
 acquisition) or any generation mismatch fails closed with
-`projection-state-changed`. The supplied current state is canonicalized before
-comparison, so filter ordering does not matter. The host must read current state
-and generation independently from its current store, never copy the saved
+`projection-state-changed`. The supplied current state must be a plain data
+object (ordinary or null prototype). Valid partial states, including `{}`, are accepted: omitted fields
+use the same defaults as `viewState`. Supplied fields must be `view` (`projects`
+or `status`), `coreIds`/`contextIds` (null or arrays of null or nonempty string IDs,
+at most 1024 characters, without surrounding whitespace or control characters),
+and `folds` (a plain data object mapping keys to booleans). Unknown fields,
+accessors, symbols and malformed shapes fail closed before canonicalization.
+Valid state is then canonicalized for comparison, so duplicate filter IDs and
+filter ordering do not matter. UI `viewState` normalization is unchanged. The host
+must read current state and generation independently from its current store, never copy the saved
 projection's binding back as proof of currency. Advance acquisition generation on
 every refresh or routing/pane invalidation, and serialize activation with these
 reads; immediately before executing a returned plan, revalidate host state and
