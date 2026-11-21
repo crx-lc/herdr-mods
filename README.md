@@ -5,7 +5,7 @@ Mods for the [Herdr](https://herdr.dev) desktop app.
 | Mod | What it is |
 |---|---|
 | [Quotr](quotr/mods/quotr/README.md) | Stock and crypto watchlist panel with logos, charts and pre/post-market data. Based on [Pulse](https://github.com/fatwang2/Pulse) by fatwang2. |
-| [Roster](roster/mods/roster/README.md) | Opt-in Projects/Status sidebar with passive provisional rows; verified runtime navigation and delegation evidence remain unproven. |
+| [Roster](roster/mods/roster/README.md) | Passive, limited Projects/Status sidebar with provisional rows and explicit opt-in; full Windows/release acceptance remains open. |
 
 ## Install a mod
 
@@ -74,6 +74,12 @@ no network and no window, so it can't show whether a request or a link works.
 `npm run typecheck` is an optional local check (it needs `npm install -g typescript` and the type
 files Herdr writes into a mod folder): it reports names that don't exist, bad imports and duplicate
 object keys in code the other two checks never run.
+
+Roster shipping inventory (read-only, no live home access):
+
+```
+node scripts/roster-package.mjs
+```
 
 Adding a mod, or changing one with an agent: see [AGENTS.md](AGENTS.md).
 

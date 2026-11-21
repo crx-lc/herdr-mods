@@ -1,0 +1,81 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { inventory, SHIPPING, parseRequests } from './roster-package.mjs';
+
+function fixture(t) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'roster-package-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  for (const file of [...SHIPPING].reverse()) fs.writeFileSync(path.join(root, file), file.endsWith('.js') ? 'export const sample = 1;' : 'neutral sample');
+  fs.writeFileSync(path.join(root, 'mod.json'), JSON.stringify({ place: 'none', focusable: true }));
+  return root;
+}
+const write = (root, file, text = 'neutral sample') => { fs.mkdirSync(path.dirname(path.join(root, file)), { recursive: true }); fs.writeFileSync(path.join(root, file), text); };
+
+test('inventory is deterministic, excludes development/runtime files, and does not mutate files', t => {
+  const root = fixture(t);
+  for (const file of ['.tests/sample.test.mjs', '.cache/private.json', '.backups/old.js', 'gpui-kit.d.ts', 'herdr.d.ts', 'jsconfig.json']) write(root, file);
+  const before = fs.readFileSync(path.join(root, 'main.js'));
+  assert.deepEqual(inventory(root), SHIPPING);
+  assert.deepEqual(inventory(root), SHIPPING);
+  assert.deepEqual(fs.readFileSync(path.join(root, 'main.js')), before);
+});
+test('missing module and forbidden private/unknown files fail rather than quietly ship', t => {
+  const root = fixture(t);
+  fs.unlinkSync(path.join(root, 'feed.js'));
+  assert.throws(() => inventory(root), /missing shipping file/);
+  write(root, 'feed.js', 'export {};');
+  for (const file of ['settings.json', '.env', 'data/private.json', 'node_modules/sample.js', 'preview.png']) {
+    write(root, file);
+    assert.throws(() => inventory(root), /nonshipping file/);
+    fs.unlinkSync(path.join(root, file));
+  }
+});
+test('links and linked roots are rejected without reading targets', t => {
+  const root = fixture(t), outside = fixture(t);
+  fs.symlinkSync(outside, path.join(root, '.cache'), 'junction');
+  assert.throws(() => inventory(root), /symlink/);
+  assert.throws(() => inventory(path.join(root, '.cache')), /symlink/);
+});
+test('real parser catches escaped imports and re-exports, missing and excluded references', t => {
+  const root = fixture(t);
+  for (const ref of ['../other.js', '/tmp/sample.js', 'https://example.invalid/mod.js', 'node:fs', './absent.js', './.cache/secret.js', './gpui-kit.d.ts', './nested/../../feed.js', './feed.js?x', './%2e%2e/private.js']) {
+    write(root, 'main.js', `export * from ${JSON.stringify(ref)};`);
+    assert.throws(() => inventory(root), /import/);
+  }
+  write(root, 'main.js', String.raw`import './\u002e\u002e/private.js';`);
+  assert.throws(() => inventory(root), /import/);
+  write(root, 'main.js', "import { sample } from './feed.js'; export { sample }; import 'herdr'; import 'gpui-kit';");
+  assert.deepEqual(inventory(root), SHIPPING);
+});
+test('dynamic imports, assets and malformed syntax fail closed without executing mod code', t => {
+  const root = fixture(t);
+  for (const source of ["import /* gap */ ('../private.js')", "image('../private.png')", "svg(variable)", "require('./feed.js')", 'export const = ;']) {
+    write(root, 'main.js', source);
+    assert.throws(() => inventory(root), /unsupported|parse failed/);
+  }
+  write(root, 'main.js', "throw Error('must never execute'); import './feed.js';");
+  assert.deepEqual(inventory(root), SHIPPING);
+});
+test('manifest drift cannot activate the package by default', t => {
+  const root = fixture(t);
+  write(root, 'mod.json', '{"place":"left","focusable":true}');
+  assert.throws(() => inventory(root), /manifest/);
+});
+
+test('parser subprocess failures, silence, timeouts and malformed responses cannot validate a package', () => {
+  for (const answer of [null, {status: 1, stdout: '[]'}, {status: null, error: Object.assign(Error('timeout'), {code: 'ETIMEDOUT'})},
+    {status: 0, stdout: ''}, {status: 0, stdout: 'broken'}, {status: 0, stdout: '{}'},
+    {status: 0, stdout: '[]'}, {status: 0, stdout: '[[null]]'}]) {
+    assert.throws(() => parseRequests(['export {};'], () => answer), /parse|parser/);
+  }
+  let observed;
+  assert.deepEqual(parseRequests(['export {};'], (_cmd, _args, options) => {
+    observed = options;
+    return {status: 0, stdout: '[[]]'};
+  }), [[]]);
+  assert.ok(observed.timeout > 0 && observed.timeout <= 10000);
+  assert.ok(observed.maxBuffer > 0 && observed.maxBuffer <= 4 * 1024 * 1024);
+});

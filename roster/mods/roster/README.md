@@ -1,10 +1,10 @@
-# Roster
-
 To add the mod, ask an agent in Herdr:
 
 ```text
 Read ~/.config/herdr-app/AGENTS.md, then add this mod: https://github.com/crx-lc/herdr-mods/tree/main/roster
 ```
+
+# Roster
 
 Roster is an opt-in sidebar with Projects and Status views. It starts with
 `place:none`: installation alone adds no panel or layout change. The current
@@ -18,7 +18,7 @@ Core identity or uninterrupted remote connection generations. Production therefo
 supplies empty Core mappings, documents, routes, scopes and correlations. **Open
 terminal actions and authoritative delegation waiting are disabled by default.**
 Core-based project/context mappings remain unbound. Equal names or aliases do not
-establish identity. This is a reviewable passive fallback for Refs #10, not proof
+establish identity. This is a passive fallback from [PR #19](https://github.com/crx-lc/herdr-mods/pull/19) for [#10](https://github.com/crx-lc/herdr-mods/issues/10), not proof
 that every original acceptance criterion is met.
 
 ## Using the sidebar
@@ -177,6 +177,53 @@ navigation; authoritative runtime waiting and observed remote continuity;
 Core-bound project/context associations; private configured icons; actual stock
 Windows opt-in/undo, accessibility, narrow-sidebar screenshot and App rendering.
 No App check, typecheck, live install/sync, owner layout/settings/Quotr access or
-real remote probe was run. There is no fabricated `preview.png`. Packaging and
-isolated stock Desktop acceptance belong to the separate #11 delivery. Global
+real remote probe was run. There is no fabricated `preview.png`. Packaging is tracked in [#11](https://github.com/crx-lc/herdr-mods/issues/11);
+isolated stock Desktop acceptance belongs to the separate Windows effort. Global
 shortcut changes are outside the current scope; the old Phase 2/#18 gate is retired.
+
+
+## Package inventory and acceptance evidence
+
+From the repository root, run `node scripts/roster-package.mjs`. It prints the
+sorted, repository-relative paths of the 20 installed-folder files that would
+ship. It only reads the repository package; it never copies, installs, syncs,
+loads mod code or consults a live App home. No destination options are accepted.
+This is a separate inventory policy, not a dry run of `scripts/sync.mjs` (whose
+broader file selection must not be substituted for this shipping list).
+
+The script uses an explicit file allowlist and V8's module parser in a bounded
+Node subprocess without linking or evaluating modules. All static imports and
+re-exports must resolve to included JavaScript files or the Herdr-provided
+`herdr`, `gpui-kit`, `gpui-base` modules. Missing files, unexpected files, symlinks,
+escaping/external references and changed passive manifest defaults fail the check.
+`.tests`, generated types/jsconfig, `.cache` and `.backups` are excluded, never
+read recursively or shipped. Other hidden/private/unrecognized files fail rather
+than quietly entering the inventory. There are no shipped image assets; direct
+renderer calls and dynamic imports/require are conservatively refused (the local
+`svg(bytes)` validator in `icons.js` is an audited exception). This static inventory
+is not a general JavaScript security audit: new runtime loading patterns, native
+API aliases or asset adapters need explicit review and checker changes. Keep all
+private mappings, layouts and assets outside this folder.
+
+Available historical evidence for the merged implementation: [PR #19's exact-head
+independent review](https://github.com/crx-lc/herdr-mods/pull/19#pullrequestreview-6008211075)
+and [the #10 result](https://github.com/crx-lc/herdr-mods/issues/10#issuecomment-7069343564)
+record default Node tests (367 total, 366 pass, one optional parity skip), pinned
+parity (396 pass), and three successful CI jobs including Windows Node 22. These
+are repository/fake-host checks, not native Windows Desktop evidence.
+
+The [#11 owner split](https://github.com/crx-lc/herdr-mods/issues/11#issuecomment-7070155324)
+assigns actual stock Desktop validation and the neutral narrow-sidebar capture to
+the Windows coordinator. No actual capture was supplied when this packaging was
+prepared, so **`roster/preview.png` is absent and its criterion remains unmet**.
+There is no substitute illustration. The coordinator must integrate a verified,
+neutral Windows capture later and record its provenance.
+
+The acceptance umbrella [#4](https://github.com/crx-lc/herdr-mods/issues/4) remains
+open. Packaging does not establish installed manual/type parity, App/sample-state
+checks and their deliberate negative control, real opt-in/undo/restart preservation,
+local/remote focus/peek, authoritative waiting/attention transitions, private image
+rendering, Windows accessibility or a narrow-sidebar preview. Core-qualified actions,
+authoritative waiting and configured private images remain blocked by #10's proof
+gaps. Stronger host-injected fixtures do not make them native capabilities. No
+full release or completed Windows acceptance is claimed.
