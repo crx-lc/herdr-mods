@@ -6,7 +6,7 @@ export const stamp = value => Number.isSafeInteger(value) && value >= 0 ? value 
 export const tuple = (...values) => JSON.stringify(values);
 export function addressParts(value, localAlias = '') {
   if (typeof value !== 'string') return null;
-  const match = /^(?:([^/\s]+)\/)?(t[1-9][0-9]*)$/.exec(value);
+  const match = /^(?:([^/\s]+)\/)?(t[1-9a-z][0-9a-z]*)$/.exec(value);
   return match ? { alias: match[1] ?? localAlias, terminalId: match[2] } : null;
 }
 const words = ['working', 'blocked', 'done', 'idle', 'error'];
@@ -57,6 +57,7 @@ function adapt(source, input, observation, now) {
     parentReference: text(r.parent), parentMalformed: r.parent != null && !text(r.parent),
     name: text(r.name), tabTitle: text(o.tabTitle), tabNamed: o.tabNamed === true,
     labels, invalidLabels, incarnation: createdMs,
+    process: compact ? null : { pid: stamp(r.pid), run: text(object(r.labels)['herdr.run']) },
     lifecycle, rawStatus,
     appStatus: fresh === 'current' && lifecycle === 'live' && ['working', 'blocked', 'done', 'idle'].includes(rawStatus) ? rawStatus : 'unknown',
     freshness: fresh, observedAt: stamp(o.observedAt), statusChangedAt: stamp(r.status_ms),

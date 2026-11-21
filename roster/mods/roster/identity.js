@@ -70,6 +70,7 @@ export function resolveIdentities(input, coreInput) {
   });
   for (const row of rows) {
     const evidence = groups.get(tuple(row.terminalKey, row.incarnation));
+    row.processEvidence = evidence.map(r => r.process ? { ...r.process } : null);
     row.statusEvidence = evidence.map(r => ({ source: r.source, observedAt: r.observedAt,
       lifecycle: r.lifecycle, freshness: r.freshness, rawStatus: r.rawStatus, appStatus: r.appStatus }));
     row.lifecycleConflict = new Set(evidence.map(r => r.lifecycle)).size > 1;
