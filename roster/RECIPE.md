@@ -18,6 +18,8 @@ full detail is available by hover, keyboard focus and accessibility label.
 Installation is inert (`place:none`). Click for local keyboard focus, Up/Down to
 move the cursor, Enter to activate. Mode/filter/fold changes never focus a
 terminal. Done starts folded. Working counts actual workers, not waiting parents.
+Vanished snapshot rows are omitted; no prior incarnations accumulate. Enter on a
+control retains its position, with nearest-position fallback if it disappears.
 Blocked attention wins; contextual Child needs you does not create another target.
 Unknown identity disables Open. No global shortcuts or native terminal states change.
 

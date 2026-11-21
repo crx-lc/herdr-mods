@@ -54,7 +54,7 @@ test('superseded generation/fingerprint and disconnect completion never resurrec
     const read = c.refresh(); await Promise.resolve(); await Promise.resolve();
     if (kind === 'disconnect') values.machines[0].layout = 'unavailable';
     if (kind === 'producer') values.terminals[0].labels['herdr.delegations'] = '/sample/new.json';
-    if (kind === 'pane') values.panes.push({ id: 'new', terminal: 't2' });
+    if (kind === 'pane') values.panes.push({ pane: 'new', terminal: 't2' });
     c.render(); complete(JSON.stringify(doc)); assert.equal(await read, false); assert.equal(c.feed.documents.length, 0);
     assert.ok(c.feed.reduced.rows.every(r => r.roster.state !== 'waiting'));
   }

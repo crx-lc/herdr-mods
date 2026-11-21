@@ -38,7 +38,7 @@ test('default adapter ignores purported host identity provider and preserves sep
 
 for (const [address, core, presentation] of [['t1', 'core-a', 'pane'], ['edge/t1', 'core-b', 'pane'], ['t1', 'core-a', 'pane-less'], ['edge/t1', 'core-b', 'pane-less']]) {
   test(`actual actionIntent dispatches exact ${address} ${presentation} only on activation`, () => {
-    const f = fakeHost([terminal(address)]); if (presentation === 'pane') f.values.panes = [{ id: 'pane-sample', terminal: address, tab: 'tab-a' }];
+    const f = fakeHost([terminal(address)]); if (presentation === 'pane') f.values.panes = [{ pane: 'pane-sample', terminal: address, tab: 'tab-a' }];
     prove(f.host, { routes: [route(core, 't1', address, presentation)] });
     const c = new Controller(f.host), p = c.render(); checkCounts(f.counts); assert.equal(f.calls.length, 0);
     assert.equal(c.activate(p, find(p, address).key).enabled, true);
@@ -52,14 +52,14 @@ test('model completeness, duplicate pane, unsupported presentation, route genera
     const f = fakeHost(); const e = prove(f.host, { routes: [route('core-a', 't1', 't1')] }); mutation(e);
     const c = new Controller(f.host), p = c.render(); assert.equal(c.activate(p, find(p, 't1').key).enabled, false); assert.equal(f.calls.length, 0);
   }
-  for (const panes of [[{ id: 'a', terminal: 't1' }], [{ id: 'a', terminal: 't1' }, { id: 'b', terminal: 't1' }]]) {
+  for (const panes of [[{ pane: 'a', terminal: 't1' }], [{ pane: 'a', terminal: 't1' }, { pane: 'b', terminal: 't1' }]]) {
     const f = fakeHost(); f.values.panes = panes; prove(f.host, { routes: [route('core-a', 't1', 't1')] });
     const c = new Controller(f.host), p = c.render(); assert.equal(find(p, 't1').navigation.enabled, false);
   }
 });
 
 test('stale callbacks, changed view, vanished target and observed disconnect reject activation', () => {
-  for (const change of [f => f.values.terminals.splice(0), f => f.values.machines[0].layout = 'unavailable', f => f.values.panes.push({ id: 'new', terminal: 't1' })]) {
+  for (const change of [f => f.values.terminals.splice(0), f => f.values.machines[0].layout = 'unavailable', f => f.values.panes.push({ pane: 'new', terminal: 't1' })]) {
     const f = fakeHost(); prove(f.host, { routes: [route('core-a', 't1', 't1')] }); const c = new Controller(f.host), p = c.render();
     change(f); assert.equal(c.activate(p, find(p, 't1').key).enabled, false); assert.equal(f.calls.length, 0);
   }
@@ -67,9 +67,9 @@ test('stale callbacks, changed view, vanished target and observed disconnect rej
   assert.equal(c.activate(p, find(p, 't1').key).enabled, false); assert.equal(f.calls.length, 0);
 });
 
-test('vanished observations become stale without fabricated finished history', () => {
+test('vanished observations are omitted without fabricated finished history', () => {
   const f = fakeHost(), c = new Controller(f.host); c.render(); f.values.terminals = []; c.render();
-  assert.equal(c.feed.reduced.rows[0].freshness, 'stale'); assert.equal(c.feed.reduced.rows[0].lifecycle, 'live');
+  assert.deepEqual(c.feed.reduced.rows, []);
 });
 
 function waitingWorld(partial = false) {

@@ -29,8 +29,9 @@ personal layout. No live installation or activation was performed for this chang
 Projects groups known project memberships and verified parent relationships;
 otherwise rows appear under explicit Unassigned groups. Status separates Needs
 you, contextual Child needs you, Working, Done, Idle, Offline, Stale and Unknown.
-A vanished observation becomes stale, never automatically finished. Done starts
-folded. No supplementary terminal history is acquired.
+Only terminals in the current snapshot are displayed; vanished observations are
+omitted, including superseded incarnations at a reused address. No finished state
+is invented. Done starts folded. No supplementary terminal history is acquired.
 
 Projects/Status, group and child folds, and independent Machine/Context filters
 change only the sidebar. Global Needs you survives filters and folds; an entry
@@ -40,8 +41,9 @@ an LLM or group. Every row keeps project name/fallback, host/route description,
 execution context, provider accessibility name and disabled-action explanation.
 
 Click gives the sidebar its own keyboard focus. Up/Down moves a visible cursor
-through its controls; Enter activates the selected control. The explicit `focus`
-command also gives it focus. Selected row detail is visible as a keyboard-focus
+through its controls; Enter activates the selected control and retains its position
+when that control survives. A removed control selects the nearest current position.
+The explicit `focus` command also gives it focus. Selected row detail is visible as a keyboard-focus
 tooltip as well as a hover tooltip and accessibility label. No global key binding,
 `setAgentOrder`, terminal input, approval, status, notification or lifecycle changes
 are made. Native GPUI focus/accessibility behavior still needs desktop validation.
@@ -95,6 +97,21 @@ settles. Refresh attempts are at least ten seconds apart and triggered only by
 observations that render; there is no automatic retry loop or loading spinner.
 Superseded generation/fingerprint results are rejected. No stale text fallback is
 used; revision high-water history survives failures and observed reconnects.
+
+Acquisition generations advance before proof stamping on refresh or selected
+terminal/process, identity, readiness, pane membership or proof changes. Injected
+`evidence(snapshot,generation)` must be synchronous and pure: proof-only changes
+may resample it once at the newly allocated generation. Derived stamps do not
+feed back into the fingerprint. Focus, scrolling, selection and agent display
+changes preserve admitted text without another file read. Even throttled refresh
+attempts observe real invalidations before returning. Unobserved disconnects cannot
+be detected by the public snapshot API.
+
+The feed holds only current snapshot rows; it keeps no vanished-row map. For N
+current rows and I displayed instances, the view builds one O(N) parent-key set
+and makes O(1) presence checks per instance (O(N + I) for that work). Pure reducers
+retain their existing current-scope costs and revision high-water semantics; no
+whole-pipeline linear-time or bounded high-water-history claim is made.
 
 Both views use `normalizeApp → resolveIdentities → enrichMetadata → reduceRoster
 → projectRoster`. R2 permits partial waiting; the host boundary first assesses

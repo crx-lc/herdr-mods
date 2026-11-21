@@ -6,7 +6,7 @@ export class Controller {
   constructor(host) { this.host = host; this.feed = new Feed(); this.state = viewState(); this.cursor = null; this.reader = new LocalReader(host); }
   observe(refresh = false) {
     const snapshot = capture(this.host);
-    const evidence = this.host.evidence ? this.host.evidence(snapshot, this.feed.generation + (refresh ? 1 : 0)) : emptyEvidence();
+    const evidence = this.host.evidence ? (snapshot, generation) => this.host.evidence(snapshot, generation) : emptyEvidence();
     this.feed.update(snapshot, this.host.now(), evidence, { refresh });
     return this.feed;
   }
@@ -15,7 +15,7 @@ export class Controller {
     this.projection = projectRoster(this.feed.reduced, this.state, { navigation: this.feed.navigation, scopes: this.feed.evidence.scopes ?? [] });
     return this.projection;
   }
-  change(event) { this.state = transition(this.state, event); this.cursor = null; }
+  change(event) { this.state = transition(this.state, event); }
   activate(projection, key) {
     this.observe();
     const plan = actionIntent(this.feed.reduced, projection, key, this.feed.navigation,
@@ -24,9 +24,10 @@ export class Controller {
     return plan;
   }
   async refresh(deadline) {
-    if (this.host.now() - this.reader.last < 10000) return false;
+    const throttled = this.host.now() - this.reader.last < 10000;
     // A fresh acquisition invalidates old documents/routes before any await.
-    this.observe(true);
+    this.observe(!throttled);
+    if (throttled) return false;
     const admitted = await this.reader.refresh(this.feed, this.host.now(), deadline);
     if (admitted) {
       // Same capture and proof, no additional getters; assess fresh text immediately.

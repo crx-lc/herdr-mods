@@ -16,13 +16,15 @@ export function fakeHost(terminals = [terminal('t1')]) {
   const counts = {}, calls = [], host = { now: () => 1000,
     run: (command, args) => { assert.ok(['pane.focus', 'terminal.peek'].includes(command), `prohibited ${command}`); assert.deepEqual(Object.keys(args), ['terminal']); calls.push([command, args]); },
     readTextFile: () => { throw Error('unadmitted file read'); }, deadline: p => p };
-  for (const key of Object.keys(values)) host[key] = () => { counts[key] = (counts[key] ?? 0) + 1; return structuredClone(values[key]); };
+  for (const key of Object.keys(values)) host[key] = () => {
+    if (key === 'panes') for (const pane of values.panes) assert.ok(!Object.hasOwn(pane ?? {}, 'id'), 'PaneInfo uses pane, never id');
+    counts[key] = (counts[key] ?? 0) + 1; return structuredClone(values[key]); };
   return { host, values, counts, calls };
 }
 export const cores = [{ alias: '', id: 'core-a', verified: true, source: 'independent-fixture' }, { alias: 'edge', id: 'core-b', verified: true, source: 'independent-fixture' }];
 export const settings = JSON.stringify({ version: 1, projects: [{ id: 'sample', displayName: 'Sample project' }], projectBindings: [{ coreId: 'core-a', token: 'sample', projectId: 'sample' }], contexts: [], processProviders: [], projectProviders: [], icons: [] });
 export function prove(host, extra = {}) {
-  const evidence = { cores, routes: [], documents: [], scopes: [], correlations: [], admissions: [], panesComplete: true, ...extra };
+  const evidence = { cores: structuredClone(cores), routes: [], documents: [], scopes: [], correlations: [], admissions: [], panesComplete: true, ...extra };
   host.evidence = () => structuredClone(evidence);
   return evidence;
 }

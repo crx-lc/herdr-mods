@@ -46,7 +46,9 @@ export function createRosterView(kit, app, options = {}) {
     }
     render(cx) {
       const projection = this.controller.render(), theme = app.theme(), props = app.props();
+      const previousControls = this.controls, previousIndex = previousControls.findIndex(c => c.key === this.controller.cursor);
       this.controls = [];
+      const parents = new Set(this.controller.feed.reduced.rows.map(r => r.parent?.associationKey).filter(Boolean));
       const v = () => div().flex().flex_col();
       const button = (key, label, activate) => {
         this.controls.push({ key, label, activate });
@@ -82,7 +84,7 @@ export function createRosterView(kit, app, options = {}) {
         if (i.context.parent) element.child(div().text_size(11).child(`Parent ${i.context.parent.displayLabel}`));
         if (!i.navigation.enabled) element.child(div().text_size(11).child(explanation));
         body.child(element);
-        if (this.controller.feed.reduced.rows.some(j => j.parent?.associationKey === row.associationKey && row.associationKey)) {
+        if (parents.has(row.associationKey)) {
           body.child(button(`fold:${i.key}`, this.controller.state.folds[i.key] ? 'Show children' : 'Hide children',
             change({ type: 'fold', key: i.key, collapsed: !this.controller.state.folds[i.key] })));
         }
@@ -114,6 +116,10 @@ export function createRosterView(kit, app, options = {}) {
         cx.spawn(async cx => this.layoutAction(() => this.optIn.undo(props.rosterToken, p => timerDeadline(cx, p)), cx));
       }));
       root.child(this.message);
+      if (this.controller.cursor !== null && !this.controls.some(c => c.key === this.controller.cursor)) {
+        this.controller.cursor = this.controls[Math.min(Math.max(previousIndex, 0), this.controls.length - 1)]?.key ?? null;
+        cx.notify();
+      }
       // Full focus tooltip is also visible with the keyboard; native tooltip is pointer-only.
       const selected = this.controls.find(c => c.key === this.controller.cursor);
       root.accessibility_label(selected?.label ?? 'Roster sidebar: Up and Down select, Enter activates');
