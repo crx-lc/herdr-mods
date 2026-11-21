@@ -34,12 +34,12 @@ export function parseRequests(sources, run = spawnSync) {
 
 export function inventory(root) {
   root = path.resolve(root);
-  // Reject links in every ancestor before reading a package, including a linked root.
-  for (let p = root;; p = path.dirname(p)) {
-    if (fs.lstatSync(p).isSymbolicLink()) throw Error('symlink in package path');
-    if (path.dirname(p) === p) break;
-  }
-  if (!fs.lstatSync(root).isDirectory()) throw Error('package root is not a directory');
+  // The package itself must be a real directory. Ancestors may be ordinary
+  // directory links (for example macOS /var); establish a canonical traversal root.
+  const stat = fs.lstatSync(root);
+  if (stat.isSymbolicLink()) throw Error('symlink package root');
+  if (!stat.isDirectory()) throw Error('package root is not a directory');
+  root = fs.realpathSync(root);
   const files = [];
   function walk(dir, prefix = '') {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0)) {

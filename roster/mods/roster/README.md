@@ -9,8 +9,8 @@ Read ~/.config/herdr-app/AGENTS.md, then add this mod: https://github.com/crx-lc
 Roster is an opt-in sidebar with Projects and Status views. It starts with
 `place:none`: installation alone adds no panel or layout change. The current
 Desktop adapter displays provisional terminal rows, native status, validated
-role/work-item labels and accessible GitHub/Azure DevOps badges. Unknown identity,
-project and execution context stay explicit. Counts describe observed identities,
+role/work-item labels and GitHub/Azure DevOps badges with declared accessibility
+names. Unknown identity, project and execution context stay explicit. Counts describe observed identities,
 not a verified census across aliases.
 
 **Current limits:** stock Desktop snapshots do not independently establish permanent
@@ -23,9 +23,19 @@ that every original acceptance criterion is met.
 
 ## Using the sidebar
 
+**Known Windows failures:** in the default approximately 330×350 Agents slot,
+existing PR19 header controls consume almost all the height, leaving one line of
+rows or none. Scrolling does not guarantee usable rows at that size. Stock
+Desktop 0.1.16 also exposes no mod `accessibility_label` to Windows UIA/Narrator
+(a platform gap). Visible labels and keyboard detail do not prove assistive
+technology exposure. Both failures remain open under #10/#11/#4; runtime fixes
+are outside this packaging change. Badges/monograms appearing on separate lines
+are an additional, uncounted observation.
+
 After installation and the usual isolated App checks, explicitly open a copy with
 `openOverlay({mod:'roster'})` from an authorized mod/agent, or place a copy in a
-personal layout. No live installation or activation was performed for this change.
+personal layout. This Linux packaging worker performed no live installation or
+activation; the external isolated Windows run is recorded below.
 Projects groups known project memberships and verified parent relationships;
 otherwise rows appear under explicit Unassigned groups. Status separates Needs
 you, contextual Child needs you, Working, Done, Idle, Offline, Stale and Unknown.
@@ -43,10 +53,12 @@ execution context, provider accessibility name and disabled-action explanation.
 Click gives the sidebar its own keyboard focus. Up/Down moves a visible cursor
 through its controls; Enter activates the selected control and retains its position
 when that control survives. A removed control selects the nearest current position.
-The explicit `focus` command also gives it focus. Selected row detail is visible as a keyboard-focus
-tooltip as well as a hover tooltip and accessibility label. No global key binding,
+The explicit `focus` command also gives it focus. Selected row detail is visible
+as a keyboard-focus tooltip as well as a hover tooltip; the code also declares
+accessibility labels. No global key binding,
 `setAgentOrder`, terminal input, approval, status, notification or lifecycle changes
-are made. Native GPUI focus/accessibility behavior still needs desktop validation.
+are made. The external run passed sidebar focus/Enter and visible tooltip detail,
+but failed UIA label exposure as described above.
 
 With independently verified injected evidence, the actual merged navigation guard
 maps eligible explicit actions to `pane.focus {terminal:exactAddress}` or
@@ -172,15 +184,12 @@ Strict Node fake-host tests exercise the actual entry, controller, reducers,
 native-call arguments, keyboard/tooltip data, read budgets and layout operations.
 They do not establish QuickJS/GPUI/native Windows behavior.
 
-Remaining original acceptance gaps: installed Core-qualified local/remote/pane-less
-navigation; authoritative runtime waiting and observed remote continuity;
-Core-bound project/context associations; private configured icons; actual stock
-Windows opt-in/undo, accessibility, narrow-sidebar screenshot and App rendering.
-No App check, typecheck, live install/sync, owner layout/settings/Quotr access or
-real remote probe was run. There is no fabricated `preview.png`. Packaging is tracked in [#11](https://github.com/crx-lc/herdr-mods/issues/11);
-isolated stock Desktop acceptance belongs to the separate Windows effort. Global
-shortcut changes are outside the current scope; the old Phase 2/#18 gate is retired.
-
+Remaining original acceptance gaps include Core-qualified local/remote/pane-less
+navigation, authoritative runtime waiting/delegateWorking and observed remote
+continuity, Core-bound project/context associations, and private configured icons.
+These remain **not verifiable**, blocked by #10 rather than waived. The default-height
+layout and UIA failures above also remain open. Global shortcut changes are outside
+the current scope; the old Phase 2/#18 gate is retired.
 
 ## Package inventory and acceptance evidence
 
@@ -194,14 +203,18 @@ broader file selection must not be substituted for this shipping list).
 The script uses an explicit file allowlist and V8's module parser in a bounded
 Node subprocess without linking or evaluating modules. All static imports and
 re-exports must resolve to included JavaScript files or the Herdr-provided
-`herdr`, `gpui-kit`, `gpui-base` modules. Missing files, unexpected files, symlinks,
-escaping/external references and changed passive manifest defaults fail the check.
+`herdr`, `gpui-kit`, `gpui-base` modules. Missing files, unexpected files, explicitly
+linked package roots or links in included traversal paths, escaping/external
+references and changed passive manifest defaults fail the check.
+Ordinary directory roots reached through linked ancestors are accepted after root
+canonicalization; traversal never follows links inside the package.
 `.tests`, generated types/jsconfig, `.cache` and `.backups` are excluded, never
 read recursively or shipped. Other hidden/private/unrecognized files fail rather
 than quietly entering the inventory. There are no shipped image assets; direct
 renderer calls and dynamic imports/require are conservatively refused (the local
 `svg(bytes)` validator in `icons.js` is an audited exception). This static inventory
-is not a general JavaScript security audit: new runtime loading patterns, native
+is a current-package eager import inventory with direct-call restrictions, not
+full JavaScript security/dataflow validation: new runtime loading patterns, native
 API aliases or asset adapters need explicit review and checker changes. Keep all
 private mappings, layouts and assets outside this folder.
 
@@ -212,18 +225,39 @@ record default Node tests (367 total, 366 pass, one optional parity skip), pinne
 parity (396 pass), and three successful CI jobs including Windows Node 22. These
 are repository/fake-host checks, not native Windows Desktop evidence.
 
-The [#11 owner split](https://github.com/crx-lc/herdr-mods/issues/11#issuecomment-7070155324)
-assigns actual stock Desktop validation and the neutral narrow-sidebar capture to
-the Windows coordinator. No actual capture was supplied when this packaging was
-prepared, so **`roster/preview.png` is absent and its criterion remains unmet**.
-There is no substitute illustration. The coordinator must integrate a verified,
-neutral Windows capture later and record its provenance.
+The [external stock Windows report](https://github.com/crx-lc/herdr-mods/issues/11#issuecomment-7070369048)
+records Windows 11, App 0.1.16 and hc 0.1.21 at merged main `10c9d66` (PR19):
+**22 checks: 17 pass, 2 fail, 3 not verifiable; isolation 3/3 pass.** It reports
+real App checks on the repo copy plus two sample-state copies, with three deliberate
+breaks failing. Selected-slot opt-in, preservation-first behavior, untouched source
+layout, byte-identical undo after restart, chosen-state restart persistence and
+Quotr/settings preservation passed. Sidebar keys/Enter, visible hover/focus tooltips
+and static rendering passed; the OS reduced-motion toggle was **not tested**.
+The two failures and uncounted inline-layout observation are stated near usage above.
 
-The acceptance umbrella [#4](https://github.com/crx-lc/herdr-mods/issues/4) remains
-open. Packaging does not establish installed manual/type parity, App/sample-state
-checks and their deliberate negative control, real opt-in/undo/restart preservation,
-local/remote focus/peek, authoritative waiting/attention transitions, private image
-rendering, Windows accessibility or a narrow-sidebar preview. Core-qualified actions,
-authoritative waiting and configured private images remain blocked by #10's proof
-gaps. Stronger host-injected fixtures do not make them native capabilities. No
-full release or completed Windows acceptance is claimed.
+The external report says the owner's 431 config files were byte-identical, with
+before/after list SHA-256
+`D349EC390426AF8064D570E897D93201380FCE1EBFE45AF222E802AD72007546`.
+Only the posted summary and crops were supplied here: this Linux worker did not
+run native Windows checks or independently audit raw Windows logs. That run at
+`10c9d66` does not validate the new package checker on macOS or any new runtime;
+runtime code is unchanged. Source pins above do not prove installed Desktop parity.
+
+The share artifact [Projects preview](../../preview.png) is the supplied real
+Windows crop, copied byte-for-byte: 240×820, SHA-256
+`60d483878d8436296fb47ce9275d3766b05215bb9080fb435b173557c3eb6790`.
+It shows neutral Coordinator / Developer #42 / Reviewer PR #43 sample labels,
+with no personal mappings imported. It is a tall sidebar capture, **not evidence
+of success at default height**, and lives outside the 20-file installed package.
+The supplied Projects and Status source crops remain in private project evidence.
+
+This worker's executed checks are repository Node tests, pinned offline parity,
+the static inventory and symlink controls, recorded in PR20 with full private logs.
+No App/typecheck/native Windows/macOS run, live installation/sync, owner
+layout/settings/Quotr operation or remote probe was performed by this worker.
+The acceptance umbrella [#4](https://github.com/crx-lc/herdr-mods/issues/4),
+[#10](https://github.com/crx-lc/herdr-mods/issues/10) and
+[#11](https://github.com/crx-lc/herdr-mods/issues/11) remain open: the two failures
+need resolution and Core-qualified actions, waiting/delegateWorking/remote
+continuity and private images remain not verifiable. Stronger injected fixtures
+do not make them native capabilities. No full release readiness is claimed.

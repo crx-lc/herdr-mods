@@ -39,6 +39,26 @@ test('links and linked roots are rejected without reading targets', t => {
   assert.throws(() => inventory(root), /symlink/);
   assert.throws(() => inventory(path.join(root, '.cache')), /symlink/);
 });
+test('real package behind a linked parent is accepted, but linked root and included paths fail', t => {
+  const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'roster-package-parent-'));
+  t.after(() => fs.rmSync(parent, { recursive: true, force: true }));
+  const root = path.join(parent, 'real', 'roster');
+  fs.mkdirSync(path.dirname(root));
+  fs.cpSync(new URL('../roster/mods/roster/', import.meta.url), root, { recursive: true });
+  const linkedParent = path.join(parent, 'alias');
+  fs.symlinkSync(path.dirname(root), linkedParent, 'junction');
+  const throughParent = path.join(linkedParent, 'roster');
+  assert.deepEqual(inventory(throughParent), SHIPPING);
+  const linkedRoot = path.join(parent, 'linked-root');
+  fs.symlinkSync(root, linkedRoot, 'junction');
+  assert.throws(() => inventory(linkedRoot), /symlink/);
+  // Link in an included traversal path; directory junction works on Windows
+  // without requiring permission to create file symlinks.
+  fs.symlinkSync(path.dirname(root), path.join(root, 'included-link'), 'junction');
+  assert.throws(() => inventory(throughParent), /symlink/);
+  fs.unlinkSync(path.join(root, 'included-link'));
+  assert.deepEqual(inventory(throughParent), SHIPPING);
+});
 test('real parser catches escaped imports and re-exports, missing and excluded references', t => {
   const root = fixture(t);
   for (const ref of ['../other.js', '/tmp/sample.js', 'https://example.invalid/mod.js', 'node:fs', './absent.js', './.cache/secret.js', './gpui-kit.d.ts', './nested/../../feed.js', './feed.js?x', './%2e%2e/private.js']) {
