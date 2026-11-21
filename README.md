@@ -5,6 +5,7 @@ Mods for the [Herdr](https://herdr.dev) desktop app.
 | Mod | What it is |
 |---|---|
 | [Quotr](quotr/mods/quotr/README.md) | Stock and crypto watchlist panel with logos, charts and pre/post-market data. Based on [Pulse](https://github.com/fatwang2/Pulse) by fatwang2. |
+| [Roster](roster/mods/roster/README.md) | Opt-in Projects/Status sidebar with passive provisional rows; verified runtime navigation and delegation evidence remain unproven. |
 
 ## Install a mod
 
