@@ -93,6 +93,29 @@ test('F4 admitted waiting survives focus, scroll, selection and agent display wi
   assert.equal(find(f.c.render(), 't1').row.roster.state, 'waiting');
 });
 
+test('admitted delegation tracks current statuses without reacquiring continuity', async () => {
+  const f = admitted(); f.c.render(); assert.equal(await f.c.refresh(), true);
+  let p = f.c.render(); const generation = f.c.feed.generation, document = f.c.feed.documents[0];
+  assert.equal(find(p, 't1').row.roster.state, 'waiting');
+  const stable = () => { assert.equal(f.c.feed.generation, generation); assert.equal(f.c.feed.documents[0], document); assert.equal(f.reads(), 1); };
+  f.values.terminals[1].status = 'idle'; f.values.terminals[1].status_ms = 1050;
+  p = f.c.render(); stable(); assert.equal(find(p, 't1').row.roster.state, 'waiting');
+  assert.equal(find(p, 't2').row.roster.state, 'idle'); assert.equal(p.counts.all.working, 2);
+  f.values.terminals[1].status = 'blocked'; f.values.terminals[1].status_ms = 1100;
+  p = f.c.render(); stable();
+  assert.equal(find(p, 't1').row.roster.state, 'child-needs-you');
+  assert.equal(find(p, 't2').row.roster.state, 'needs-you');
+  assert.equal(p.counts.all.working, 2); assert.equal(p.counts.all.needsYou, 1);
+  f.values.terminals[0].status = 'blocked'; f.values.terminals[0].status_ms = 1200;
+  p = f.c.render(); stable(); assert.equal(find(p, 't1').row.roster.state, 'needs-you');
+  f.values.terminals[0].status = 'idle'; f.values.terminals[0].status_ms = 1300;
+  f.values.terminals[2].status = 'idle'; f.values.terminals[2].status_ms = 1300;
+  f.values.terminals[3].status = 'idle'; f.values.terminals[3].status_ms = 1300;
+  p = f.c.render(); stable(); assert.notEqual(find(p, 't1').row.roster.state, 'waiting');
+  assert.equal(p.counts.all.working, 0); assert.equal(find(p, 't2').row.roster.state, 'needs-you');
+  f.advance(5000); assert.equal(await f.c.refresh(), false); stable();
+});
+
 const realChanges = {
   core: f => f.base.cores[0].id = 'replacement-core',
   epoch: f => f.base.sourceGeneration++,

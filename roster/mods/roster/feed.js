@@ -13,7 +13,7 @@ export function capture(host) {
 export const emptyEvidence = () => ({ cores: [], documents: [], routes: [], scopes: [], correlations: [], admissions: [] });
 // Select acquisition facts, excluding UI focus, selection, scrolling and agent display.
 const pick = (record, keys) => record == null ? record : Object.fromEntries(keys.map(k => [k, record[k]]));
-const terminalFacts = t => pick(t, ['address', 'state', 'status', 'status_ms', 'created_ms', 'finished_ms', 'pid', 'argv', 'keep', 'parent', 'name', 'labels']);
+const terminalFacts = t => pick(t, ['address', 'state', 'created_ms', 'finished_ms', 'pid', 'argv', 'keep', 'parent', 'name', 'labels']);
 const snapshotFacts = snapshot => ({
   terminals: snapshot.terminals.map(terminalFacts),
   machines: snapshot.machines.map(m => pick(m, ['name', 'layout'])),
