@@ -358,10 +358,12 @@ module has no polling, loading UI, producer writes or native actions.
 `attention.js` exports `reduceRoster(metadataRows, options={})`. Options are
 `documents:[{producer,text,generation?}]`, current raw `terminals`, `machines`,
 `history`, optional `correlations`, and `generation` (default null for entirely
-synchronous injected fixtures). Async hosts must supply a non-null generation
-and documents with the matching acquisition token. Old generations produce no
-waiting. Return `{rows,targets,counts,assessments,history}`. Every row retains its
-native fields and adds `roster`; no native status is rewritten.
+synchronous injected fixtures). Omitted, undefined or null current generation
+accepts only untagged, undefined or null-generation fixture documents; tagged
+documents fail closed. An explicit current generation requires an exact document
+token match. Async hosts must supply a non-null generation and matching
+acquisition tokens. Old generations produce no waiting. Return
+`{rows,targets,counts,assessments,history}`. Every row retains its native fields and adds `roster`; no native status is rewritten.
 
 R1 adapters now accept lowercase base-36 terminal IDs such as `t4z` and `t7a`
 as well as existing numeric IDs. Explicit configuration selectors use the same
@@ -379,7 +381,9 @@ conflicts remain authoritative. Aliases are joined through R1 identity evidence.
 
 `roster.delegation` exposes knowledge known/partial/unknown, pendingCount,
 workingCount, delegates `{id,associationKey,role,working}`, and unresolved IDs.
-Counts are confirmed lower bounds when knowledge is partial/unknown. Ended,
+Knowledge is unknown when required evidence is missing or all outstanding
+assignments are unresolved; a mix of confirmed and unresolved delegates is
+partial. Counts are confirmed lower bounds when knowledge is partial/unknown. Ended,
 finished, reused or R1 done children are never pending; an active idle/blocked
 worker can be pending without working. Missing R1 child evidence is unresolved.
 Waiting needs an idle Coordinator, confirmed pending assignments and at least
@@ -395,16 +399,24 @@ work unrelated to an assignment. `counts.needsYou` counts actionable targets.
 
 For waiting, `display.tooltip` and `display.detail` preserve `Waiting for
 Developer`, `Waiting for Reviewer`, `Waiting on 1 agent` for an unknown role, or
-`Waiting on N agents`. Roles come from R1's validated metadata, never worker
-names. The semantic icon is a distinct token for the later view to map to an
-accessible glyph; it is not an App icon API or a bundled asset. No UI is built.
+`Waiting on N agents`. Delegation purpose comes from the confirmed published
+`assignment.role`: only `developer` and `reviewer` yield named detail. Missing or
+unrecognized assignment roles stay generic, even if child labels or names
+suggest a role. A child's missing or mismatching role label never overrides the
+assignment; its own R1 row role and metadata remain unchanged. The semantic
+icon is a distinct token for the later view to map to an accessible glyph; it is not an App icon API or a bundled asset. No UI is built.
 
-Own blocked attention outranks contextual direct-child attention, which
-outranks waiting. `roster.children` preserves each verified direct child's
+Own blocked attention wins. Contextual direct-child attention replaces waiting
+only on a current idle parent; a working parent retains state working and group
+Working while exposing the same blocked-child context. `roster.children`
+preserves each verified direct child's
 associationKey/address/terminalKey/incarnation. Contextual Child needs you
 is not actionable; only the child's own entry appears in `targets`. Inferred
 ancestry cannot create a direct child attention edge. Existing R1 verified
 parent evidence supports direct-child context, not proof of an assignment.
+Null or malformed raw terminal/machine entries supply no evidence. Irrelevant
+invalid entries do not invalidate other valid observations; missing required
+evidence remains unknown and cannot produce waiting.
 Targets preserve exact identity; unverified rows remain explicit via terminalKey
 and null associationKey.
 

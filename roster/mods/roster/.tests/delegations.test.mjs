@@ -4,7 +4,7 @@ import { assessDelegations, consumeDelegations, readDelegations } from '../deleg
 import { reduceRoster } from '../attention.js';
 import { normalizeApp } from '../normalize.js';
 import { resolveIdentities } from '../identity.js';
-import { enrichMetadata } from '../metadata.js';
+import { enrichMetadata, normalizeConfig } from '../metadata.js';
 const copy = x => JSON.parse(JSON.stringify(x));
 const freeze = x => { if (x && typeof x === 'object') { Object.values(x).forEach(freeze); Object.freeze(x); } return x; };
 const run = n => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -33,7 +33,7 @@ test('parallel workers count actual work; waiting coordinator contributes zero w
 });
 test('known Developer/Reviewer and unknown role details retain literal collapsed label', () => {
   for (const [role, label] of [['developer', 'Waiting for Developer'], ['reviewer', 'Waiting for Reviewer'], ['unknown', 'Waiting on 1 agent']]) {
-    const w = world(); w.terminals[1].labels['herdr.role'] = role;
+    const w = world(); w.doc.assignments[0].role = role;
     assert.equal(parent(reduce(w)).display.detail, label); assert.equal(parent(reduce(w)).display.collapsedLabel, 'Waiting for delegate');
   }
 });
@@ -185,4 +185,126 @@ test('ready cross-core workers and ambiguous child addresses are unknown', () =>
   const w = world(); w.doc.assignments[0].child.address = 'edge/t7a'; w.machines.push({ name: 'edge', layout: 'ready' });
   assert.equal(assess(w).assignments[0].why, 'child-cross-core');
   const d = world(); d.terminals.push(copy(d.terminals[1])); assert.equal(assess(d).assignments[0].why, 'child-ambiguous');
+});
+
+test('working parent keeps Working and exact blocked-child context; idle context adds no target or work', () => {
+  const w = world(2); w.terminals[1].status = 'blocked';
+  const idle = reduce(w), context = parent(idle).children;
+  const child = idle.rows.find(r => r.address === 't7a');
+  assert.deepEqual(context, [{ associationKey: child.associationKey, address: child.address, terminalKey: child.terminalKey, incarnation: child.incarnation }]);
+  assert.equal(idle.counts.working, 1); assert.equal(idle.counts.needsYou, 1);
+  assert.equal(parent(idle).actionable, false);
+  w.producer.status = 'working'; const active = reduce(w);
+  assert.equal(parent(active).state, 'working'); assert.equal(parent(active).group, 'Working');
+  assert.deepEqual(parent(active).children, context); assert.deepEqual(active.targets, idle.targets);
+  assert.equal(active.counts.working, 2); assert.equal(parent(active).actionable, false);
+  w.producer.status = 'blocked'; assert.equal(parent(reduce(w)).state, 'needs-you');
+});
+
+test('published assignment purpose wins over missing/mismatching child labels without rewriting R1', () => {
+  for (const role of ['developer', 'reviewer', null, undefined, 'unrecognized']) {
+    for (const childRole of [undefined, 'developer', 'reviewer']) {
+      const w = world(); w.doc.assignments[0].role = role;
+      if (childRole === undefined) delete w.terminals[1].labels['herdr.role'];
+      else w.terminals[1].labels['herdr.role'] = childRole;
+      w.terminals[1].name = 'Reviewer Developer';
+      const rs = freeze(rows(w)), before = JSON.stringify(rs), r = reduce(w, {}, rs);
+      const expected = role === 'developer' ? 'Waiting for Developer' : role === 'reviewer' ? 'Waiting for Reviewer' : 'Waiting on 1 agent';
+      assert.equal(parent(r).display.detail, expected);
+      assert.equal(parent(r).display.tooltip, expected);
+      const child = r.rows.find(r => r.address === 't7a');
+      assert.equal(child.role, childRole ?? 'unknown');
+      for (const k of Object.keys(rs.find(x => x.address === 't7a'))) assert.deepEqual(child[k], rs.find(x => x.address === 't7a')[k]);
+      assert.equal(JSON.stringify(rs), before);
+    }
+  }
+});
+
+const omitted = Symbol('omitted');
+for (const gen of [omitted, null, undefined, 2]) for (const tag of [omitted, null, undefined, 1, 2]) {
+  test(`generation current ${String(gen)} document ${String(tag)} requires explicit matching tags`, () => {
+    const w = world(), doc = { producer: w.producer, text: JSON.stringify(w.doc) }, options = { documents: [doc] };
+    if (gen !== omitted) options.generation = gen;
+    if (tag !== omitted) doc.generation = tag;
+    const accepted = gen === 2 ? tag === 2 : tag === omitted || tag == null;
+    const r = reduce(w, options);
+    assert.equal(parent(r).state, accepted ? 'waiting' : 'idle');
+    assert.equal(parent(r).delegation.pendingCount, accepted ? 1 : 0);
+    assert.equal(parent(r).delegation.knowledge, accepted ? 'known' : 'unknown');
+  });
+}
+
+test('null/malformed raw observations are ignored without mutation or fabricated readiness', () => {
+  const w = world(), rs = freeze(rows(w));
+  const junk = [null, undefined, {}, [], false, 7, 'bad', { address: null }, { name: 7, layout: 'ready' }];
+  const options = freeze({ terminals: [...junk, ...w.terminals], machines: [...junk, ...w.machines] });
+  const before = JSON.stringify(options);
+  assert.equal(parent(reduce(w, options, rs)).state, 'waiting');
+  assert.equal(assessDelegations({ ...input(w), ...options }).assignments[0].state, 'active');
+  for (const replacement of junk) {
+    const noParent = reduce(w, { terminals: [replacement, w.terminals[1]] }, rs);
+    assert.equal(parent(noParent).state, 'idle'); assert.equal(parent(noParent).delegation.knowledge, 'unknown');
+    const noChild = reduce(w, { terminals: [w.producer, replacement] }, rs);
+    assert.equal(parent(noChild).state, 'idle'); assert.equal(parent(noChild).delegation.pendingCount, 0);
+    assert.equal(parent(noChild).delegation.knowledge, 'unknown');
+    const machines = [replacement];
+    assert.equal(assessDelegations({ ...input(w), machines }).why, 'machine-unavailable');
+    assert.equal(parent(reduce(w, { machines }, rs)).delegation.knowledge, 'unknown');
+  }
+  assert.equal(JSON.stringify(options), before);
+});
+
+test('watcher machine checks ignore null/malformed entries and require actual readiness', () => {
+  const w = world(); w.producer.labels['herdr.role'] = 'watcher'; w.producer.status = 'blocked'; w.terminals[1].status = 'blocked';
+  const rs = freeze(rows(w));
+  const evidence = (r, t) => ({ associationKey: r.associationKey, pid: t.pid, run: t.labels['herdr.run'] });
+  const c = { verified: true, soleCause: true, source: 'explicit-event', generation: 1, delivery: 'sample', targetDelivery: 'sample',
+    watcher: evidence(rs.find(r => r.address === 't4z'), w.producer), target: evidence(rs.find(r => r.address === 't7a'), w.terminals[1]) };
+  const opts = { correlations: [c], generation: 1, machines: [null, {}, ...w.machines] };
+  assert.equal(reduce(w, opts, rs).targets.length, 1);
+  const off = reduce(w, { ...opts, machines: [null, {}, { layout: 'ready' }] }, rs);
+  assert.equal(off.targets.length, 2);
+});
+
+test('malformed producers fail closed during acquisition and reduction', async () => {
+  const w = world(); let reads = 0;
+  const host = { deadline, generation: () => 1, readTextFile: async () => { reads++; throw Error('unavailable'); } };
+  for (const producer of [null, undefined, {}, false, { address: 7, labels: { 'herdr.delegations': '/data/delegations.json' } }]) {
+    assert.equal((await readDelegations(host, producer, 1)).status, 'unknown');
+    assert.equal(assessDelegations({ ...input(w), producer }).status, 'unknown');
+    assert.equal(parent(reduce(w, { documents: [null, {}, { producer, text: JSON.stringify(w.doc) }] })).state, 'idle');
+  }
+  assert.equal(reads, 0);
+});
+
+test('positively labeled non-coordinator with valid live delegate never waits', () => {
+  const w = world(); w.producer.labels['herdr.role'] = 'developer';
+  assert.equal(assess(w).assignments[0].state, 'active');
+  const r = reduce(w), p = r.rows.find(r => r.address === 't4z');
+  assert.equal(p.role, 'developer'); assert.equal(p.roster.delegation.pendingCount, 1);
+  assert.equal(p.roster.state, 'idle'); assert.equal(p.roster.group, 'Other');
+});
+
+test('valid raw contract parent cannot override mismatching verified R1 parent association', () => {
+  const w = world(), rs = rows(w); assert.equal(assess(w).assignments[0].state, 'active');
+  const child = rs.find(r => r.address === 't7a'); assert.equal(child.parent.resolution, 'verified');
+  child.parent.associationKey = 'another-verified-parent';
+  const r = reduce(w, {}, freeze(rs)), d = parent(r).delegation;
+  assert.equal(parent(r).state, 'idle'); assert.equal(d.pendingCount, 0);
+  assert.deepEqual(d.delegates, []); assert.deepEqual(d.unresolved, [w.doc.assignments[0].id]);
+  assert.equal(d.knowledge, 'unknown');
+});
+
+test('base36 exact metadata selector accepts and matches t4z; rejects zero/padding/uppercase', () => {
+  const w = world(), rs = rows(w);
+  const config = { processProviders: ['t4z', 't0', 't01', 't4Z', 'T4z'].map(terminalId => ({ coreId: 'core-a', terminalId, incarnation: 100, provider: 'github' })) };
+  const normalized = normalizeConfig(config);
+  assert.deepEqual(normalized.processProviders.map(p => p.terminalId), ['t4z']); assert.equal(normalized.rejected.length, 4);
+  const enriched = enrichMetadata(rs, config);
+  assert.equal(enriched.rows.find(r => r.address === 't4z').providerBadge.id, 'github');
+  assert.equal(enriched.rows.find(r => r.address === 't7a').providerBadge, null);
+  for (const edit of [p => p.incarnation++, p => p.coreId = 'core-b', p => p.terminalId = 't4y']) {
+    const other = copy(config); edit(other.processProviders[0]);
+    assert.equal(enrichMetadata(rs, other).rows.find(r => r.address === 't4z').providerBadge, null);
+  }
 });

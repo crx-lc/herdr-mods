@@ -10,7 +10,7 @@ const incarnation = t => t && string(t.address) && integer(t.created) && integer
 export const machineOf = address => address.includes('/') ? address.slice(0, address.lastIndexOf('/')) : null;
 const localOf = address => address.slice(address.lastIndexOf('/') + 1);
 export const qualifyChild = (address, producer) => address.includes('/') || machineOf(producer) === null ? address : `${machineOf(producer)}/${address}`;
-const ready = (machines, machine) => machines.some(m => (m?.name ?? null) === machine && m.layout === 'ready');
+const ready = (machines, machine) => machines.some(m => m?.name === machine && m.layout === 'ready');
 const root = t => typeof t?.argv?.[0] === 'string' ? t.argv[0].split(/[\\/]/).pop().toLowerCase().replace(/\.(cmd|bat|exe|sh)$/, '') : null;
 const continuous = (live, saved) => saved.program !== null && root(live) === saved.program && saved.run !== null && live?.labels?.['herdr.run'] === saved.run;
 const same = (live, saved) => live?.state === 'live' && live.created_ms === saved.created && live.pid === saved.pid;
