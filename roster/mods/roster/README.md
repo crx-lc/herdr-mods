@@ -23,23 +23,12 @@ that every original acceptance criterion is met.
 
 ## Using the sidebar
 
-The exact-head Windows run at `eb1df42` found four mod UI defects: Options
-would not scroll, project/parent lines clipped, keyboard detail had no full-text
-path, and waiting hover omitted context. The subsequent [Windows retest](https://github.com/crx-lc/herdr-mods/issues/21#issuecomment-7081956583) at
-`0623d11` reports 51 pass, 1 platform UIA failure and 4 production areas not
-verifiable (56 checks, isolation 3/3). The four mod repairs passed there. This
-revision additionally corrects toolbar cursor return, Unicode page boundaries
-and crowded machine/context text; affected exact-new-head native checks remain pending. It uses a 26px toolbar, four-line
-64px rows and a separate Options viewport of at most 52px with no inner maximum
-height. Keyboard selection requests reveal of the corresponding direct child.
-These requests and height budgets are not proof of native wheel/reveal behavior.
-Stock Desktop 0.1.16 still exposes no mod labels to Windows UIA; Narrator was not
-run. Visible text and local keys do not establish assistive technology exposure.
+The [external Windows R3 report](https://github.com/crx-lc/herdr-mods/issues/21#issuecomment-7083288510) validated runtime source `929d85903dc0b32e2fe05b4b98e8d258c63b7f74` on Windows 11 Pro 10.0.26300, stock Desktop 0.1.16, hc 0.1.21, Node 26.13.1 and tsc 7.0.2. At 100% OS scale the slot was 330×350 physical pixels: zoom 1 uses 330×350 logical, zoom 1.1 uses 300×318 logical. The report records 53 pass, 1 fail, 4 not verifiable, and isolation 3/3. Toolbar return, reader paging, machine/context fit, Options, scrolling and selected-slot opt-in/undo/restart passed the described presentation checks at that source head. Repo tests were 416 total, 415 pass and one optional skip; package inventory had 21 files, typecheck and native check passed, 16 sample states passed and 22 deliberate breaks were detected. This packaging changes only documentation and preview images; runtime files remain byte-identical to that source. Windows did not run on the later packaging commit. Raw private logs were not independently audited here.
 
-Use the explicit selected Agents-slot opt-in described below after the usual
-isolated App checks. Stock Desktop 0.1.16 displayed only the toolbar when opened
-as an overlay in both Windows runs; overlay list usability is not established. This Linux worker performed no live installation or
-activation; the external isolated Windows run is recorded below.
+**Remaining criteria:** stock Windows UIA exposes no Roster labels; Narrator was not run. Production exact Open/Peek (local, remote and pane-less), authoritative Waiting, private project images and finished rows were not verifiable. Injected route and waiting positives are UI test fixtures, not production capability proof. Issue #21 remains open; no full release acceptance or scope waiver is claimed. Stock Desktop 0.1.16 overlay shows only toolbar and Options; selected Agents-slot opt-in is the tested path.
+
+The native tooltip can clip at the window edge; D or pointer Info/Details supplies the complete in-panel reading path. Tested common Unicode and page boundaries preserved text without clipping. Stock fonts displayed regional-indicator components rather than flags, tag sequences as a black flag, and ZWJ sequences as components; lone CR was invisible. These rendering limits are distinct from text loss. The pagination is not full UAX #29.
+
 Projects groups known project memberships and verified parent relationships;
 otherwise rows appear under explicit Unassigned groups. Status separates Needs
 you, contextual Child needs you, Working, Done, Idle, Offline, Stale and Unknown.
@@ -98,11 +87,7 @@ sequences without Intl. Oversized graphemes split within the fixed budget to
 guarantee progress; this is not a full Unicode grapheme algorithm or font-shaping
 guarantee. Fresh 12px wrapped literal text uses the panel
 width, without ellipsis or clamping. Only the active page is rendered. This
-conservative budget needs native font/wide-glyph/newline validation at 330×350,
-zoom 1 and 1.1; smaller pages may be needed if stock text overflows. The worst
-normal-list planning budget is 148px fixed, leaving about 170px at fixed physical
-350px height/zoom 1.1, for two 64px rows plus a 24px heading and two 3px gaps.
-Neither that arithmetic nor Node element trees establish rendered acceptance.
+budget was tested in the R3 report at both zooms, subject to the stock font limits above. The normal-list planning budget is 148px fixed; the reported native worst case showed two full rows and a heading at both zooms.
 
 With independently verified injected evidence, the actual merged navigation guard
 maps eligible explicit actions to `pane.focus {terminal:exactAddress}` or
@@ -277,42 +262,6 @@ breaks failing. Selected-slot opt-in, preservation-first behavior, untouched sou
 layout, byte-identical undo after restart, chosen-state restart persistence and
 Quotr/settings preservation passed. Sidebar keys/Enter, visible hover/focus tooltips
 and static rendering passed; the OS reduced-motion toggle was **not tested**.
-That historical run found header crowding and missing UIA labels, plus inline-layout
-issues. The UI repair candidate addresses the four reported mod defects in code; exact-new-head native revalidation is pending.
+That historical run found header crowding and missing UIA labels. The R3 report above supersedes its presentation observations for the pinned runtime.
 
-The external report says the owner's 431 config files were byte-identical, with
-before/after list SHA-256
-`D349EC390426AF8064D570E897D93201380FCE1EBFE45AF222E802AD72007546`.
-Only the posted summary and crops were supplied here: this Linux worker did not
-run native Windows checks or independently audit raw Windows logs. That run at
-`10c9d66` does not validate the new package checker on macOS or any new runtime;
-that historical run does not validate this compact runtime revision. Source pins above do not prove installed Desktop parity.
-
-The share artifact [Projects preview](https://github.com/crx-lc/herdr-mods/blob/main/roster/preview.png) is the supplied real
-Windows crop, copied byte-for-byte: 240×820, SHA-256
-`60d483878d8436296fb47ce9275d3766b05215bb9080fb435b173557c3eb6790`.
-It shows neutral Coordinator / Developer #42 / Reviewer PR #43 sample labels,
-with no personal mappings imported. It is a tall sidebar capture, **not evidence
-of success at default height**, and lives outside the 21-file installed package.
-The supplied Projects and Status source crops remain in private project evidence.
-
-PR20 recorded repository Node tests, pinned offline parity, the static inventory
-and symlink controls. Those are historical checks, not this candidate's results.
-No App/typecheck/native Windows/macOS run, live installation/sync, owner
-layout/settings/Quotr operation or remote probe was performed by this worker.
-The acceptance umbrella [#4](https://github.com/crx-lc/herdr-mods/issues/4),
-[#10](https://github.com/crx-lc/herdr-mods/issues/10) and
-[#11](https://github.com/crx-lc/herdr-mods/issues/11) remain open: the compact layout needs exact-head native validation and UIA labels need resolution and Core-qualified actions, waiting/delegateWorking/remote
-continuity and private images remain not verifiable. Stronger injected fixtures
-do not make them native capabilities. No full release readiness is claimed.
-
-The [compact-head Windows report](https://github.com/crx-lc/herdr-mods/issues/21#issuecomment-7080873467)
-validated `eb1df42`, not this repair: 31 pass, 5 fail, 4 not verifiable, isolation
-3/3. Four failures concern the mod UI described above; stock UIA remains open.
-Production exact Open/Peek, authoritative Waiting, private images and finished
-rows also remain unverified. Existing real PNGs remain historical evidence;
-no replacement preview is claimed. The later `0623d11` retest above is historical
-evidence for that head, not a native pass for these final corrections. The coordinator will
-request isolated exact-head retesting, including Options wheel and last-item
-keyboard reveal, independent context lines, full field/page reading, crowded
-normal-list fit at both zooms, and unchanged opt-in/undo/isolation behavior.
+The share artifacts [Projects preview](https://github.com/crx-lc/herdr-mods/blob/main/roster/preview.png) and [Status preview](https://github.com/crx-lc/herdr-mods/blob/main/roster/preview-status.png) are neutral production 330×350 crops from the R3 Windows run, copied byte-for-byte. They live outside the installed package. No live installation or native Windows rerun was performed for this packaging change.

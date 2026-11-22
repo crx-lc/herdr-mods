@@ -2,15 +2,12 @@
 
 A passive, explicitly opt-in Projects/Status sidebar for stock Herdr Desktop.
 The current adapter keeps terminal identities provisional and project/context
-associations unknown. This recipe describes the UI repair candidate awaiting native validation, not full
-[#4](https://github.com/crx-lc/herdr-mods/issues/4) release acceptance.
+associations unknown. Full release acceptance remains open.
 
-![Roster](preview.png)
+![Production Projects](preview.png)
 
-Real external Windows Projects crop, 240×820, copied byte-for-byte; SHA-256
-`60d483878d8436296fb47ce9275d3766b05215bb9080fb435b173557c3eb6790`.
-Neutral Coordinator / Developer #42 / Reviewer PR #43 only. This tall sidebar
-capture does not demonstrate usability in the default-height Agents slot.
+[Production Status preview](preview-status.png). Both are real neutral 330×350
+Windows slot crops at zoom 1, copied byte-for-byte from the R3 evidence.
 
 ## What you see
 
@@ -35,7 +32,7 @@ Disabled selections have a separate readable 16px reason above a 16px summary
 and Details (D) affordance; enabled selections use 16px. A layout message uses
 16px. Worst fixed normal-list budget is 148px, leaving about 170px at fixed
 physical 350px/zoom1.1: plan two 64px rows, a 24px header and two 3px gaps (158px).
-Verify actual fit natively; arithmetic is not acceptance. Full contextual row
+The R3 native report records actual fit at both zooms; arithmetic alone is not acceptance. Full contextual row
 hover includes waiting, project, parent, provider, route/context and reason.
 
 Explicit Details at opening replaces everything below the toolbar with one
@@ -48,7 +45,7 @@ or ancestors. Pages have at most 64 Unicode code points and three line breaks
 Render only the active page, with no total-length cap or detail-scroll dependency.
 Use separate name/project/parent/machine/context/state/waiting/provider/availability/
 filter/diagnostic fields. Keep full waiting in expanded compact and hidden-child
-modes. Native wide-glyph/blank-line/long-token fit at both zooms is pending.
+modes. R3 reports tested wide-glyph, newline and long-token pages fit at both zooms, subject to the font limits below.
 Production has no admitted authoritative waiting. Stock Desktop 0.1.16 UIA
 exposes no mod labels; Narrator was not run, and the reader is no UIA pass.
 
@@ -110,16 +107,11 @@ that would ship, validates eager import closure, and performs no install/sync.
 
 ## Watch out
 
-The `eb1df42` compact-head Windows run reports 31 pass, 5 fail, 4 not verifiable,
-isolation 3/3. Its four mod defects were Options scrolling/reveal, clipped
-project/parent, no full keyboard text path and waiting-hover context/edge clipping.
-Those repairs passed the external 0623d11 retest; the final review corrections
-below still need affected exact-new-head native retesting. Preserve
-existing real tall preview and old 330×350 crops; never label them new-head proof.
-The fifth failure is stock UIA and remains open without a scope waiver. A 108px
-Options-only/no-max_h A/B and supported plain overflow_y_scroll fallback are
-prepared outside the package for isolated native testing. Final Options cap is
-52px to retain the owner's visible machine/context requirement in four-line rows.
+The [external Windows R3 report](https://github.com/crx-lc/herdr-mods/issues/21#issuecomment-7083288510) validated runtime source `929d85903dc0b32e2fe05b4b98e8d258c63b7f74` on Windows 11 Pro 10.0.26300, stock Desktop 0.1.16, hc 0.1.21, Node 26.13.1 and tsc 7.0.2. At 100% OS scale the slot was 330×350 physical pixels: zoom 1 uses 330×350 logical, zoom 1.1 uses 300×318 logical. The report records 53 pass, 1 fail, 4 not verifiable, and isolation 3/3. Toolbar return, reader paging, machine/context fit, Options, scrolling and selected-slot opt-in/undo/restart passed the described presentation checks at that source head. Repo tests were 416 total, 415 pass and one optional skip; package inventory had 21 files, typecheck and native check passed, 16 sample states passed and 22 deliberate breaks were detected. This packaging changes only documentation and preview images; runtime files remain byte-identical to that source. Windows did not run on the later packaging commit. Raw private logs were not independently audited here.
+
+**Remaining criteria:** stock Windows UIA exposes no Roster labels; Narrator was not run. Production exact Open/Peek (local, remote and pane-less), authoritative Waiting, private project images and finished rows were not verifiable. Injected route and waiting positives are UI test fixtures, not production capability proof. Issue #21 remains open; no full release acceptance or scope waiver is claimed. Stock Desktop 0.1.16 overlay shows only toolbar and Options; selected Agents-slot opt-in is the tested path.
+
+The native tooltip can clip at the window edge; D or pointer Info/Details supplies the complete in-panel reading path. Tested common Unicode and page boundaries preserved text without clipping. Stock fonts displayed regional-indicator components rather than flags, tag sequences as a black flag, and ZWJ sequences as components; lone CR was invisible. These rendering limits are distinct from text loss. The pagination is not full UAX #29.
 
 Stock snapshots cannot prove permanent Core/remote-epoch binding. Unknown must
 remain unknown; do not enable actions, authoritative waiting or private images to
@@ -144,42 +136,4 @@ contract parity when available, and the read-only inventory pass, with negative
 controls rejecting missing/forbidden files, links and escaping references. Record
 actual commands/counts separately from planned workstation checks.
 
-The [external Windows summary](https://github.com/crx-lc/herdr-mods/issues/11#issuecomment-7070369048)
-at merged main `10c9d66`, stock Windows 11 / App 0.1.16 / hc 0.1.21, reports
-22 checks: 17 pass, 2 fail, 3 not verifiable, and isolation 3/3 pass. Real repo
-App check plus two sample-state checks passed with three deliberate-break failures.
-Selected-slot opt-in, preservation-first, untouched source layout, byte-identical
-undo after restart, chosen-state restarts and Quotr/settings preservation passed.
-Sidebar keys/Enter, hover/focus tooltips and static rendering passed; OS reduced-motion
-toggle was not tested. Owner 431 config files reportedly remained byte-identical,
-list SHA-256 `D349EC390426AF8064D570E897D93201380FCE1EBFE45AF222E802AD72007546`.
-Only the posted summary and source crops were supplied, not raw Windows logs;
-this Linux worker neither reran native checks nor independently audited those logs.
-The source Projects/Status crops stay in private evidence; preview is a share
-artifact outside the installed package, with no editing/generation or private mapping
-import. The Windows run does not validate the revised checker on macOS; macOS
-portability is inferred from Linux linked-ancestor controls. This historical run does not validate the compact runtime changes.
-
-Full acceptance remains open in [#11](https://github.com/crx-lc/herdr-mods/issues/11),
-[#10](https://github.com/crx-lc/herdr-mods/issues/10) and
-[#4](https://github.com/crx-lc/herdr-mods/issues/4): compact layout validation and the platform accessibility gap remain open under
-[#21](https://github.com/crx-lc/herdr-mods/issues/21).
-Core-qualified local/remote/pane-less actions, authoritative waiting/delegateWorking,
-remote continuity and configured private images remain **not verifiable** due to
-#10 proof gaps, not waived. Source pins do not prove installed Desktop capability.
-This packaging and tall capture do not establish release readiness or authorize
-live activation. This worker executed Node/default/pinned/package checks only;
-no App, typecheck, native Windows/macOS, live install/sync or workstation run.
-
-Final review corrections: toolbar/state transitions close Details without origin
-return and cancel pending returns; explicit Back/Esc still restores/reveals the
-exact surviving control. Machine/route summary and execution context use equal
-zero-basis flex columns in the same 14px row line, independently truncated; omit
-redundant diagnostic prose there but retain full host-unknown/unverified-identity
-text in Details and hover. Route aliases never prove hosts. Protect feasible RI
-flag pairs by run parity, emoji tags and CRLF as well as combining/variation/skin/ZWJ
-boundaries, within 64 code points/three CRLF-or-lone-CR/LF breaks. Oversized clusters
-use bounded lossless fallback; no full Unicode segmentation/shaping claim.
-Windows retest at 0623d11 reports 51/1/4 with isolation3/3; these corrections need
-affected exact-new-head retesting. Stock Desktop0.1.16 overlay showed toolbar only;
-selected Agents-slot opt-in is the tested path. Preserve all existing PNGs.
+The R3 report above is tied to the exact runtime source, not a claim that a later packaging commit ran on Windows. Full acceptance remains open in [#21](https://github.com/crx-lc/herdr-mods/issues/21), [#11](https://github.com/crx-lc/herdr-mods/issues/11), [#10](https://github.com/crx-lc/herdr-mods/issues/10) and [#4](https://github.com/crx-lc/herdr-mods/issues/4). No live activation is authorized by this evidence.

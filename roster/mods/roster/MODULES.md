@@ -621,8 +621,7 @@ Empty fields get a page. Common combining/variation/skin-tone/ZWJ boundaries,
 regional-indicator pairs (run parity), emoji tag sequences and CRLF are protected
 where feasible without Intl. Oversized graphemes split at the bounded limit to
 retain progress; this is not full UAX #29 or a native shaping guarantee.
-Concatenating a field's spans exactly recovers its value. Native shaping/fit is
-an outstanding Windows check, not established by Node Unicode coverage.
+Concatenating a field's spans exactly recovers its value. The external R3 Windows report linked in README records tested native fit at both zooms and separate stock font limitations; Node Unicode coverage alone does not establish native shaping.
 
 The view captures fields with the exact source instance key as Details at opening,
 keeps a separate reader control set, and never activates a row from reader Enter.
@@ -633,4 +632,4 @@ A pending Back/Esc return is cancelled by intervening transitions. No snapshot s
 Rows keep four independent visible lines at 64px; machine summary and context
 share the last line in equal zero-basis flex columns with independent truncation, and Options uses a fixed
 viewport up to 52px with no max_h, retaining existing direct-child indices.
-These layout and reveal requests await exact-head native acceptance.
+The R3 report linked in README records native presentation checks at runtime source `929d859`; full release acceptance remains open.
