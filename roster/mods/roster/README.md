@@ -23,19 +23,12 @@ that every original acceptance criterion is met.
 
 ## Using the sidebar
 
-**Known Windows failures:** in the default approximately 330×350 Agents slot,
-existing PR19 header controls consume almost all the height, leaving one line of
-rows or none. Scrolling does not guarantee usable rows at that size. Stock
-Desktop 0.1.16 also exposes no mod `accessibility_label` to Windows UIA/Narrator
-(a platform gap). Visible labels and keyboard detail do not prove assistive
-technology exposure. Both failures remain open under #10/#11/#4; runtime fixes
-are outside this packaging change. Badges/monograms appearing on separate lines
-are an additional, uncounted observation.
+The [external Windows R3 report](https://github.com/crx-lc/herdr-mods/issues/21#issuecomment-7083288510) validated runtime source `929d85903dc0b32e2fe05b4b98e8d258c63b7f74` on Windows 11 Pro 10.0.26300, stock Desktop 0.1.16, hc 0.1.21, Node 26.13.1 and tsc 7.0.2. At 100% OS scale the slot was 330×350 physical pixels: zoom 1 uses 330×350 logical, zoom 1.1 uses 300×318 logical. The report records 53 pass, 1 fail, 4 not verifiable, and isolation 3/3. Toolbar return, reader paging, machine/context fit, Options, scrolling and selected-slot opt-in/undo/restart passed the described presentation checks at that source head. Repo tests were 416 total, 415 pass and one optional skip; package inventory had 21 files, typecheck and native check passed, 16 sample states passed and 22 deliberate breaks were detected. This packaging changes only documentation and preview images; runtime files remain byte-identical to that source. Windows did not run on the later packaging commit. Raw private logs were not independently audited here.
 
-After installation and the usual isolated App checks, explicitly open a copy with
-`openOverlay({mod:'roster'})` from an authorized mod/agent, or place a copy in a
-personal layout. This Linux packaging worker performed no live installation or
-activation; the external isolated Windows run is recorded below.
+**Remaining criteria:** stock Windows UIA exposes no Roster labels; Narrator was not run. Production exact Open/Peek (local, remote and pane-less), authoritative Waiting, private project images and finished rows were not verifiable. Injected route and waiting positives are UI test fixtures, not production capability proof. Issue #21 remains open; no full release acceptance or scope waiver is claimed. Stock Desktop 0.1.16 overlay shows only toolbar and Options; selected Agents-slot opt-in is the tested path.
+
+The native tooltip can clip at the window edge; D or pointer Info/Details supplies the complete in-panel reading path. Tested common Unicode and page boundaries preserved text without clipping. Stock fonts displayed regional-indicator components rather than flags, tag sequences as a black flag, and ZWJ sequences as components; lone CR was invisible. These rendering limits are distinct from text loss. The pagination is not full UAX #29.
+
 Projects groups known project memberships and verified parent relationships;
 otherwise rows appear under explicit Unassigned groups. Status separates Needs
 you, contextual Child needs you, Working, Done, Idle, Offline, Stale and Unknown.
@@ -44,21 +37,57 @@ omitted, including superseded incarnations at a reused address. No finished stat
 is invented. Done starts folded. No supplementary terminal history is acquired.
 
 Projects/Status, group and child folds, and independent Machine/Context filters
-change only the sidebar. Global Needs you survives filters and folds; an entry
+change only the sidebar. Open **Options** for filters and Agents-slot controls.
+Unfiltered dimensions with only one available value have no redundant selector;
+when a filter is active, its reset stays available. Global Needs you survives filters and folds; an entry
 outside filters explains why it cannot be opened. Contextual Child needs you
 creates no second actionable parent. Provider badges represent work items, never
-an LLM or group. Every row keeps project name/fallback, host/route description,
-execution context, provider accessibility name and disabled-action explanation.
+an LLM or group. Rows keep a neutral project monogram and inline provider/state
+chips on their title line. Separate Project and verified Parent lines extend
+beneath the chips. The last line gives machine/route and execution context equal,
+independently bounded columns. It abbreviates an unknown host to Local route or
+Route <alias>; an alias does not verify a host. Full host-unknown and unverified-identity
+diagnostics remain in Details and full hover text.
+Only the projected verified parent supplies a name; missing relationships show
+Not reported or Unknown with the existing resolution. Unassigned projects,
+unknown hosts remain explicit in full details and unknown contexts stay visible. Long row lines ellipsize
+independently; full values are available through Details. Info is a sibling of
+the terminal control and never opens the terminal. Provider markers remain
+separate from project images.
 
-Click gives the sidebar its own keyboard focus. Up/Down moves a visible cursor
-through its controls; Enter activates the selected control and retains its position
-when that control survives. A removed control selects the nearest current position.
-The explicit `focus` command also gives it focus. Selected row detail is visible
-as a keyboard-focus tooltip as well as a hover tooltip; the code also declares
-accessibility labels. No global key binding,
-`setAgentOrder`, terminal input, approval, status, notification or lifecycle changes
-are made. The external run passed sidebar focus/Enter and visible tooltip detail,
-but failed UIA label exposure as described above.
+Click gives the sidebar focus. Up/Down selects controls; Enter activates the
+selected control. Normal row Enter keeps its guarded Open semantics. D on a row,
+Info or child-fold control opens the local reader, as do Enter/click on Info or
+the footer's Details (D). The disabled reason retains its own 16px line above a
+16px summary/Details line (32px total); enabled selections use 16px. Full contextual
+hover uses the same facts/reason mapping as the reader, including full waiting
+text even when expanded children use compact Waiting. Native tooltips can clip
+at the window edge; use Info/Details to read every field.
+
+**Details at opening** replaces the content below the toolbar with a captured,
+nonpersistent snapshot of that exact projection instance. Each page shows one
+literal field or its continuation: name, project, verified parent, machine/route,
+context, state, full waiting text when present, work-item/project provider,
+action availability, outside-filter reasons and identity diagnostic. Left/Up and
+Previous go back, Right/Down and Next go forward, Home/End jump first/last, and
+Esc/Back returns to the same surviving control and reveals its row. If that
+instance vanished, return safely to Projects; identical names never rebind it.
+Enter in the reader only operates a reader control and cannot Open a terminal.
+Toolbar clicks close the reader and keep the clicked toolbar cursor/highlight.
+View/filter/fold or Options state transitions cancel origin returns, including a
+Back/Esc return queued before the next render. Unhandled keys
+retain host behavior. The existing explicit focus command still focuses this copy;
+there are no new global keys, overlays or terminal-input changes.
+
+Pages preserve every source character, including whitespace and blank lines,
+with at most 64 Unicode code points and three line breaks (CRLF, lone CR or LF) per page;
+there is no total-length clipping. Feasible boundaries preserve regional-indicator
+pairs, emoji tag sequences, CRLF, and common combining/variation/skin-tone/ZWJ
+sequences without Intl. Oversized graphemes split within the fixed budget to
+guarantee progress; this is not a full Unicode grapheme algorithm or font-shaping
+guarantee. Fresh 12px wrapped literal text uses the panel
+width, without ellipsis or clamping. Only the active page is rendered. This
+budget was tested in the R3 report at both zooms, subject to the stock font limits above. The normal-list planning budget is 148px fixed; the reported native worst case showed two full rows and a heading at both zooms.
 
 With independently verified injected evidence, the actual merged navigation guard
 maps eligible explicit actions to `pane.focus {terminal:exactAddress}` or
@@ -70,7 +99,7 @@ proofs, and no experimental Core reader is bundled.
 
 ## Selected Agents-slot opt-in and undo
 
-“Choose an existing Agents slot…” inspects the current layout only when clicked.
+“Choose an existing Agents slot…” (in **Options**) inspects the current layout only when clicked.
 Select one exact existing slot. Roster first writes a preservation copy of the
 **current effective tree**, then a private restoration record, then a separate
 working layout with only that slot's content replaced, and switches to that copy.
@@ -156,7 +185,7 @@ Detailed pure exports and data shapes are in [MODULES.md](MODULES.md).
 
 ## Modules, data sources and limits
 
-The installable tree is self-contained. `main.js` imports only Herdr/gpui-kit and
+The installable tree is self-contained. `main.js` imports only Herdr/gpui-kit/gpui-base and
 the local view; `view.js` draws and wires the host-injected controller, feed,
 local reader and layout logic. Pure logic has no Herdr imports. Existing identity,
 metadata, delegation, attention, projection, settings, icons and navigation
@@ -187,14 +216,13 @@ They do not establish QuickJS/GPUI/native Windows behavior.
 Remaining original acceptance gaps include Core-qualified local/remote/pane-less
 navigation, authoritative runtime waiting/delegateWorking and observed remote
 continuity, Core-bound project/context associations, and private configured icons.
-These remain **not verifiable**, blocked by #10 rather than waived. The default-height
-layout and UIA failures above also remain open. Global shortcut changes are outside
+These remain **not verifiable**, blocked by #10 rather than waived. The UIA gap above remains open under [#21](https://github.com/crx-lc/herdr-mods/issues/21). Global shortcut changes are outside
 the current scope; the old Phase 2/#18 gate is retired.
 
 ## Package inventory and acceptance evidence
 
 From the repository root, run `node scripts/roster-package.mjs`. It prints the
-sorted, repository-relative paths of the 20 installed-folder files that would
+sorted, repository-relative paths of the 21 installed-folder files that would
 ship. It only reads the repository package; it never copies, installs, syncs,
 loads mod code or consults a live App home. No destination options are accepted.
 This is a separate inventory policy, not a dry run of `scripts/sync.mjs` (whose
@@ -233,31 +261,6 @@ breaks failing. Selected-slot opt-in, preservation-first behavior, untouched sou
 layout, byte-identical undo after restart, chosen-state restart persistence and
 Quotr/settings preservation passed. Sidebar keys/Enter, visible hover/focus tooltips
 and static rendering passed; the OS reduced-motion toggle was **not tested**.
-The two failures and uncounted inline-layout observation are stated near usage above.
+That historical run found header crowding and missing UIA labels. The R3 report above supersedes its presentation observations for the pinned runtime.
 
-The external report says the owner's 431 config files were byte-identical, with
-before/after list SHA-256
-`D349EC390426AF8064D570E897D93201380FCE1EBFE45AF222E802AD72007546`.
-Only the posted summary and crops were supplied here: this Linux worker did not
-run native Windows checks or independently audit raw Windows logs. That run at
-`10c9d66` does not validate the new package checker on macOS or any new runtime;
-runtime code is unchanged. Source pins above do not prove installed Desktop parity.
-
-The share artifact [Projects preview](https://github.com/crx-lc/herdr-mods/blob/main/roster/preview.png) is the supplied real
-Windows crop, copied byte-for-byte: 240×820, SHA-256
-`60d483878d8436296fb47ce9275d3766b05215bb9080fb435b173557c3eb6790`.
-It shows neutral Coordinator / Developer #42 / Reviewer PR #43 sample labels,
-with no personal mappings imported. It is a tall sidebar capture, **not evidence
-of success at default height**, and lives outside the 20-file installed package.
-The supplied Projects and Status source crops remain in private project evidence.
-
-This worker's executed checks are repository Node tests, pinned offline parity,
-the static inventory and symlink controls, recorded in PR20 with full private logs.
-No App/typecheck/native Windows/macOS run, live installation/sync, owner
-layout/settings/Quotr operation or remote probe was performed by this worker.
-The acceptance umbrella [#4](https://github.com/crx-lc/herdr-mods/issues/4),
-[#10](https://github.com/crx-lc/herdr-mods/issues/10) and
-[#11](https://github.com/crx-lc/herdr-mods/issues/11) remain open: the two failures
-need resolution and Core-qualified actions, waiting/delegateWorking/remote
-continuity and private images remain not verifiable. Stronger injected fixtures
-do not make them native capabilities. No full release readiness is claimed.
+The share artifacts [Projects preview](https://github.com/crx-lc/herdr-mods/blob/main/roster/preview.png) and [Status preview](https://github.com/crx-lc/herdr-mods/blob/main/roster/preview-status.png) are neutral production 330×350 crops from the R3 Windows run, copied byte-for-byte. They live outside the installed package. No live installation or native Windows rerun was performed for this packaging change.

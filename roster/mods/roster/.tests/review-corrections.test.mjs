@@ -167,18 +167,18 @@ test('F4 explicit fresh read invalidates before await and retains revision high 
 });
 
 test('F5 Enter preserves mode/filter/fold position, Down advances and tooltip/a11y follows', () => {
-  const f = fakeHost([terminal('t1'), terminal('t2', 'working', { parent: 't1' })]); prove(f.host);
-  const { view, cx } = viewOf(f); let tree = view.render(cx);
+  const f = fakeHost([terminal('t1'), terminal('t2', 'working', { parent: 't1' }), terminal('edge/t3')]); prove(f.host);
+  const { view, cx } = viewOf(f); view.toolsOpen = true; let tree = view.render(cx);
   const parent = find(view.controller.projection, 't1');
   const section = view.controls.find(c => c.label.includes('Unassigned'));
-  for (const key of ['mode:status', 'mode:projects', 'filter:coreIds:core-a', 'all:coreIds', `fold:${parent.key}`, section.key]) {
+  for (const key of ['mode:status', 'mode:projects', 'filter:coreIds:value:core-a', 'all:coreIds', `fold:${parent.key}`, section.key]) {
     view.controller.cursor = key; view.key({ keystroke: 'enter' }, cx); tree = view.render(cx);
     assert.equal(view.controller.cursor, key);
     const index = view.controls.findIndex(c => c.key === key), expected = view.controls[(index + 1) % view.controls.length].key;
     view.key({ keystroke: 'down' }, cx); tree = view.render(cx); assert.equal(view.controller.cursor, expected);
     const selected = view.controls.find(c => c.key === expected);
     assert.equal(tree.attributes.accessibility_label[0], selected.label);
-    assert.equal(textOf(flatten(tree).find(e => e.attributes.id?.[0] === 'roster-focus-tooltip')), selected.label);
+    assert.equal(textOf(flatten(tree).find(e => e.attributes.id?.[0] === 'roster-focus-tooltip')), [selected.disabledReason, selected.detail ?? selected.label, selected.instance ? 'Details (D)' : null].filter(Boolean).join(' '));
   }
   assert.equal(f.calls.length, 0);
 });
