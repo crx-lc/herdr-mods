@@ -25,17 +25,20 @@ that every original acceptance criterion is met.
 
 The exact-head Windows run at `eb1df42` found four mod UI defects: Options
 would not scroll, project/parent lines clipped, keyboard detail had no full-text
-path, and waiting hover omitted context. This candidate repairs those paths in
-code and awaits a new exact-head Windows run. It uses a 26px toolbar, four-line
+path, and waiting hover omitted context. The subsequent [Windows retest](https://github.com/crx-lc/herdr-mods/issues/21#issuecomment-7081956583) at
+`0623d11` reports 51 pass, 1 platform UIA failure and 4 production areas not
+verifiable (56 checks, isolation 3/3). The four mod repairs passed there. This
+revision additionally corrects toolbar cursor return, Unicode page boundaries
+and crowded machine/context text; affected exact-new-head native checks remain pending. It uses a 26px toolbar, four-line
 64px rows and a separate Options viewport of at most 52px with no inner maximum
 height. Keyboard selection requests reveal of the corresponding direct child.
 These requests and height budgets are not proof of native wheel/reveal behavior.
 Stock Desktop 0.1.16 still exposes no mod labels to Windows UIA; Narrator was not
 run. Visible text and local keys do not establish assistive technology exposure.
 
-After installation and the usual isolated App checks, explicitly open a copy with
-`openOverlay({mod:'roster'})` from an authorized mod/agent, or place a copy in a
-personal layout. This Linux worker performed no live installation or
+Use the explicit selected Agents-slot opt-in described below after the usual
+isolated App checks. Stock Desktop 0.1.16 displayed only the toolbar when opened
+as an overlay in both Windows runs; overlay list usability is not established. This Linux worker performed no live installation or
 activation; the external isolated Windows run is recorded below.
 Projects groups known project memberships and verified parent relationships;
 otherwise rows appear under explicit Unassigned groups. Status separates Needs
@@ -52,10 +55,13 @@ outside filters explains why it cannot be opened. Contextual Child needs you
 creates no second actionable parent. Provider badges represent work items, never
 an LLM or group. Rows keep a neutral project monogram and inline provider/state
 chips on their title line. Separate Project and verified Parent lines extend
-beneath the chips, followed by a visible machine/route and execution-context line.
+beneath the chips. The last line gives machine/route and execution context equal,
+independently bounded columns. It abbreviates an unknown host to Local route or
+Route <alias>; an alias does not verify a host. Full host-unknown and unverified-identity
+diagnostics remain in Details and full hover text.
 Only the projected verified parent supplies a name; missing relationships show
 Not reported or Unknown with the existing resolution. Unassigned projects,
-unknown hosts and unknown contexts stay explicit. Long row lines ellipsize
+unknown hosts remain explicit in full details and unknown contexts stay visible. Long row lines ellipsize
 independently; full values are available through Details. Info is a sibling of
 the terminal control and never opens the terminal. Provider markers remain
 separate from project images.
@@ -78,13 +84,19 @@ Previous go back, Right/Down and Next go forward, Home/End jump first/last, and
 Esc/Back returns to the same surviving control and reveals its row. If that
 instance vanished, return safely to Projects; identical names never rebind it.
 Enter in the reader only operates a reader control and cannot Open a terminal.
-View/filter/fold or Options changes close the reader locally. Unhandled keys
+Toolbar clicks close the reader and keep the clicked toolbar cursor/highlight.
+View/filter/fold or Options state transitions cancel origin returns, including a
+Back/Esc return queued before the next render. Unhandled keys
 retain host behavior. The existing explicit focus command still focuses this copy;
 there are no new global keys, overlays or terminal-input changes.
 
 Pages preserve every source character, including whitespace and blank lines,
-with at most 64 Unicode code points and three newline characters per page;
-there is no total-length clipping. Fresh 12px wrapped literal text uses the panel
+with at most 64 Unicode code points and three line breaks (CRLF, lone CR or LF) per page;
+there is no total-length clipping. Feasible boundaries preserve regional-indicator
+pairs, emoji tag sequences, CRLF, and common combining/variation/skin-tone/ZWJ
+sequences without Intl. Oversized graphemes split within the fixed budget to
+guarantee progress; this is not a full Unicode grapheme algorithm or font-shaping
+guarantee. Fresh 12px wrapped literal text uses the panel
 width, without ellipsis or clamping. Only the active page is rendered. This
 conservative budget needs native font/wide-glyph/newline validation at 330×350,
 zoom 1 and 1.1; smaller pages may be needed if stock text overflows. The worst
@@ -299,7 +311,8 @@ validated `eb1df42`, not this repair: 31 pass, 5 fail, 4 not verifiable, isolati
 3/3. Four failures concern the mod UI described above; stock UIA remains open.
 Production exact Open/Peek, authoritative Waiting, private images and finished
 rows also remain unverified. Existing real PNGs remain historical evidence;
-no replacement preview or new native success is claimed. The coordinator will
+no replacement preview is claimed. The later `0623d11` retest above is historical
+evidence for that head, not a native pass for these final corrections. The coordinator will
 request isolated exact-head retesting, including Options wheel and last-item
 keyboard reveal, independent context lines, full field/page reading, crowded
 normal-list fit at both zooms, and unchanged opt-in/undo/isolation behavior.

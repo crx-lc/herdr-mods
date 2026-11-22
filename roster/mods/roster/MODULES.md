@@ -608,16 +608,19 @@ No sending, keys, run, kill, keep, label, native status or lifecycle plan exists
 
 `detail.js` has no native imports or host operations. `rowContext(instance)` keeps
 project, verified-parent, machine/route and execution context separate with truthful
-unknowns. `actionReason` owns the existing reason mapping; `detailFields` and
+unknowns. `machineSummary` abbreviates only the visible row; full machine diagnostics
+remain unchanged in reader/hover. `actionReason` owns the existing reason mapping; `detailFields` and
 `detailLabel` share it between reader, footer and full contextual waiting hover.
 Only `context.parent.displayLabel` can name a parent; route aliases do not prove
 hosts, and provider names describe work items/configuration, never an LLM.
 
 `detailPages(fields)` returns ordered `{fieldIndex,fieldId,label,start,end,text,
 fieldPage,fieldPages}` source spans. Offsets are UTF-16; pages contain at most
-64 code points/three newlines. Whitespace is retained; there is no total cap.
-Empty fields get a page. Common combining/joining boundaries are avoided where
-feasible without Intl; arbitrarily long runs must split within the budget.
+64 code points/three line breaks (CRLF or lone CR/LF). Whitespace is retained; there is no total cap.
+Empty fields get a page. Common combining/variation/skin-tone/ZWJ boundaries,
+regional-indicator pairs (run parity), emoji tag sequences and CRLF are protected
+where feasible without Intl. Oversized graphemes split at the bounded limit to
+retain progress; this is not full UAX #29 or a native shaping guarantee.
 Concatenating a field's spans exactly recovers its value. Native shaping/fit is
 an outstanding Windows check, not established by Node Unicode coverage.
 
@@ -625,7 +628,9 @@ The view captures fields with the exact source instance key as Details at openin
 keeps a separate reader control set, and never activates a row from reader Enter.
 D or Info/Details opens; arrows/Previous/Next page; Home/End jump; Esc/Back returns
 to that surviving control/reveals its row, else Projects. View/filter/fold/Options
-changes close it. No snapshot storage/timers/new route protocol or global keys.
-Rows keep four independent visible lines at 64px, and Options uses a fixed
+changes close it without origin return; toolbar clicks retain the clicked cursor.
+A pending Back/Esc return is cancelled by intervening transitions. No snapshot storage/timers/new route protocol or global keys.
+Rows keep four independent visible lines at 64px; machine summary and context
+share the last line in equal zero-basis flex columns with independent truncation, and Options uses a fixed
 viewport up to 52px with no max_h, retaining existing direct-child indices.
 These layout and reveal requests await exact-head native acceptance.

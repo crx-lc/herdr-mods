@@ -43,8 +43,8 @@ captured, nonpersistent instance snapshot. Display a 24px Back (Esc)/title line,
 18px field label, 18px global/field progress, active literal value and 24px
 Previous/Next controls, with 4px gaps. Use fresh text, full available width,
 whitespace_normal, 12px, line_height(1.25); no clipping/ellipsis/clamp on the value
-or ancestors. Pages have at most 64 Unicode code points and three newline
-characters, preserving every UTF-16 source span, whitespace and terminal suffix.
+or ancestors. Pages have at most 64 Unicode code points and three line breaks
+(CRLF or lone CR/LF), preserving every UTF-16 source span, whitespace and terminal suffix.
 Render only the active page, with no total-length cap or detail-scroll dependency.
 Use separate name/project/parent/machine/context/state/waiting/provider/availability/
 filter/diagnostic fields. Keep full waiting in expanded compact and hidden-child
@@ -113,7 +113,8 @@ that would ship, validates eager import closure, and performs no install/sync.
 The `eb1df42` compact-head Windows run reports 31 pass, 5 fail, 4 not verifiable,
 isolation 3/3. Its four mod defects were Options scrolling/reveal, clipped
 project/parent, no full keyboard text path and waiting-hover context/edge clipping.
-This candidate repairs those in code; all native retests are pending. Preserve
+Those repairs passed the external 0623d11 retest; the final review corrections
+below still need affected exact-new-head native retesting. Preserve
 existing real tall preview and old 330×350 crops; never label them new-head proof.
 The fifth failure is stock UIA and remains open without a scope waiver. A 108px
 Options-only/no-max_h A/B and supported plain overflow_y_scroll fallback are
@@ -169,3 +170,16 @@ remote continuity and configured private images remain **not verifiable** due to
 This packaging and tall capture do not establish release readiness or authorize
 live activation. This worker executed Node/default/pinned/package checks only;
 no App, typecheck, native Windows/macOS, live install/sync or workstation run.
+
+Final review corrections: toolbar/state transitions close Details without origin
+return and cancel pending returns; explicit Back/Esc still restores/reveals the
+exact surviving control. Machine/route summary and execution context use equal
+zero-basis flex columns in the same 14px row line, independently truncated; omit
+redundant diagnostic prose there but retain full host-unknown/unverified-identity
+text in Details and hover. Route aliases never prove hosts. Protect feasible RI
+flag pairs by run parity, emoji tags and CRLF as well as combining/variation/skin/ZWJ
+boundaries, within 64 code points/three CRLF-or-lone-CR/LF breaks. Oversized clusters
+use bounded lossless fallback; no full Unicode segmentation/shaping claim.
+Windows retest at 0623d11 reports 51/1/4 with isolation3/3; these corrections need
+affected exact-new-head retesting. Stock Desktop0.1.16 overlay showed toolbar only;
+selected Agents-slot opt-in is the tested path. Preserve all existing PNGs.

@@ -40,14 +40,18 @@ export function createRosterView(kit, app, options = {}) {
       const fields = detailFields(control.instance);
       this.reader = { sourceKey: control.instance.key, returnKey: control.key, fields,
         pages: detailPages(fields), page: 0, state: JSON.stringify(this.controller.state), toolsOpen: this.toolsOpen };
+      this.returnControl = null;
       this.readerCursor = 'details:next';
       // Discard normal callbacks immediately, before the next render/key event.
       this.controls = []; this.readerControls = [];
       cx.notify();
     }
-    closeDetails(cx) {
+    closeDetails(cx, returnToOrigin = true) {
+      // A transition also cancels a Back/Esc return queued before this render.
+      if (!returnToOrigin) this.returnControl = null;
       if (!this.reader) return;
-      this.returnControl = { key: this.reader.returnKey, sourceKey: this.reader.sourceKey };
+      if (returnToOrigin) this.returnControl = { key: this.reader.returnKey, sourceKey: this.reader.sourceKey,
+        state: this.reader.state, toolsOpen: this.reader.toolsOpen };
       this.reader = null; this.readerControls = []; this.controls = [];
       cx.notify();
     }
@@ -137,7 +141,7 @@ export function createRosterView(kit, app, options = {}) {
         if (active) content.font_semibold();
         return element.child(content);
       };
-      const change = event => cx => { this.closeDetails(cx); c.change(event); cx.notify(); };
+      const change = event => cx => { this.closeDetails(cx, false); c.change(event); cx.notify(); };
       const viewMode = c.state.view;
       const root = v().id('roster').size_full().p(5).gap(3).bg(theme.surface).text_color(fg).text_size(12)
         .track_focus(this.handle).on_key_down((e, cx) => this.key(e, cx));
@@ -148,9 +152,9 @@ export function createRosterView(kit, app, options = {}) {
       const settingsOpen = this.toolsOpen;
       const filtered = c.state.coreIds !== null || c.state.contextIds !== null;
       toolbar.child(button('tools:toggle', (settingsOpen ? 'Hide' : 'Show') + ' filters and Agents slot controls' + (filtered ? ' (filters active)' : ''),
-        cx => { this.closeDetails(cx); this.toolsOpen = !this.toolsOpen; cx.notify(); }, { active: settingsOpen || filtered, text: filtered ? 'Options •' : 'Options' }));
+        cx => { this.closeDetails(cx, false); this.toolsOpen = !this.toolsOpen; cx.notify(); }, { active: settingsOpen || filtered, text: filtered ? 'Options •' : 'Options' }));
       root.child(toolbar);
-      if (this.reader && (this.reader.state !== JSON.stringify(c.state) || this.reader.toolsOpen !== this.toolsOpen)) this.closeDetails(cx);
+      if (this.reader && (this.reader.state !== JSON.stringify(c.state) || this.reader.toolsOpen !== this.toolsOpen)) this.closeDetails(cx, false);
       if (!this.reading && this.controller.feed.evidence.admissions?.length) {
         this.reading = true;
         cx.spawn(async cx => { try { if (await this.controller.refresh(p => timerDeadline(cx, p))) cx.notify(); } finally { this.reading = false; } });
@@ -225,7 +229,9 @@ export function createRosterView(kit, app, options = {}) {
         element.child(title)
           .child(labelText('Project: ' + context.project, 10, muted).h(14).flex_none())
           .child(labelText('Parent: ' + context.parent, 10, muted).h(14).flex_none())
-          .child(labelText(context.machine + ' / ' + context.context, 10, muted).h(14).flex_none());
+          .child(h().id('row-context:' + i.key).h(14).flex_none().min_w(0).gap(4)
+            .child(labelText(context.machineSummary, 10, muted).id('row-machine:' + i.key).w(0).flex_1())
+            .child(labelText(context.context, 10, muted).id('row-execution-context:' + i.key).w(0).flex_1()));
         const line = h().h(64).flex_none().min_w(0).gap(2).pl(Math.min(i.depth, 3) * 8).child(element);
         const info = button('info:' + i.key, 'Details for ' + row.displayLabel,
           cx => this.openDetails({ key: 'info:' + i.key, instance: i }, cx), { text: 'Info' }).px(0).w(30);
@@ -251,6 +257,8 @@ export function createRosterView(kit, app, options = {}) {
         this.controls.push({ ...footerOwner, key: 'details:open',
           activate: cx => this.openDetails({ key: 'details:open', instance: footerOwner.instance }, cx) });
       }
+      if (this.returnControl && (this.returnControl.state !== JSON.stringify(c.state)
+        || this.returnControl.toolsOpen !== this.toolsOpen)) this.returnControl = null;
       if (this.returnControl) {
         const origin = this.returnControl;
         const surviving = this.controls.find(control => control.key === origin.key && control.instance?.key === origin.sourceKey)
