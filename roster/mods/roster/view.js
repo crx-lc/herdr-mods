@@ -129,8 +129,9 @@ export function createRosterView(kit, app, options = {}) {
         const provider = row.providerBadge?.accessibleName;
         const host = row.core.hostLabel ?? (row.core.alias ? 'Route ' + row.core.alias + ' (unverified)' : 'Local route (unverified)');
         const context = host + ' / ' + row.executionContext.label;
+        const parent = i.context.parent ? 'Parent ' + i.context.parent.displayLabel : null;
         const brief = [row.core.hostLabel || row.core.alias || 'Local', row.executionContext.label,
-          viewMode === 'status' && row.project.id ? row.project.displayName : null].filter(Boolean).join(' · ');
+          row.project.displayName, parent].filter(Boolean).join(' · ');
         const explanation = i.navigation.enabled ? 'Open terminal' : reasons[i.navigation.reason] ?? ('Open unavailable: ' + i.navigation.reason);
         const label = [row.displayLabel, row.project.displayName, waiting ? i.display.detail : status, provider, context,
           i.context.parent ? 'Parent ' + i.context.parent.displayLabel : null, ...i.outsideFilters, explanation].filter(Boolean).join(' · ');
@@ -138,7 +139,9 @@ export function createRosterView(kit, app, options = {}) {
           .h(38).gap(6).tooltip(waiting ? i.display.detail : label);
         const selected = this.controls[this.controls.length - 1];
         selected.rowIndex = index;
-        selected.detail = [waiting ? i.display.detail : row.displayLabel + ' · ' + status, i.navigation.enabled ? null : explanation].filter(Boolean).join(' · ');
+        selected.detail = [waiting ? i.display.detail : row.displayLabel + ' · ' + status,
+          row.project.displayName, parent, context].filter(Boolean).join(' · ');
+        selected.disabledReason = i.navigation.enabled ? null : explanation;
         // Persistent neutral monogram: production has no verified private image source.
         const monogram = h().w(18).h(18).flex_none().justify_center().rounded(4).bg(theme.raised)
           .accessibility_label(row.project.displayName + ' project icon fallback').child(labelText(Array.from(row.project.displayName)[0] ?? '?', 11));
@@ -175,11 +178,17 @@ export function createRosterView(kit, app, options = {}) {
         c.cursor = this.controls[Math.min(Math.max(previousIndex, 0), this.controls.length - 1)]?.key ?? null;
         cx.notify();
       }
-      // Focus detail stays one short line; the accessibility label and mouse tooltip retain the full label.
+      // Keep the disabled reason independent of long waiting/context text for keyboard selection.
       const selected = this.controls.find(control => control.key === c.cursor);
       root.accessibility_label(selected?.label ?? 'Roster sidebar: Up and Down select, Enter activates');
-      if (selected) root.child(labelText(selected.detail ?? selected.label, 11, muted).id('roster-focus-tooltip').h(16).flex_none()
-        .tooltip(selected.label).accessibility_label(selected.label));
+      if (selected) {
+        const footer = v().id('roster-focus-tooltip').h(selected.disabledReason ? 32 : 16).flex_none().min_w(0)
+          .tooltip(selected.label).accessibility_label(selected.label);
+        if (selected.disabledReason) footer.child(labelText(selected.disabledReason, 11, muted)
+          .id('roster-disabled-reason').h(16).flex_none());
+        footer.child(labelText(selected.detail ?? selected.label, 11, muted).h(16).flex_none());
+        root.child(footer);
+      }
       if (!this.reading && this.controller.feed.evidence.admissions?.length) {
         this.reading = true;
         cx.spawn(async cx => { try { if (await this.controller.refresh(p => timerDeadline(cx, p))) cx.notify(); } finally { this.reading = false; } });

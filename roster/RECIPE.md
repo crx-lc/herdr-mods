@@ -22,13 +22,18 @@ omit redundant selectors; active filters always retain a reset.
 
 The remaining height is a scrolling row list: 24px group headers, non-shrinking
 38px terminal lines. Rows have an 18px neutral project monogram, a 13px role/title,
-a 10px machine/context line (with known project in Status), and inline GH/ADO and
+a 10px machine/context/project/verified-parent line in both views, and inline GH/ADO and
 state chips. State chips cap at 104px; names/context truncate with full context in
 hover and declared accessibility labels. Done starts folded. Global Needs you
 survives filters/folds; contextual Child needs you remains a separate nonactionable
 parent context. Empty snapshots show a neutral message inside the scrolling area.
 
-The selected-control footer and layout result each take a single 16px line.
+The selected-control footer repeats project/parent/route context in a 16px detail
+line. Disabled selections have a separate 16px reason line above it (32px total),
+independent of long waiting/context text. Other selections and the layout result
+use 16px. With Options, result and disabled selection, budget two terminal rows
+plus a group header at 350px. Row/footer text can still truncate at native fonts
+and zoom; full focus/hover values do not prove every character is readable.
 Keyboard selection reveals its direct row/option scroll child. Waiting is static,
 with textual ◈ Waiting when children are visible and full text otherwise; full
 waiting detail remains in hover/focus data. Production has no admitted delegation

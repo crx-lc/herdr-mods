@@ -49,11 +49,19 @@ Unfiltered dimensions with only one available value have no redundant selector;
 when a filter is active, its reset stays available. Global Needs you survives filters and folds; an entry
 outside filters explains why it cannot be opened. Contextual Child needs you
 creates no second actionable parent. Provider badges represent work items, never
-an LLM or group. Rows keep a project monogram and a second line for machine/context; Status also
-includes a known project name there. Provider markers remain separate from project
-images. Long text truncates; full project/parent/route context and disabled-action
-reasons stay in hover and declared accessibility labels. The selected-control
-footer shows a short detail line, including full waiting text before truncation.
+an LLM or group. Rows keep a project monogram and a second line with machine,
+execution context, project name and verified parent when present, including global
+Needs you and flat Status rows. Provider markers remain separate from project images.
+The selected row repeats project/parent/route context in its detail line. A disabled
+action's reason has its own 16px line above that detail, so waiting/context text
+cannot consume its space; selected disabled rows use a 32px footer. Other selections
+use 16px. Full waiting text remains in hover and focus detail values. Long row and
+footer lines still truncate: this does not guarantee every character is readable
+at native font/zoom settings. Full labels also remain in pointer tooltips and
+declared accessibility labels; stock UIA does not expose those labels. Exact-head
+Windows checks must assess reason readability and context truncation at 330×350.
+With Options, a layout result and a disabled selection, the structural height
+budget leaves space for two terminal rows plus a group header; it is not a render.
 
 Click gives the sidebar its own keyboard focus. Up/Down moves a visible cursor
 through its controls; Enter activates the selected control and retains its position
