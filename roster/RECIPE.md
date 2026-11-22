@@ -4,7 +4,7 @@ A passive, explicitly opt-in Projects/Status sidebar for stock Herdr Desktop.
 The current adapter keeps terminal identities provisional and project/context
 associations unknown. Full release acceptance remains open.
 
-![Production Projects](preview.png)
+![Roster](preview.png)
 
 [Production Status preview](preview-status.png). Both are real neutral 330×350
 Windows slot crops at zoom 1, copied byte-for-byte from the R3 evidence.

@@ -216,8 +216,7 @@ They do not establish QuickJS/GPUI/native Windows behavior.
 Remaining original acceptance gaps include Core-qualified local/remote/pane-less
 navigation, authoritative runtime waiting/delegateWorking and observed remote
 continuity, Core-bound project/context associations, and private configured icons.
-These remain **not verifiable**, blocked by #10 rather than waived. Exact-candidate default-height
-layout validation and the UIA gap above remain open under [#21](https://github.com/crx-lc/herdr-mods/issues/21). Global shortcut changes are outside
+These remain **not verifiable**, blocked by #10 rather than waived. The UIA gap above remains open under [#21](https://github.com/crx-lc/herdr-mods/issues/21). Global shortcut changes are outside
 the current scope; the old Phase 2/#18 gate is retired.
 
 ## Package inventory and acceptance evidence
