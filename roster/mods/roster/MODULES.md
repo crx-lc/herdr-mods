@@ -603,3 +603,29 @@ apply; the result is `{enabled,reason,intent}`, with null intent when disabled.
 This adds no host calls or external App capability. Reproject after any state or
 acquisition change before retrying an explicit action.
 No sending, keys, run, kill, keep, label, native status or lifecycle plan exists.
+
+## Local detail presentation
+
+`detail.js` has no native imports or host operations. `rowContext(instance)` keeps
+project, verified-parent, machine/route and execution context separate with truthful
+unknowns. `actionReason` owns the existing reason mapping; `detailFields` and
+`detailLabel` share it between reader, footer and full contextual waiting hover.
+Only `context.parent.displayLabel` can name a parent; route aliases do not prove
+hosts, and provider names describe work items/configuration, never an LLM.
+
+`detailPages(fields)` returns ordered `{fieldIndex,fieldId,label,start,end,text,
+fieldPage,fieldPages}` source spans. Offsets are UTF-16; pages contain at most
+64 code points/three newlines. Whitespace is retained; there is no total cap.
+Empty fields get a page. Common combining/joining boundaries are avoided where
+feasible without Intl; arbitrarily long runs must split within the budget.
+Concatenating a field's spans exactly recovers its value. Native shaping/fit is
+an outstanding Windows check, not established by Node Unicode coverage.
+
+The view captures fields with the exact source instance key as Details at opening,
+keeps a separate reader control set, and never activates a row from reader Enter.
+D or Info/Details opens; arrows/Previous/Next page; Home/End jump; Esc/Back returns
+to that surviving control/reveals its row, else Projects. View/filter/fold/Options
+changes close it. No snapshot storage/timers/new route protocol or global keys.
+Rows keep four independent visible lines at 64px, and Options uses a fixed
+viewport up to 52px with no max_h, retaining existing direct-child indices.
+These layout and reveal requests await exact-head native acceptance.

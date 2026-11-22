@@ -83,7 +83,7 @@ test('actual view renders static compact waiting, full hover AND keyboard focus 
   const { f } = waitingWorld(), { view, cx } = viewOf(f); let tree = view.render(cx), p = view.controller.projection;
   const parent = find(p, 't1'); assert.equal(parent.display.compact, true); assert.equal(p.counts.all.working, 3);
   const element = flatten(tree).find(e => e.attributes.id?.[0] === parent.key);
-  assert.equal(element.attributes.tooltip[0], 'Waiting on 3 agents'); assert.match(element.attributes.accessibility_label[0], /Waiting on 3 agents/);
+  assert.match(element.attributes.tooltip[0], /Waiting on 3 agents/); assert.match(element.attributes.tooltip[0], /Project: Sample project/); assert.match(element.attributes.tooltip[0], /Context unknown/); assert.match(element.attributes.accessibility_label[0], /Waiting on 3 agents/);
   assert.match(textOf(element), /◈/); view.controller.cursor = parent.key; tree = view.render(cx);
   assert.match(textOf(flatten(tree).find(e => e.attributes.id?.[0] === 'roster-focus-tooltip')), /Waiting on 3 agents/);
   view.controller.change({ type: 'fold', key: parent.key, collapsed: true }); tree = view.render(cx); assert.match(textOf(tree), /Waiting on 3 agents/);
@@ -211,11 +211,11 @@ test('compact sidebar keeps a single default toolbar and puts row badges on the 
     assert.ok(rows.attributes.overflow_y_scrollbar);
     const first = byId(tree, find(view.controller.projection, 't1').key);
     const second = byId(tree, find(view.controller.projection, 't2').key);
-    assert.ok(first.attributes.flex_row);
-    assert.equal(first.attributes.h[0], 38);
-    assert.ok(first.children.some(e => e.attributes.accessibility_label?.[0] === 'GitHub provider badge'));
-    assert.ok(first.children.some(e => e.attributes.accessibility_label?.[0] === 'Unassigned project icon fallback'));
-    assert.equal(second.children.some(e => e.attributes.accessibility_label?.[0].includes('provider badge')), false);
+    assert.ok(first.children[0].attributes.flex_row);
+    assert.equal(first.attributes.h[0], 64);
+    assert.ok(flatten(first).some(e => e.attributes.accessibility_label?.[0] === 'GitHub provider badge'));
+    assert.ok(flatten(first).some(e => e.attributes.accessibility_label?.[0] === 'Unassigned project icon fallback'));
+    assert.equal(flatten(second).some(e => e.attributes.accessibility_label?.[0].includes('provider badge')), false);
     assert.doesNotMatch(textOf(rows), /Open unavailable|Waiting/);
     assert.match(first.attributes.tooltip[0], /Open unavailable: terminal identity is unverified/);
     if (mode === 'projects') {
@@ -225,7 +225,7 @@ test('compact sidebar keeps a single default toolbar and puts row badges on the 
   }
   byId(tree, 'tools:toggle').attributes.on_click[0]({}, cx);
   tree = view.render(cx);
-  assert.equal(byId(tree, 'roster-options').attributes.max_h[0], 108);
+  assert.ok(byId(tree, 'roster-options').attributes.h[0] <= 52); assert.equal(byId(tree, 'roster-options').attributes.max_h, undefined);
   assert.ok(byId(tree, 'layout:select'));
   assert.equal(byId(tree, 'all:coreIds'), undefined);
   assert.equal(byId(tree, 'all:contextIds'), undefined);
@@ -249,8 +249,8 @@ test('350px vertical budget retains multiple rows with Options, selection and a 
     const tree = view.render(cx), body = flatten(tree).find(e => e.attributes.id?.[0] === 'roster-rows');
     const fixedHeight = tree.children.filter(e => e !== body).reduce((sum, e) => sum + (e.attributes.h?.[0] ?? e.attributes.max_h?.[0] ?? 350), 0);
     const available = 350 - 2 * tree.attributes.p[0] - (tree.children.length - 1) * tree.attributes.gap[0] - fixedHeight;
-    // At least three 38px terminal rows plus a 24px group and intervening gaps.
-    assert.ok(available >= 3 * 38 + 24 + 3 * 3, `only ${available}px left in ${mode}, options=${open}`);
+    // Two 64px rows plus a 24px group and intervening gaps, also at zoom 1.1.
+    assert.ok(available - (350 - 350 / 1.1) >= 2 * 64 + 24 + 2 * 3, `only ${available}px left in ${mode}, options=${open}`);
     assert.ok(body.attributes.min_h); assert.ok(body.attributes.track_scroll);
     assert.ok(body.children.every(e => e.attributes.flex_none && e.attributes.h), 'scroll content must retain its height');
   }
@@ -308,12 +308,12 @@ test('both providers are inline, named separately from project fallback; unknown
     view.controller.change({ type: 'view', view: mode }); const tree = view.render(cx);
     for (const [address, provider] of [['t1', 'GitHub'], ['t2', 'Azure DevOps'], ['t3', null]]) {
       const item = find(view.controller.projection, address), element = flatten(tree).find(e => e.attributes.id?.[0] === item.key);
-      const badges = element.children.filter(e => e.attributes.accessibility_label?.[0].includes('provider badge'));
+      const badges = flatten(element.children[0]).filter(e => e.attributes.accessibility_label?.[0].includes('provider badge'));
       assert.deepEqual(badges.map(e => e.attributes.accessibility_label[0]), provider ? [provider + ' provider badge'] : []);
-      assert.ok(element.children.some(e => e.attributes.accessibility_label?.[0] === 'Unassigned project icon fallback'));
-      assert.match(textOf(element), /Local · Context unknown/);
+      assert.ok(flatten(element).some(e => e.attributes.accessibility_label?.[0] === 'Unassigned project icon fallback'));
+      assert.match(textOf(element), /Local route.*Context unknown/);
       if (!provider) assert.match(textOf(element), /Sample unlabeled process/);
-      const chip = element.children.at(-1);
+      const chip = element.children[0].children.at(-1);
       assert.ok(chip.attributes.max_w[0] <= 104, 'long state text must leave room for row identity');
     }
   }

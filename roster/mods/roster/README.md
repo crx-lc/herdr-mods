@@ -23,14 +23,15 @@ that every original acceptance criterion is met.
 
 ## Using the sidebar
 
-The first Windows acceptance run found that the original stacked header crowded
-out rows in an approximately 330×350 Agents slot. This revision uses a single
-horizontal toolbar and two-line rows with inline provider/state badges and an
-18px monogram. Options scrolls independently within 108px; keyboard selection
-reveals rows or options without leaving the sidebar. This compact candidate has
-not yet been rendered or checked on Windows at its exact head. Stock Desktop 0.1.16 still exposes no mod `accessibility_label`
-to Windows UIA/Narrator (a platform gap). Visible labels and keyboard detail do
-not establish assistive technology exposure.
+The exact-head Windows run at `eb1df42` found four mod UI defects: Options
+would not scroll, project/parent lines clipped, keyboard detail had no full-text
+path, and waiting hover omitted context. This candidate repairs those paths in
+code and awaits a new exact-head Windows run. It uses a 26px toolbar, four-line
+64px rows and a separate Options viewport of at most 52px with no inner maximum
+height. Keyboard selection requests reveal of the corresponding direct child.
+These requests and height budgets are not proof of native wheel/reveal behavior.
+Stock Desktop 0.1.16 still exposes no mod labels to Windows UIA; Narrator was not
+run. Visible text and local keys do not establish assistive technology exposure.
 
 After installation and the usual isolated App checks, explicitly open a copy with
 `openOverlay({mod:'roster'})` from an authorized mod/agent, or place a copy in a
@@ -49,29 +50,47 @@ Unfiltered dimensions with only one available value have no redundant selector;
 when a filter is active, its reset stays available. Global Needs you survives filters and folds; an entry
 outside filters explains why it cannot be opened. Contextual Child needs you
 creates no second actionable parent. Provider badges represent work items, never
-an LLM or group. Rows keep a project monogram and a second line with machine,
-execution context, project name and verified parent when present, including global
-Needs you and flat Status rows. Provider markers remain separate from project images.
-The selected row repeats project/parent/route context in its detail line. A disabled
-action's reason has its own 16px line above that detail, so waiting/context text
-cannot consume its space; selected disabled rows use a 32px footer. Other selections
-use 16px. Full waiting text remains in hover and focus detail values. Long row and
-footer lines still truncate: this does not guarantee every character is readable
-at native font/zoom settings. Full labels also remain in pointer tooltips and
-declared accessibility labels; stock UIA does not expose those labels. Exact-head
-Windows checks must assess reason readability and context truncation at 330×350.
-With Options, a layout result and a disabled selection, the structural height
-budget leaves space for two terminal rows plus a group header; it is not a render.
+an LLM or group. Rows keep a neutral project monogram and inline provider/state
+chips on their title line. Separate Project and verified Parent lines extend
+beneath the chips, followed by a visible machine/route and execution-context line.
+Only the projected verified parent supplies a name; missing relationships show
+Not reported or Unknown with the existing resolution. Unassigned projects,
+unknown hosts and unknown contexts stay explicit. Long row lines ellipsize
+independently; full values are available through Details. Info is a sibling of
+the terminal control and never opens the terminal. Provider markers remain
+separate from project images.
 
-Click gives the sidebar its own keyboard focus. Up/Down moves a visible cursor
-through its controls; Enter activates the selected control and retains its position
-when that control survives. A removed control selects the nearest current position.
-The explicit `focus` command also gives it focus. Selected row detail is visible
-as a keyboard-focus tooltip as well as a hover tooltip; the code also declares
-accessibility labels. No global key binding,
-`setAgentOrder`, terminal input, approval, status, notification or lifecycle changes
-are made. The external run passed sidebar focus/Enter and visible tooltip detail,
-but failed UIA label exposure as described above.
+Click gives the sidebar focus. Up/Down selects controls; Enter activates the
+selected control. Normal row Enter keeps its guarded Open semantics. D on a row,
+Info or child-fold control opens the local reader, as do Enter/click on Info or
+the footer's Details (D). The disabled reason retains its own 16px line above a
+16px summary/Details line (32px total); enabled selections use 16px. Full contextual
+hover uses the same facts/reason mapping as the reader, including full waiting
+text even when expanded children use compact Waiting. Native tooltips can clip
+at the window edge; use Info/Details to read every field.
+
+**Details at opening** replaces the content below the toolbar with a captured,
+nonpersistent snapshot of that exact projection instance. Each page shows one
+literal field or its continuation: name, project, verified parent, machine/route,
+context, state, full waiting text when present, work-item/project provider,
+action availability, outside-filter reasons and identity diagnostic. Left/Up and
+Previous go back, Right/Down and Next go forward, Home/End jump first/last, and
+Esc/Back returns to the same surviving control and reveals its row. If that
+instance vanished, return safely to Projects; identical names never rebind it.
+Enter in the reader only operates a reader control and cannot Open a terminal.
+View/filter/fold or Options changes close the reader locally. Unhandled keys
+retain host behavior. The existing explicit focus command still focuses this copy;
+there are no new global keys, overlays or terminal-input changes.
+
+Pages preserve every source character, including whitespace and blank lines,
+with at most 64 Unicode code points and three newline characters per page;
+there is no total-length clipping. Fresh 12px wrapped literal text uses the panel
+width, without ellipsis or clamping. Only the active page is rendered. This
+conservative budget needs native font/wide-glyph/newline validation at 330×350,
+zoom 1 and 1.1; smaller pages may be needed if stock text overflows. The worst
+normal-list planning budget is 148px fixed, leaving about 170px at fixed physical
+350px height/zoom 1.1, for two 64px rows plus a 24px heading and two 3px gaps.
+Neither that arithmetic nor Node element trees establish rendered acceptance.
 
 With independently verified injected evidence, the actual merged navigation guard
 maps eligible explicit actions to `pane.focus {terminal:exactAddress}` or
@@ -207,7 +226,7 @@ the current scope; the old Phase 2/#18 gate is retired.
 ## Package inventory and acceptance evidence
 
 From the repository root, run `node scripts/roster-package.mjs`. It prints the
-sorted, repository-relative paths of the 20 installed-folder files that would
+sorted, repository-relative paths of the 21 installed-folder files that would
 ship. It only reads the repository package; it never copies, installs, syncs,
 loads mod code or consults a live App home. No destination options are accepted.
 This is a separate inventory policy, not a dry run of `scripts/sync.mjs` (whose
@@ -247,7 +266,7 @@ layout, byte-identical undo after restart, chosen-state restart persistence and
 Quotr/settings preservation passed. Sidebar keys/Enter, visible hover/focus tooltips
 and static rendering passed; the OS reduced-motion toggle was **not tested**.
 That historical run found header crowding and missing UIA labels, plus inline-layout
-issues. The compact revision addresses the layout in code; native revalidation is pending.
+issues. The UI repair candidate addresses the four reported mod defects in code; exact-new-head native revalidation is pending.
 
 The external report says the owner's 431 config files were byte-identical, with
 before/after list SHA-256
@@ -262,7 +281,7 @@ Windows crop, copied byte-for-byte: 240×820, SHA-256
 `60d483878d8436296fb47ce9275d3766b05215bb9080fb435b173557c3eb6790`.
 It shows neutral Coordinator / Developer #42 / Reviewer PR #43 sample labels,
 with no personal mappings imported. It is a tall sidebar capture, **not evidence
-of success at default height**, and lives outside the 20-file installed package.
+of success at default height**, and lives outside the 21-file installed package.
 The supplied Projects and Status source crops remain in private project evidence.
 
 PR20 recorded repository Node tests, pinned offline parity, the static inventory
@@ -274,3 +293,13 @@ The acceptance umbrella [#4](https://github.com/crx-lc/herdr-mods/issues/4),
 [#11](https://github.com/crx-lc/herdr-mods/issues/11) remain open: the compact layout needs exact-head native validation and UIA labels need resolution and Core-qualified actions, waiting/delegateWorking/remote
 continuity and private images remain not verifiable. Stronger injected fixtures
 do not make them native capabilities. No full release readiness is claimed.
+
+The [compact-head Windows report](https://github.com/crx-lc/herdr-mods/issues/21#issuecomment-7080873467)
+validated `eb1df42`, not this repair: 31 pass, 5 fail, 4 not verifiable, isolation
+3/3. Four failures concern the mod UI described above; stock UIA remains open.
+Production exact Open/Peek, authoritative Waiting, private images and finished
+rows also remain unverified. Existing real PNGs remain historical evidence;
+no replacement preview or new native success is claimed. The coordinator will
+request isolated exact-head retesting, including Options wheel and last-item
+keyboard reveal, independent context lines, full field/page reading, crowded
+normal-list fit at both zooms, and unchanged opt-in/undo/isolation behavior.

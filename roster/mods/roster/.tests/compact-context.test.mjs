@@ -31,7 +31,7 @@ for (const mode of ['projects', 'status']) for (const state of ['working', 'bloc
       const tree = view.render(cx);
       for (const el of [byId(tree, child.key), byId(tree, 'roster-focus-tooltip')]) {
         const drawn = textOf(el);
-        assert.match(drawn, /Parent Coordinator/);
+        assert.match(drawn, /Parent: Coordinator/);
         assert.ok(drawn.includes(mapped ? 'Sample project' : 'Unassigned'));
         assert.match(drawn, /Local/);
         assert.match(drawn, /Context unknown/);
@@ -52,7 +52,7 @@ for (const mode of ['projects', 'status']) {
     for (const el of [byId(tree, row.key), byId(tree, 'roster-focus-tooltip')]) {
       assert.match(textOf(el), /Unassigned/);
       assert.match(textOf(el), /Context unknown/);
-      assert.doesNotMatch(textOf(el), /Parent |Sample project/);
+      assert.doesNotMatch(textOf(el), /Parent: Coordinator|Sample project/);
     }
     assert.equal(f.calls.length, 0);
   });
@@ -87,13 +87,13 @@ for (const mode of ['projects', 'status']) {
     assert.ok(footer.children[0].attributes.flex_none);
     assert.ok(textOf(footer.children[1]).includes(waiting));
     assert.match(textOf(footer.children[1]), /Sample project.*Context unknown/);
-    assert.equal(byId(tree, parent.key).attributes.tooltip[0], waiting);
+    assert.ok(byId(tree, parent.key).attributes.tooltip[0].includes(waiting)); assert.match(byId(tree, parent.key).attributes.tooltip[0], /Project: Sample project/); assert.match(byId(tree, parent.key).attributes.tooltip[0], /Context unknown/);
     // Worst fixed regions: Options, selected disabled row, and a layout message.
     view.toolsOpen = true; view.message = 'Sample layout result';
     const full = view.render(cx), body = byId(full, 'roster-rows');
     const fixed = full.children.filter(e => e !== body).reduce((n, e) => n + (e.attributes.h?.[0] ?? e.attributes.max_h?.[0] ?? 350), 0);
     const available = 350 - 2 * full.attributes.p[0] - (full.children.length - 1) * full.attributes.gap[0] - fixed;
-    assert.ok(available >= 2 * 38 + 24 + 2 * 3, `only ${available}px for rows`);
+    assert.ok(available - (350 - 350 / 1.1) >= 2 * 64 + 24 + 2 * 3, `only ${available}px for rows`);
     assert.equal(f.calls.length, 0);
   });
 }

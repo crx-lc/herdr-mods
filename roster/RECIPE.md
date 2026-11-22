@@ -2,7 +2,7 @@
 
 A passive, explicitly opt-in Projects/Status sidebar for stock Herdr Desktop.
 The current adapter keeps terminal identities provisional and project/context
-associations unknown. This recipe describes the merged implementation, not full
+associations unknown. This recipe describes the UI repair candidate awaiting native validation, not full
 [#4](https://github.com/crx-lc/herdr-mods/issues/4) release acceptance.
 
 ![Roster](preview.png)
@@ -17,28 +17,40 @@ capture does not demonstrate usability in the default-height Agents slot.
 A theme-colored sidebar (`surface`/`foreground`, 12px base text, 5px padding,
 3px gaps). A 26px horizontal toolbar holds Projects, Status and Options. Options
 contains independent Machine/Context filters and selected-slot opt-in/undo controls
-in a separately scrolling region capped at 108px. Unfiltered singleton dimensions
+in a separately scrolling region with an explicit viewport height of min(52, n×24 + (n−1)×2)px, min_h(0), flex_none and no max_h. Unfiltered singleton dimensions
 omit redundant selectors; active filters always retain a reset.
 
 The remaining height is a scrolling row list: 24px group headers, non-shrinking
-38px terminal lines. Rows have an 18px neutral project monogram, a 13px role/title,
-a 10px machine/context/project/verified-parent line in both views, and inline GH/ADO and
-state chips. State chips cap at 104px; names/context truncate with full context in
-hover and declared accessibility labels. Done starts folded. Global Needs you
-survives filters/folds; contextual Child needs you remains a separate nonactionable
-parent context. Empty snapshots show a neutral message inside the scrolling area.
+64px terminal rows. Each has an 18px title/badge line, independent 14px Project
+and verified Parent lines spanning beneath badges, and a 14px machine/route and
+execution-context line, plus 4px padding. Preserve depth indentation capped at
+24px and one direct scroll child per instance. Keep Info and child-fold buttons
+as siblings of terminal activation, with that same owner key and rowIndex.
+Use truthful Unassigned, Not reported, Unknown (resolution), host unknown and
+Context unknown fallbacks. State chips cap at 104px; each row line may ellipsize.
+Done starts folded; global Needs you survives filters/folds. Contextual Child
+needs you remains nonactionable. Provider badges describe work items/projects.
 
-The selected-control footer repeats project/parent/route context in a 16px detail
-line. Disabled selections have a separate 16px reason line above it (32px total),
-independent of long waiting/context text. Other selections and the layout result
-use 16px. With Options, result and disabled selection, budget two terminal rows
-plus a group header at 350px. Row/footer text can still truncate at native fonts
-and zoom; full focus/hover values do not prove every character is readable.
-Keyboard selection reveals its direct row/option scroll child. Waiting is static,
-with textual ◈ Waiting when children are visible and full text otherwise; full
-waiting detail remains in hover/focus data. Production has no admitted delegation
-evidence and makes no authoritative waiting claim. Stock Desktop 0.1.16 did not
-expose mod labels to Windows UIA/Narrator; declared labels are not proof of exposure.
+Disabled selections have a separate readable 16px reason above a 16px summary
+and Details (D) affordance; enabled selections use 16px. A layout message uses
+16px. Worst fixed normal-list budget is 148px, leaving about 170px at fixed
+physical 350px/zoom1.1: plan two 64px rows, a 24px header and two 3px gaps (158px).
+Verify actual fit natively; arithmetic is not acceptance. Full contextual row
+hover includes waiting, project, parent, provider, route/context and reason.
+
+Explicit Details at opening replaces everything below the toolbar with one
+captured, nonpersistent instance snapshot. Display a 24px Back (Esc)/title line,
+18px field label, 18px global/field progress, active literal value and 24px
+Previous/Next controls, with 4px gaps. Use fresh text, full available width,
+whitespace_normal, 12px, line_height(1.25); no clipping/ellipsis/clamp on the value
+or ancestors. Pages have at most 64 Unicode code points and three newline
+characters, preserving every UTF-16 source span, whitespace and terminal suffix.
+Render only the active page, with no total-length cap or detail-scroll dependency.
+Use separate name/project/parent/machine/context/state/waiting/provider/availability/
+filter/diagnostic fields. Keep full waiting in expanded compact and hidden-child
+modes. Native wide-glyph/blank-line/long-token fit at both zooms is pending.
+Production has no admitted authoritative waiting. Stock Desktop 0.1.16 UIA
+exposes no mod labels; Narrator was not run, and the reader is no UIA pass.
 
 ## How it behaves
 
@@ -53,7 +65,12 @@ Projects stay unbound and contexts unknown without Core-qualified configuration.
 Projects/Status, filters and folds affect this copy. Click focuses it; Up/Down
 select a visible control, Enter activates it; `focus` focuses the handle. Preserve
 surviving cursor keys and choose a nearby position when a control disappears.
-Never bind global next/previous or call setAgentOrder. Production Open is disabled:
+D on a row/Info/fold, or Enter/click on Info/Details, opens the reader.
+Left/Up/Previous and Right/Down/Next page; Home/End jump; Esc/Back returns and
+reveals the surviving originating control, or selects Projects if its exact
+instance disappeared. Never rebind duplicate names. Enter in the reader uses
+only reader callbacks. View/filter/fold and Options changes close it locally;
+unhandled keys retain host behavior. Never bind global next/previous or call setAgentOrder. Production Open is disabled:
 no independently bound Core identity, endpoint or uninterrupted remote epoch is
 available. Injected tests may prove exact focus/peek plans; that is not a native
 capability claim. Native terminal statuses, input, approvals and lifecycle stay native.
@@ -73,7 +90,7 @@ and guarded layout I/O. `controller.js` connects `feed.js`, `local-reader.js`,
 projection and action guards. Pure modules have no Herdr imports:
 `normalize.js`, `identity.js`, `metadata.js`, `delegations.js`, `attention.js`,
 `projection.js`, `navigation-rows.js`, `navigation.js`, `settings.js`, `icons.js`,
-and `layout.js`. Keep the actual reducer chain and independent evidence contracts;
+`detail.js` (presentation facts/reasons/lossless pages), and `layout.js`. Keep the actual reducer chain and independent evidence contracts;
 see `mods/roster/MODULES.md` for data shapes.
 
 Production supplies empty Core mappings, admissions, documents, routes, scopes and
@@ -88,16 +105,20 @@ Only explicit layout controls read/write layouts and private App data restoratio
 records. Never bundle those records or personal assets. No third-party assets,
 packages or network sources are added. Source pins in the installed README are
 reference contracts, not installed Desktop evidence. Repository-only scripts and
-`.tests` do not ship. `node scripts/roster-package.mjs` lists exactly the 20 files
+`.tests` do not ship. `node scripts/roster-package.mjs` lists exactly the 21 files
 that would ship, validates eager import closure, and performs no install/sync.
 
 ## Watch out
 
-The older Windows run found default-height header crowding and badges on separate
-lines. This compact candidate changes those layouts but awaits exact-head Windows
-rendering, keyboard/focus/scrolling and a fresh neutral preview under #21. The real
-tall PNG above remains historical evidence, unchanged. Stock Desktop 0.1.16 exposed
-no mod labels to UIA/Narrator; visible labels/keyboard detail do not prove exposure.
+The `eb1df42` compact-head Windows run reports 31 pass, 5 fail, 4 not verifiable,
+isolation 3/3. Its four mod defects were Options scrolling/reveal, clipped
+project/parent, no full keyboard text path and waiting-hover context/edge clipping.
+This candidate repairs those in code; all native retests are pending. Preserve
+existing real tall preview and old 330×350 crops; never label them new-head proof.
+The fifth failure is stock UIA and remains open without a scope waiver. A 108px
+Options-only/no-max_h A/B and supported plain overflow_y_scroll fallback are
+prepared outside the package for isolated native testing. Final Options cap is
+52px to retain the owner's visible machine/context requirement in four-line rows.
 
 Stock snapshots cannot prove permanent Core/remote-epoch binding. Unknown must
 remain unknown; do not enable actions, authoritative waiting or private images to

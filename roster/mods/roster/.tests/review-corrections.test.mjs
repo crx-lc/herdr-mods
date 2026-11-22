@@ -178,7 +178,7 @@ test('F5 Enter preserves mode/filter/fold position, Down advances and tooltip/a1
     view.key({ keystroke: 'down' }, cx); tree = view.render(cx); assert.equal(view.controller.cursor, expected);
     const selected = view.controls.find(c => c.key === expected);
     assert.equal(tree.attributes.accessibility_label[0], selected.label);
-    assert.equal(textOf(flatten(tree).find(e => e.attributes.id?.[0] === 'roster-focus-tooltip')), [selected.disabledReason, selected.detail ?? selected.label].filter(Boolean).join(' '));
+    assert.equal(textOf(flatten(tree).find(e => e.attributes.id?.[0] === 'roster-focus-tooltip')), [selected.disabledReason, selected.detail ?? selected.label, selected.instance ? 'Details (D)' : null].filter(Boolean).join(' '));
   }
   assert.equal(f.calls.length, 0);
 });
