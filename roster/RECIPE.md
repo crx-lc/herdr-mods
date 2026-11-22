@@ -14,22 +14,26 @@ capture does not demonstrate usability in the default-height Agents slot.
 
 ## What you see
 
-A theme-colored sidebar (`surface`/`foreground`, 13px text, 6px padding,
-4px gaps). Projects and Status buttons precede separate Machine/Context filters,
-including explicit unknown options. Group headers fold; Done starts folded.
-Rows show display label, observed state, validated work-item provider badge,
-Unassigned/project name, host/route and Context unknown. Every project keeps an
-18px monogram/name fallback. Open-unavailable reasons remain visible. Global
-Needs you stays visible through filters/folds. Contextual Child needs you is a
-separate, nonactionable context entry when independently verified ancestry exists.
+A theme-colored sidebar (`surface`/`foreground`, 12px base text, 5px padding,
+3px gaps). A 26px horizontal toolbar holds Projects, Status and Options. Options
+contains independent Machine/Context filters and selected-slot opt-in/undo controls
+in a separately scrolling region capped at 108px. Unfiltered singleton dimensions
+omit redundant selectors; active filters always retain a reset.
 
-Hover detail and visible selected-control detail provide context. The code
-declares accessibility labels, but stock Desktop 0.1.16 does not expose them to
-Windows UIA/Narrator. An independently proven injected waiting parent can show
-a static ◈ when its delegates are directly visible, otherwise full waiting text. Production
-has no admitted delegation evidence and makes no authoritative waiting claim.
-The footer offers choosing an existing Agents slot and, in a token-owned working
-copy, restoring Agents in that slot. Layout results/refusals appear as text.
+The remaining height is a scrolling row list: 24px group headers, non-shrinking
+38px terminal lines. Rows have an 18px neutral project monogram, a 13px role/title,
+a 10px machine/context line (with known project in Status), and inline GH/ADO and
+state chips. State chips cap at 104px; names/context truncate with full context in
+hover and declared accessibility labels. Done starts folded. Global Needs you
+survives filters/folds; contextual Child needs you remains a separate nonactionable
+parent context. Empty snapshots show a neutral message inside the scrolling area.
+
+The selected-control footer and layout result each take a single 16px line.
+Keyboard selection reveals its direct row/option scroll child. Waiting is static,
+with textual ◈ Waiting when children are visible and full text otherwise; full
+waiting detail remains in hover/focus data. Production has no admitted delegation
+evidence and makes no authoritative waiting claim. Stock Desktop 0.1.16 did not
+expose mod labels to Windows UIA/Narrator; declared labels are not proof of exposure.
 
 ## How it behaves
 
@@ -59,7 +63,7 @@ writes are not OS-wide CAS. Partial failures can leave files for inspection.
 ## Built from
 
 One self-contained `mods/roster/`: `mod.json` has `place:none`, `focusable:true`;
-`main.js` wires gpui-kit/Herdr to `view.js`. `desktop.js` exposes stock snapshots
+`main.js` wires gpui-kit/gpui-base/Herdr to `view.js`. `desktop.js` exposes stock snapshots
 and guarded layout I/O. `controller.js` connects `feed.js`, `local-reader.js`,
 projection and action guards. Pure modules have no Herdr imports:
 `normalize.js`, `identity.js`, `metadata.js`, `delegations.js`, `attention.js`,
@@ -84,13 +88,11 @@ that would ship, validates eager import closure, and performs no install/sync.
 
 ## Watch out
 
-**Both external Windows failures remain open:** existing PR19 header controls
-consume a default approximately 330×350 Agents slot, leaving only one line of rows
-or none; no scrolling or default-size usability guarantee follows from the tall
-preview. Stock Desktop 0.1.16 exposes no mod `accessibility_label` to UIA/Narrator
-(platform gap). Visible labels/keyboard detail do not prove assistive technology
-exposure. Badges/monograms on separate lines were also observed, not counted as a
-third failure. Runtime fixes are outside packaging; retain #10/#11/#4 acceptance.
+The older Windows run found default-height header crowding and badges on separate
+lines. This compact candidate changes those layouts but awaits exact-head Windows
+rendering, keyboard/focus/scrolling and a fresh neutral preview under #21. The real
+tall PNG above remains historical evidence, unchanged. Stock Desktop 0.1.16 exposed
+no mod labels to UIA/Narrator; visible labels/keyboard detail do not prove exposure.
 
 Stock snapshots cannot prove permanent Core/remote-epoch binding. Unknown must
 remain unknown; do not enable actions, authoritative waiting or private images to
@@ -129,11 +131,12 @@ this Linux worker neither reran native checks nor independently audited those lo
 The source Projects/Status crops stay in private evidence; preview is a share
 artifact outside the installed package, with no editing/generation or private mapping
 import. The Windows run does not validate the revised checker on macOS; macOS
-portability is inferred from Linux linked-ancestor controls. Runtime is unchanged.
+portability is inferred from Linux linked-ancestor controls. This historical run does not validate the compact runtime changes.
 
 Full acceptance remains open in [#11](https://github.com/crx-lc/herdr-mods/issues/11),
 [#10](https://github.com/crx-lc/herdr-mods/issues/10) and
-[#4](https://github.com/crx-lc/herdr-mods/issues/4): both failures above need resolution.
+[#4](https://github.com/crx-lc/herdr-mods/issues/4): compact layout validation and the platform accessibility gap remain open under
+[#21](https://github.com/crx-lc/herdr-mods/issues/21).
 Core-qualified local/remote/pane-less actions, authoritative waiting/delegateWorking,
 remote continuity and configured private images remain **not verifiable** due to
 #10 proof gaps, not waived. Source pins do not prove installed Desktop capability.

@@ -23,18 +23,18 @@ that every original acceptance criterion is met.
 
 ## Using the sidebar
 
-**Known Windows failures:** in the default approximately 330×350 Agents slot,
-existing PR19 header controls consume almost all the height, leaving one line of
-rows or none. Scrolling does not guarantee usable rows at that size. Stock
-Desktop 0.1.16 also exposes no mod `accessibility_label` to Windows UIA/Narrator
-(a platform gap). Visible labels and keyboard detail do not prove assistive
-technology exposure. Both failures remain open under #10/#11/#4; runtime fixes
-are outside this packaging change. Badges/monograms appearing on separate lines
-are an additional, uncounted observation.
+The first Windows acceptance run found that the original stacked header crowded
+out rows in an approximately 330×350 Agents slot. This revision uses a single
+horizontal toolbar and two-line rows with inline provider/state badges and an
+18px monogram. Options scrolls independently within 108px; keyboard selection
+reveals rows or options without leaving the sidebar. This compact candidate has
+not yet been rendered or checked on Windows at its exact head. Stock Desktop 0.1.16 still exposes no mod `accessibility_label`
+to Windows UIA/Narrator (a platform gap). Visible labels and keyboard detail do
+not establish assistive technology exposure.
 
 After installation and the usual isolated App checks, explicitly open a copy with
 `openOverlay({mod:'roster'})` from an authorized mod/agent, or place a copy in a
-personal layout. This Linux packaging worker performed no live installation or
+personal layout. This Linux worker performed no live installation or
 activation; the external isolated Windows run is recorded below.
 Projects groups known project memberships and verified parent relationships;
 otherwise rows appear under explicit Unassigned groups. Status separates Needs
@@ -44,11 +44,16 @@ omitted, including superseded incarnations at a reused address. No finished stat
 is invented. Done starts folded. No supplementary terminal history is acquired.
 
 Projects/Status, group and child folds, and independent Machine/Context filters
-change only the sidebar. Global Needs you survives filters and folds; an entry
+change only the sidebar. Open **Options** for filters and Agents-slot controls.
+Unfiltered dimensions with only one available value have no redundant selector;
+when a filter is active, its reset stays available. Global Needs you survives filters and folds; an entry
 outside filters explains why it cannot be opened. Contextual Child needs you
 creates no second actionable parent. Provider badges represent work items, never
-an LLM or group. Every row keeps project name/fallback, host/route description,
-execution context, provider accessibility name and disabled-action explanation.
+an LLM or group. Rows keep a project monogram and a second line for machine/context; Status also
+includes a known project name there. Provider markers remain separate from project
+images. Long text truncates; full project/parent/route context and disabled-action
+reasons stay in hover and declared accessibility labels. The selected-control
+footer shows a short detail line, including full waiting text before truncation.
 
 Click gives the sidebar its own keyboard focus. Up/Down moves a visible cursor
 through its controls; Enter activates the selected control and retains its position
@@ -70,7 +75,7 @@ proofs, and no experimental Core reader is bundled.
 
 ## Selected Agents-slot opt-in and undo
 
-“Choose an existing Agents slot…” inspects the current layout only when clicked.
+“Choose an existing Agents slot…” (in **Options**) inspects the current layout only when clicked.
 Select one exact existing slot. Roster first writes a preservation copy of the
 **current effective tree**, then a private restoration record, then a separate
 working layout with only that slot's content replaced, and switches to that copy.
@@ -156,7 +161,7 @@ Detailed pure exports and data shapes are in [MODULES.md](MODULES.md).
 
 ## Modules, data sources and limits
 
-The installable tree is self-contained. `main.js` imports only Herdr/gpui-kit and
+The installable tree is self-contained. `main.js` imports only Herdr/gpui-kit/gpui-base and
 the local view; `view.js` draws and wires the host-injected controller, feed,
 local reader and layout logic. Pure logic has no Herdr imports. Existing identity,
 metadata, delegation, attention, projection, settings, icons and navigation
@@ -187,8 +192,8 @@ They do not establish QuickJS/GPUI/native Windows behavior.
 Remaining original acceptance gaps include Core-qualified local/remote/pane-less
 navigation, authoritative runtime waiting/delegateWorking and observed remote
 continuity, Core-bound project/context associations, and private configured icons.
-These remain **not verifiable**, blocked by #10 rather than waived. The default-height
-layout and UIA failures above also remain open. Global shortcut changes are outside
+These remain **not verifiable**, blocked by #10 rather than waived. Exact-candidate default-height
+layout validation and the UIA gap above remain open under [#21](https://github.com/crx-lc/herdr-mods/issues/21). Global shortcut changes are outside
 the current scope; the old Phase 2/#18 gate is retired.
 
 ## Package inventory and acceptance evidence
@@ -233,7 +238,8 @@ breaks failing. Selected-slot opt-in, preservation-first behavior, untouched sou
 layout, byte-identical undo after restart, chosen-state restart persistence and
 Quotr/settings preservation passed. Sidebar keys/Enter, visible hover/focus tooltips
 and static rendering passed; the OS reduced-motion toggle was **not tested**.
-The two failures and uncounted inline-layout observation are stated near usage above.
+That historical run found header crowding and missing UIA labels, plus inline-layout
+issues. The compact revision addresses the layout in code; native revalidation is pending.
 
 The external report says the owner's 431 config files were byte-identical, with
 before/after list SHA-256
@@ -241,7 +247,7 @@ before/after list SHA-256
 Only the posted summary and crops were supplied here: this Linux worker did not
 run native Windows checks or independently audit raw Windows logs. That run at
 `10c9d66` does not validate the new package checker on macOS or any new runtime;
-runtime code is unchanged. Source pins above do not prove installed Desktop parity.
+that historical run does not validate this compact runtime revision. Source pins above do not prove installed Desktop parity.
 
 The share artifact [Projects preview](https://github.com/crx-lc/herdr-mods/blob/main/roster/preview.png) is the supplied real
 Windows crop, copied byte-for-byte: 240×820, SHA-256
@@ -251,13 +257,12 @@ with no personal mappings imported. It is a tall sidebar capture, **not evidence
 of success at default height**, and lives outside the 20-file installed package.
 The supplied Projects and Status source crops remain in private project evidence.
 
-This worker's executed checks are repository Node tests, pinned offline parity,
-the static inventory and symlink controls, recorded in PR20 with full private logs.
+PR20 recorded repository Node tests, pinned offline parity, the static inventory
+and symlink controls. Those are historical checks, not this candidate's results.
 No App/typecheck/native Windows/macOS run, live installation/sync, owner
 layout/settings/Quotr operation or remote probe was performed by this worker.
 The acceptance umbrella [#4](https://github.com/crx-lc/herdr-mods/issues/4),
 [#10](https://github.com/crx-lc/herdr-mods/issues/10) and
-[#11](https://github.com/crx-lc/herdr-mods/issues/11) remain open: the two failures
-need resolution and Core-qualified actions, waiting/delegateWorking/remote
+[#11](https://github.com/crx-lc/herdr-mods/issues/11) remain open: the compact layout needs exact-head native validation and UIA labels need resolution and Core-qualified actions, waiting/delegateWorking/remote
 continuity and private images remain not verifiable. Stronger injected fixtures
 do not make them native capabilities. No full release readiness is claimed.
