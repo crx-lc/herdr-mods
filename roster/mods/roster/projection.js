@@ -183,7 +183,7 @@ export function projectRoster(reduced, inputState = {}, { scopes = [], repositor
       }
       const path = ['projects', group.key];
       if (!header(path, group.label, 0, collapseUnassigned && [tuple('other'), tuple('unidentified')].includes(group.key),
-        { projectId: group.projectId, space: group.space ?? null, counts: counts(members) })) continue;
+        { projectId: group.projectId, space: group.space ?? null, repository: group.repository ?? null, counts: counts(members) })) continue;
       // Iterative event stack prevents recursive overflow on deep actual ancestry.
       const stack = [{ type: 'siblings', siblings: members.filter(r => !parentOf.has(rowIdentity(r))), path, depth: 1 }];
       while (stack.length) {

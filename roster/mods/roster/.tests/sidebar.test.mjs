@@ -30,7 +30,7 @@ test('actual main entry defaults passive, captures exactly once, renders labels 
   // Production default: Needs you stays open; the Other group starts folded with its count.
   assert.ok(view.controller.projection.instances.filter(i => i.kind === 'section' && i.label === 'Other').every(i => i.collapsed));
   // Needs you never folds, so it has no chevron; Other starts folded.
-  assert.match(textOf(tree), /Needs you · 1 Planner.* Other · 2 ▸$/); assert.doesNotMatch(textOf(tree), /Needs you · 1 [▸▾]/);
+  assert.match(textOf(tree), /Needs you 1 .*Planner.* Other 2 ▸$/); assert.doesNotMatch(textOf(tree), /Needs you 1 [▸▾]/);
   assert.equal(rows(view.controller.projection).length, 1, 'only the Needs you copy is drawn');
   assert.ok(flatten(tree).some(e => e.attributes.accessibility_label?.[0].includes('Context unknown')));
   // Stock desktop navigates natively: a live terminal with no pane would peek, exactly that address.
@@ -102,7 +102,7 @@ test('actual view renders static compact waiting, full hover AND keyboard focus 
   assert.match(textOf(element), /◈/); view.controller.cursor = parent.key; tree = view.render(cx);
   assert.match(textOf(flatten(tree).find(e => e.attributes.id?.[0] === 'roster-focus-tooltip')), /Waiting on 3 agents/);
   view.controller.change({ type: 'fold', key: parent.key, collapsed: true }); tree = view.render(cx); assert.match(textOf(tree), /Waiting on 3 agents/);
-  view.controller.change({ type: 'view', view: 'status' }); tree = view.render(cx); assert.match(textOf(tree), /Working · 3/);
+  view.controller.change({ type: 'view', view: 'status' }); tree = view.render(cx); assert.match(textOf(tree), /Working 3/);
   // Status rows have new keys: the old cursor selects nothing, and the full phrase is on the row itself.
   const statusParent = find(view.controller.projection, 't1'), statusRow = flatten(tree).find(e => e.attributes.id?.[0] === statusParent.key);
   assert.match(statusRow.attributes.accessibility_label[0], /Waiting on 3 agents/); assert.match(statusRow.attributes.tooltip[0].replace(/\n/g, ' '), /Waiting on 3 agents/);

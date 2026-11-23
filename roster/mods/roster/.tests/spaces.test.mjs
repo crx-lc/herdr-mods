@@ -160,17 +160,59 @@ test('a connected machine without Spaces offers "New space there", which opens t
   assert.equal(byId(tree, 'spaces:new:zed'), undefined, 'not for a machine that is still loading');
 });
 
-test('agent group headers use the same style: chevron last, spinner before it, none on Needs you', () => {
-  const f = fakeHost([terminal('t1', 'blocked'), terminal('t2', 'working'), terminal('t3', 'idle')]);
+// One header in every view: 30px, an 18px leading icon, a 12px bold title in full contrast
+// (folded or not), the tail, and the chevron last (or an empty slot where a group never folds).
+const shape = el => el.children.map(e => {
+  const id = e.attributes.id?.[0] ?? '';
+  if (/^group-icon:/.test(id)) return e.attributes.frames ? 'icon:spinner' : e.attributes.svg ? 'icon:' + e.attributes.svg[0].split('/').pop().replace('.svg', '') : 'icon:initial';
+  if (/^group-label:/.test(id)) return 'title';
+  if (/^group-count:/.test(id)) return 'count:' + textOf(e);
+  if (/^group-chevron:/.test(id)) return e.attributes.svg ? 'chevron' : 'slot';
+  if (/^group-space:/.test(id)) return 'space:' + textOf(e);
+  return id.split(':')[0];
+});
+const sameLook = (el, key) => {
+  assert.equal(el.attributes.h[0], 30, key);
+  const title = el.children.find(e => /^group-label:/.test(e.attributes.id?.[0] ?? ''));
+  assert.equal(title.attributes.text_size[0], 12); assert.ok(title.attributes.font_bold); assert.equal(title.attributes.text_color[0], '#eeeeee', key + ' full contrast');
+  const lead = el.children[0];
+  assert.ok(lead.attributes.size?.[0] === 18 || (lead.attributes.w?.[0] === 18 && lead.attributes.h?.[0] === 18), key + ' 18px icon');
+};
+
+test('Status headers: the shared header with a status icon, the count, and the chevron last', () => {
+  const f = fakeHost([terminal('t1', 'blocked'), terminal('t2', 'working'), terminal('t3', 'idle'), terminal('t4', 'done'), terminal('t5', 'nonsense')]);
   f.host.run = (command, args) => f.calls.push([command, args]);
-  const Type = createRosterView(kit, appOf(f.host), { host: f.host, layoutHost: layoutHostUnused, initialView: 'status' });
+  const Type = createRosterView(kit, { ...appOf(f.host), theme: () => ({ surface: '#111111', raised: '#222222', foreground: '#eeeeee', muted: '#777777', dim: '#555555' }) }, { host: f.host, layoutHost: layoutHostUnused, initialView: 'status' });
   const view = new Type(), c = context(); view.init({}, c.cx); const tree = view.render(c.cx);
   const sections = view.controller.projection.instances.filter(i => i.kind === 'section');
   const head = label => byId(tree, sections.find(x => x.label === label).key);
-  const needs = head('Needs you'), working = head('Working');
-  assert.equal(needs.children.some(e => e.attributes.svg), false);
-  assert.deepEqual(working.children.map(e => e.attributes.frames ? 'spinner' : e.attributes.svg ? e.attributes.svg[0].split('/').pop() : 'label'),
-    ['label', 'spinner', 'chevron-down.svg']);
-  for (const h of [needs, working]) { assert.equal(h.attributes.h[0], 26); assert.equal(h.attributes.text_size[0], 11); }
+  assert.deepEqual(shape(head('Needs you')), ['icon:bell', 'title', 'count:1', 'slot'], 'never folds: slot keeps the count aligned');
+  assert.deepEqual(shape(head('Working')), ['icon:spinner', 'title', 'count:1', 'chevron']);
+  assert.deepEqual(shape(head('Done')), ['icon:check-circle', 'title', 'count:1', 'chevron']);
+  assert.deepEqual(shape(head('Idle')), ['icon:pause-circle', 'title', 'count:1', 'chevron']);
+  assert.deepEqual(shape(head('Unknown')), ['icon:help-circle', 'title', 'count:1', 'chevron']);
+  for (const label of ['Needs you', 'Working', 'Done', 'Idle', 'Unknown']) sameLook(head(label), label);
+  assert.ok(sections.find(x => x.label === 'Done').collapsed, 'folded groups use the same title weight and contrast');
+  assert.equal(f.calls.length, 0);
+});
+
+test('Projects and Spaces headers share the same layout; each keeps its own tail', () => {
+  const f = fakeHost([terminal('edge/t1', 'blocked', { labels: { 'herdr.role': 'watcher' } }), terminal('edge/t2', 'idle', { labels: { 'herdr.role': 'planner' } }), terminal('t3', 'nonsense')]);
+  f.values.machines = [{ name: null, layout: 'ready' }, { name: 'edge', layout: 'ready' }];
+  f.values.panes = [{ pane: 'edge/p1', terminal: 'edge/t1', tab: 'edge/a' }, { pane: 'edge/p2', terminal: 'edge/t2', tab: 'edge/a' }];
+  f.values.spaces = [{ id: 'edge/s1', name: 'Sample Mods', machine: 'edge', active: true, tabs: [{ id: 'edge/a', name: '1', named: false }] }];
+  f.host.run = (command, args) => f.calls.push([command, args]);
+  const Type = createRosterView(kit, { ...appOf(f.host), theme: () => ({ surface: '#111111', raised: '#222222', foreground: '#eeeeee', muted: '#777777', dim: '#555555' }) }, { host: f.host, layoutHost: layoutHostUnused, initialView: 'projects' });
+  const view = new Type(), c = context(); view.init({}, c.cx); let tree = view.render(c.cx);
+  const key = label => view.controller.projection.instances.find(i => i.kind === 'section' && i.label === label).key;
+  assert.deepEqual(shape(byId(tree, key('Needs you'))), ['icon:bell', 'title', 'count:1', 'slot']);
+  assert.deepEqual(shape(byId(tree, key('Sample Mods'))), ['icon:initial', 'title', 'space:Space · edge', 'count:2', 'chevron']);
+  assert.equal(textOf(byId(tree, 'group-icon:' + key('Sample Mods'))), 'S');
+  assert.deepEqual(shape(byId(tree, key('Unidentified'))), ['icon:terminal', 'title', 'count:1', 'chevron']);
+  for (const label of ['Needs you', 'Sample Mods', 'Unidentified']) sameLook(byId(tree, key(label)), label);
+  // Spaces: the reference header, with its machine tail and no count.
+  byId(tree, 'mode:spaces').attributes.on_click[0]({}, c.cx); tree = view.render(c.cx);
+  assert.deepEqual(shape(byId(tree, 'spaces:machine:edge')), ['icon:server', 'title', 'machine-add', 'machine-state', 'chevron']);
+  sameLook(byId(tree, 'spaces:machine:edge'), 'edge');
   assert.equal(f.calls.length, 0);
 });

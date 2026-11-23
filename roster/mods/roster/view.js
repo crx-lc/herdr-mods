@@ -226,7 +226,7 @@ export function createRosterView(kit, app, options = {}) {
           extras.push(div().id('machine-state:' + row.key).size(6).rounded(3).flex_none().bg(row.ready ? theme.ansi2 ?? theme.working ?? fg : dim));
           add(groupHeader(row.key, row.label + (row.collapsed ? ', folded' : ''), row.label,
             change({ type: 'fold', key: row.key, collapsed: !row.collapsed }),
-            { icon: os?.icon ?? (row.machine ? 'server' : 'monitor'), collapsed: row.collapsed, extras, height: 30, titleSize: 12, iconSize: 18, strong: true,
+            { icon: os?.icon ?? (row.machine ? 'server' : 'monitor'), collapsed: row.collapsed, extras,
               tooltip: [row.label, os?.tooltip, row.machine ? (row.ready ? 'connected' : row.loading ? 'loading' : 'not connected') : null].filter(Boolean).join(' · ') }));
           if (!row.collapsed && row.count === 0 && row.ready) add(click('spaces:new:' + (row.machine ?? 'local'), 'New space on ' + row.label, newSpace)
             .h(28).flex_none().px(8).gap(7).rounded(7).text_size(12).text_color(dim).cursor_pointer()
@@ -391,17 +391,35 @@ export function createRosterView(kit, app, options = {}) {
       // The stock group header: 26px, 11px dim text, optional leading icon, extras, chevron last.
       // Machine headers in Spaces pass a larger, semibold title and an 18px icon; the +, dot and
       // chevron keep the header's own 11px size and stay aligned.
+      // The one group header for Spaces, Projects and Status. The Spaces machine header is the
+      // reference: 30px, an 18px leading icon (a shipped icon name, or an element such as a
+      // Space's initial or the Working spinner), a 12px bold title in full contrast whether
+      // folded or not, then a right-aligned tail: view-specific extras, a count, and the
+      // chevron (or an empty slot of its size where a group never folds). The header's own
+      // 11px size and dim color reach only the tail.
+      const HEADER = { height: 30, iconSize: 18, titleSize: 11 + 1, chevron: 11 };
       const groupHeader = (key, label, title, activate, { icon: lead = null, collapsed = false, foldable = true, extras = [], tooltip = label, depth = 0,
-        height = 26, titleSize = 11, iconSize = 13, strong = false } = {}) => {
-        const head = click(key, label, activate).h(height).flex_none().px(8).pl(8 + Math.min(depth, 3) * 8).gap(7)
+        count = null } = {}) => {
+        const head = click(key, label, activate).h(HEADER.height).flex_none().px(8).pl(8 + Math.min(depth, 3) * 8).gap(7)
           .text_size(11).text_color(dim).cursor_pointer().hover(el => el.bg(theme.hover ?? theme.raised)).tooltip(tooltip);
-        if (lead) head.child(icon(lead, iconSize).id('group-icon:' + key));
-        const titleText = labelText(title, titleSize, strong ? fg : dim).id('group-label:' + key).flex_1();
-        head.child(strong ? titleText.font_bold() : titleText);
+        const leadEl = typeof lead === 'string' ? icon(lead, HEADER.iconSize) : lead;
+        if (leadEl) head.child(leadEl.id('group-icon:' + key));
+        head.child(labelText(title, HEADER.titleSize, fg).id('group-label:' + key).font_bold().flex_1());
         for (const extra of extras) head.child(extra);
-        if (foldable) head.child(icon(collapsed ? 'chevron-right' : 'chevron-down', 11).id('group-chevron:' + key));
+        if (count != null) head.child(div().id('group-count:' + key).flex_none().text_size(11).text_color(dim).child(String(count)));
+        head.child(foldable ? icon(collapsed ? 'chevron-right' : 'chevron-down', HEADER.chevron).id('group-chevron:' + key)
+          : div().id('group-chevron:' + key).w(HEADER.chevron).h(HEADER.chevron).flex_none());
         return head;
       };
+      // An element in the 18px icon box: a Space's colored initial, or the live Working spinner.
+      const leadBox = () => h().w(HEADER.iconSize).h(HEADER.iconSize).flex_none().justify_center();
+      const spaceInitial = space => {
+        const colors = typeof app.shared === 'function' ? app.shared('space.colors') ?? {} : {};
+        const name = typeof space.name === 'string' && space.name.trim() ? space.name.trim() : space.id;
+        return leadBox().rounded(5).bg(spaceFill(typeof colors[space.id] === 'string' ? colors[space.id] : 'ansi6', theme))
+          .child(div().text_size(10.5).font_bold().text_color('#ffffff').child((Array.from(name)[0] ?? '?').toUpperCase()));
+      };
+      const STATUS_ICONS = { 'Needs you': 'bell', 'Child needs you': 'bell', Done: 'check-circle', Idle: 'pause-circle', Offline: 'offline', Stale: 'clock', Unknown: 'help-circle' };
       const change = event => cx => { this.closeDetails(cx, false); this.controls = []; c.change(event); cx.notify(); };
       const viewMode = c.state.view;
       const root = v().id('roster').size_full().p(5).gap(3).bg(theme.surface).text_color(fg).text_size(12)
@@ -464,18 +482,22 @@ export function createRosterView(kit, app, options = {}) {
         if (i.kind === 'section') {
           section = i;
           const count = i.label === 'Working' ? i.counts?.working : i.label === 'Needs you' ? i.counts?.needsYou : i.counts?.identities ?? i.count;
-          const title = i.label + (count != null ? ' · ' + count : '');
-          // Needs you never folds, so it has no chevron.
-          const foldable = i.key !== JSON.stringify([viewMode, 'attention']);
-          // One subtle native spinner marks live work in Status; it is decoration, not a control.
-          const extras = viewMode === 'status' && i.label === 'Working' ? [div().id('roster-working-indicator').flex_none()
-            .text_size(10).text_color(theme.working ?? theme.accent ?? muted).frames(WORKING_FRAMES, 80)] : [];
+          const title = i.label;
+          // Needs you never folds: no chevron, but its slot keeps the count aligned.
+          const attentionKey = i.key === JSON.stringify([viewMode, 'attention']), foldable = !attentionKey;
+          // The leading icon says what kind of group it is. Working's is the one live
+          // indicator: a native spinner, decoration rather than a control.
+          const lead = attentionKey ? 'bell'
+            : viewMode === 'status' ? (i.label === 'Working' ? leadBox().id('roster-working-indicator').text_size(12)
+              .text_color(theme.working ?? theme.accent ?? muted).frames(WORKING_FRAMES, 80) : STATUS_ICONS[i.label] ?? 'help-circle')
+            : i.space ? spaceInitial(i.space) : i.label === 'Done' ? 'check-circle' : i.label === 'Unidentified' ? 'terminal'
+            : i.label === 'Infrastructure' ? 'server' : i.repository ? 'branch' : 'folder';
           // A Space group is named as a Space on its machine: where these terminals are shown,
           // not a claim that they belong to a project or repository.
           const where = i.space ? 'Space · ' + (i.space.machine ?? 'This computer') : null;
-          if (where) extras.push(div().id('group-space:' + i.key).flex_none().text_size(10).text_color(muted).child(where));
-          const header = groupHeader(i.key, title + (where ? ', ' + where : '') + (foldable ? (i.collapsed ? ', folded' : ', open') : ''), title,
-            change({ type: 'fold', key: i.key, collapsed: !i.collapsed }), { collapsed: i.collapsed, foldable, extras, depth: i.depth,
+          const extras = where ? [div().id('group-space:' + i.key).flex_none().text_size(10).text_color(muted).child(where)] : [];
+          const header = groupHeader(i.key, title + (count != null ? ', ' + count : '') + (where ? ', ' + where : '') + (foldable ? (i.collapsed ? ', folded' : ', open') : ''), title,
+            change({ type: 'fold', key: i.key, collapsed: !i.collapsed }), { icon: lead, collapsed: i.collapsed, foldable, extras, depth: i.depth, count,
               tooltip: where ? i.label + ': the Herdr Space on ' + (i.space.machine ?? 'this computer') + ' that shows these terminals (project not verified)' : undefined });
           body.child(header);
           this.controls.at(-1).rowIndex = index;

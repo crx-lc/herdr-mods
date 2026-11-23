@@ -8,7 +8,8 @@ import { spawnSync } from 'node:child_process';
 // Deliberate shipping allowlist: additions require review here, not a broad extension glob.
 export const SHIPPING = Object.freeze([
   'MODULES.md', 'README.md', 'attention.js', 'controller.js', 'delegations.js',
-  'icons/branch.svg', 'icons/chevron-down.svg', 'icons/chevron-right.svg', 'icons/monitor.svg', 'icons/os-debian.svg', 'icons/os-linux.svg', 'icons/os-ubuntu.svg', 'icons/os-windows.svg',
+  'icons/bell.svg', 'icons/branch.svg', 'icons/check-circle.svg', 'icons/chevron-down.svg', 'icons/clock.svg', 'icons/folder.svg',
+  'icons/help-circle.svg', 'icons/offline.svg', 'icons/pause-circle.svg', 'icons/terminal.svg', 'icons/chevron-right.svg', 'icons/monitor.svg', 'icons/os-debian.svg', 'icons/os-linux.svg', 'icons/os-ubuntu.svg', 'icons/os-windows.svg',
   'icons/pencil.svg', 'icons/plus.svg', 'icons/server.svg', 'LICENSE-DEBIAN-LOGO.txt', 'NOTICE-UBUNTU-LOGO.txt',
   'desktop.js', 'detail.js', 'feed.js', 'icons.js', 'identity.js', 'layout.js', 'local-reader.js',
   'main.js', 'metadata.js', 'mod.json', 'navigation-rows.js', 'navigation.js',
