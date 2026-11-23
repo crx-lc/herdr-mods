@@ -132,3 +132,25 @@ test('known delegation shows the active delegates and the full waiting phrase', 
   assert.equal(value(tree, 'project'), 'Sample project');
   assert.equal(value(tree, 'role'), 'Coordinator');
 });
+
+test('clicks in the modal stop there; list controls under an open modal change nothing', () => {
+  const s = setup(); let tree = s.render(); const i = item(s.view, 't1'), other = item(s.view, 't2');
+  s.view.place(i.key); click(s, s.render(), 'info:' + i.key); tree = s.render();
+  // Every modal control and the box itself stop propagation (GPUI also hit-tests the rows beneath).
+  for (const id of ['roster-details', 'details:close', 'details:technical', 'details:go']) {
+    const stops = s.stats.stop; click(s, tree, id); tree = s.render();
+    assert.equal(s.stats.stop, stops + 1, id);
+    if (!s.view.reader) { click(s, tree, 'info:' + i.key); tree = s.render(); }
+  }
+  s.f.calls.length = 0;
+  if (!s.view.reader) { click(s, tree, 'info:' + i.key); tree = s.render(); }
+  const before = JSON.stringify([s.view.controller.cursor, s.view.controller.state, s.view.reader.sourceKey]);
+  const group = s.view.controller.projection.instances.find(x => x.kind === 'section');
+  for (const id of [other.key, 'info:' + other.key, group.key]) click(s, tree, id);
+  assert.equal(JSON.stringify([s.view.controller.cursor, s.view.controller.state, s.view.reader.sourceKey]), before);
+  assert.deepEqual(s.f.calls, []);
+  // Toolbar controls are outside the list and still work (and close the modal).
+  click(s, tree, 'mode:status'); assert.equal(s.view.reader, null); assert.equal(s.view.controller.state.view, 'status');
+  // With the modal closed, list clicks act again.
+  tree = s.render(); click(s, tree, item(s.view, 't1').key); assert.deepEqual(s.f.calls, [['pane.focus', { pane: 'p1' }]]);
+});

@@ -158,11 +158,13 @@ export function createRosterView(kit, app, options = {}) {
         return h().id(key).h(22).flex_none().px(6).rounded(4).accessibility_label(label).tooltip(label)
           .bg(this.readerCursor === key ? theme.selected ?? theme.raised : theme.raised ?? theme.surface)
           .hover(el => el.bg(theme.hover ?? theme.selected ?? theme.surface))
-          .on_click((_e, cx) => { this.readerCursor = key; this.focus(cx); activate(cx); })
+          // A click on the modal stops here; GPUI would otherwise also deliver it to the row beneath.
+          .on_click((_e, cx) => { cx.stop_propagation(); this.readerCursor = key; this.focus(cx); activate(cx); })
           .child(labelText(text, 12, color));
       };
       const box = v().id('roster-details').absolute().top(0).left(0).right(0).p(8).gap(3).rounded(8)
-        .bg(theme.raised ?? theme.surface).border(1).border_color(theme.border ?? muted).accessibility_label('Agent details');
+        .bg(theme.raised ?? theme.surface).border(1).border_color(theme.border ?? muted).accessibility_label('Agent details')
+        .on_click((_e, cx) => cx.stop_propagation());
       box.child(h().h(22).flex_none().gap(6)
         .child(labelText('Agent details', 12, fg).font_semibold().flex_1())
         .child(control('details:close', 'Close agent details (Esc)', '×', cx => this.closeDetails(cx))));
@@ -202,11 +204,14 @@ export function createRosterView(kit, app, options = {}) {
       const v = () => v_flex();
       const h = () => h_flex().items_center();
       const labelText = (value, size, color = fg) => div().min_w(0).truncate().text_size(size).text_color(color).child(value);
+      // Controls drawn in the list ignore clicks while the details modal is open over it.
+      let listPhase = false;
       const click = (key, label, activate, column = false) => {
+        const inList = listPhase;
         this.controls.push({ key, label, activate });
         return (column ? v() : h()).id(key).min_w(0).px(6).rounded(4).accessibility_label(label)
           .bg(c.cursor === key ? theme.selected ?? theme.raised : theme.surface)
-          .on_click((_e, cx) => { this.place(key); this.focus(cx); activate(cx); });
+          .on_click((_e, cx) => { if (inList && this.reader) return; this.place(key); this.focus(cx); activate(cx); });
       };
       const button = (key, label, activate, { active = false, text = label } = {}) => {
         const element = click(key, label, activate).h(24).flex_none().tooltip(label);
@@ -266,6 +271,7 @@ export function createRosterView(kit, app, options = {}) {
         tools.h(Math.min(52, optionIndex * 24 + Math.max(0, optionIndex - 1) * 2));
         root.child(tools);
       }
+      listPhase = true;
       const body = v().id('roster-rows').flex_1().min_h(0).gap(3).overflow_y_scrollbar().track_scroll(this.rowScroll);
       let section = null;
       for (const [index, i] of projection.instances.entries()) {
