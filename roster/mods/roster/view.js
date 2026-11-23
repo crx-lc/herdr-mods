@@ -183,7 +183,7 @@ export function createRosterView(kit, app, options = {}) {
           extras.push(div().id('machine-state:' + row.key).size(6).rounded(3).flex_none().bg(row.ready ? theme.ansi2 ?? theme.working ?? fg : dim));
           add(groupHeader(row.key, row.label + (row.collapsed ? ', folded' : ''), row.label,
             change({ type: 'fold', key: row.key, collapsed: !row.collapsed }),
-            { icon: os?.icon ?? (row.machine ? 'server' : 'monitor'), collapsed: row.collapsed, extras, height: 30, titleSize: 14, iconSize: 18, strong: true,
+            { icon: os?.icon ?? (row.machine ? 'server' : 'monitor'), collapsed: row.collapsed, extras, height: 30, titleSize: 12, iconSize: 18, strong: true,
               tooltip: [row.label, os?.tooltip, row.machine ? (row.ready ? 'connected' : row.loading ? 'loading' : 'not connected') : null].filter(Boolean).join(' · ') }));
           if (!row.collapsed && row.count === 0 && row.ready) add(click('spaces:new:' + (row.machine ?? 'local'), 'New space on ' + row.label, newSpace)
             .h(28).flex_none().px(8).gap(7).rounded(7).text_size(12).text_color(dim).cursor_pointer()
@@ -304,7 +304,7 @@ export function createRosterView(kit, app, options = {}) {
           .text_size(11).text_color(dim).cursor_pointer().hover(el => el.bg(theme.hover ?? theme.raised)).tooltip(tooltip);
         if (lead) head.child(icon(lead, iconSize).id('group-icon:' + key));
         const titleText = labelText(title, titleSize, strong ? fg : dim).id('group-label:' + key).flex_1();
-        head.child(strong ? titleText.font_semibold() : titleText);
+        head.child(strong ? titleText.font_bold() : titleText);
         for (const extra of extras) head.child(extra);
         if (foldable) head.child(icon(collapsed ? 'chevron-right' : 'chevron-down', 11).id('group-chevron:' + key));
         return head;
@@ -375,8 +375,13 @@ export function createRosterView(kit, app, options = {}) {
           // One subtle native spinner marks live work in Status; it is decoration, not a control.
           const extras = viewMode === 'status' && i.label === 'Working' ? [div().id('roster-working-indicator').flex_none()
             .text_size(10).text_color(theme.working ?? theme.accent ?? muted).frames(WORKING_FRAMES, 80)] : [];
-          const header = groupHeader(i.key, title + (foldable ? (i.collapsed ? ', folded' : ', open') : ''), title,
-            change({ type: 'fold', key: i.key, collapsed: !i.collapsed }), { collapsed: i.collapsed, foldable, extras, depth: i.depth });
+          // A Space group is named as a Space on its machine: where these terminals are shown,
+          // not a claim that they belong to a project or repository.
+          const where = i.space ? 'Space · ' + (i.space.machine ?? 'This computer') : null;
+          if (where) extras.push(div().id('group-space:' + i.key).flex_none().text_size(10).text_color(muted).child(where));
+          const header = groupHeader(i.key, title + (where ? ', ' + where : '') + (foldable ? (i.collapsed ? ', folded' : ', open') : ''), title,
+            change({ type: 'fold', key: i.key, collapsed: !i.collapsed }), { collapsed: i.collapsed, foldable, extras, depth: i.depth,
+              tooltip: where ? i.label + ': the Herdr Space on ' + (i.space.machine ?? 'this computer') + ' that shows these terminals (project not verified)' : undefined });
           body.child(header);
           this.controls.at(-1).rowIndex = index;
           continue;
@@ -409,8 +414,11 @@ export function createRosterView(kit, app, options = {}) {
         // Neutral monogram only for a known project: an "Unassigned" initial says nothing.
         if (context.knownProject) element.child(h().w(16).h(16).flex_none().justify_center().rounded(4).bg(theme.raised)
           .accessibility_label(context.knownProject + ' project icon fallback').child(labelText(Array.from(context.knownProject)[0] ?? '?', 10)));
-        element.child(labelText(row.displayLabel, 12, i.navigation.enabled ? fg : muted).id('row-name:' + i.key).font_semibold().flex_1());
-        element.child(labelText(context.machineShort, 10, muted).id('row-machine:' + i.key).flex_none().max_w(84));
+        // An echo is the alert's own terminal listed again in its group: muted, never a second alert.
+        const echo = i.echo === true;
+        element.child(labelText(row.displayLabel, 12, i.navigation.enabled && !echo ? fg : muted).id('row-name:' + i.key).font_semibold().flex_1());
+        const where = i.space && !section?.space ? i.space.name + ' · ' + context.machineShort : context.machineShort;
+        element.child(labelText(where, 10, muted).id('row-machine:' + i.key).flex_none().max_w(i.space && !section?.space ? 150 : 84));
         if (context.knownContext) element.child(labelText(context.knownContext, 10, muted).id('row-execution-context:' + i.key).flex_none().max_w(72));
         const stateColor = ({ Working: theme.working, 'Needs you': theme.blocked, 'Child needs you': theme.blocked,
           Done: theme.done, Idle: theme.idle })[status] ?? (waiting ? theme.accent : muted) ?? fg;
@@ -427,6 +435,7 @@ export function createRosterView(kit, app, options = {}) {
         const statusView = viewMode === 'status';
         if (statusView && waiting) element.child(badge('◈ Waiting', theme.accent ?? muted).id('row-waiting:' + i.key)
           .accessibility_label('Waiting for delegate').tooltip('Waiting for delegate'));
+        else if (echo) element.child(labelText('in Needs you', 10, muted).id('row-echo:' + i.key).flex_none());
         else if (!(statusView && !i.display.error && section?.label === i.status)) element.child(badge(status, stateColor));
         const line = h().id('line:' + i.key).h(24).flex_none().min_w(0).gap(2).pl(Math.min(i.depth, 3) * 8).child(element)
           .on_hover((on, cx) => { if (on) this.hoverKey = i.key; else if (this.hoverKey === i.key) this.hoverKey = null; cx.notify(); });
@@ -443,7 +452,25 @@ export function createRosterView(kit, app, options = {}) {
             change({ type: 'fold', key: i.key, collapsed: !collapsed }), { text: collapsed ? '▸' : '▾' }).px(0).w(18));
           Object.assign(this.controls.at(-1), { rowIndex: index, instance: i, detail: label, hover, disabledReason: selected.disabledReason });
         }
-        body.child(line);
+        if (!i.alert) { body.child(line); continue; }
+        const a = i.alert;
+        const summary = (a.context ?? 'Project unknown') + ' · ' + [a.issue, a.reason ?? 'needs you'].filter(Boolean).join(' ');
+        const details = [summary, a.recipient ? 'Reply goes to ' + a.recipient.label + ' (' + a.recipient.address + ')' : null,
+          ...a.missing.map(m => 'Missing ' + m.field + ': ' + m.detail)].filter(Boolean).join('\n');
+        const alertLine = h().id('alert:' + i.key).h(20).flex_none().min_w(0).gap(6).pl(Math.min(i.depth, 3) * 8 + 6)
+          .tooltip(details).accessibility_label(details)
+          .child(labelText(summary, 11, fg).id('alert-summary:' + i.key).flex_1());
+        if (a.recipient) {
+          // Only a verified recipient gets an action, and it is checked again at click time.
+          alertLine.child(button('recipient:' + i.key, 'Open ' + a.recipient.title + ': ' + a.recipient.label, cx => {
+            const plan = this.controller.openRecipient(projection, i.key);
+            if (plan.enabled) { if (this.openMessage) this.message = ''; this.openMessage = false; }
+            else { this.message = reasonText(plan.reason); this.openMessage = true; }
+            cx?.notify?.();
+          }, { text: 'Open ' + a.recipient.title }).h(20));
+          Object.assign(this.controls.at(-1), { rowIndex: index, instance: i, detail: label, hover: details });
+        } else alertLine.child(labelText('Not reported: ' + a.missing.map(m => m.field).join(', '), 10, muted).id('alert-missing:' + i.key).flex_none());
+        body.child(v().id('alert-block:' + i.key).flex_none().child(line).child(alertLine));
       }
       if (viewMode === 'spaces') this.renderSpaces(body, theme, { click, change, labelText, h, fg, muted, groupHeader });
       else if (!projection.instances.length) body.child(labelText('No observed terminals', 12, muted).p(6));

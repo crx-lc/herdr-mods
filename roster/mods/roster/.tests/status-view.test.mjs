@@ -17,7 +17,11 @@ test('Status drops chips that repeat their group header; Projects keeps every ch
   const f = mixed(), s = setup(f);
   let tree = s.render();
   const projects = Object.fromEntries(rowsOf(s.view).map(i => [i.row.address + ':' + i.key.includes('attention'), chips(byId(tree, i.key))]));
-  for (const [key, list] of Object.entries(projects)) assert.equal(list.length, 1, key);
+  // Every row keeps its chip, except the blocked terminal's group copy: it echoes the Needs you
+  // row with a muted "in Needs you" rather than a second equal-prominence alert.
+  for (const [key, list] of Object.entries(projects)) assert.equal(list.length, key === 't4:false' ? 0 : 1, key);
+  const echo = rowsOf(s.view).find(i => i.row.address === 't4' && !i.key.includes('attention'));
+  assert.equal(textOf(byId(tree, 'row-echo:' + echo.key)), 'in Needs you');
   assert.equal(spinners(tree).length, 0, 'Projects has no Working header spinner');
   s.view.controller.change({ type: 'view', view: 'status' }); s.render();
   // Done starts folded; open every group so each state is drawn.

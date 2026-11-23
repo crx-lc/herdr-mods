@@ -41,7 +41,7 @@ function adapt(source, input, observation, now) {
   const labels = {};
   const invalidLabels = [];
   if (!compact) {
-    for (const key of ['herdr.role', 'herdr.project', 'herdr.issue', 'herdr.pr']) {
+    for (const key of ['herdr.role', 'herdr.project', 'herdr.issue', 'herdr.pr', 'herdr.delivery']) {
       if (Object.hasOwn(object(r.labels), key)) {
         const value = text(r.labels[key]);
         if (value) labels[key] = value;
@@ -56,6 +56,8 @@ function adapt(source, input, observation, now) {
       ? { alias: o.parentNamespace.alias, source: text(o.parentNamespace.source) } : null,
     parentReference: text(r.parent), parentMalformed: r.parent != null && !text(r.parent),
     name: text(r.name), tabTitle: text(o.tabTitle), tabNamed: o.tabNamed === true,
+    // The agent's own status message, when it reports one (Herdr's report / status.msg).
+    reportMessage: text(typeof r.report === 'string' ? r.report : object(r.report).msg ?? object(r.status).msg),
     labels, invalidLabels, incarnation: createdMs,
     process: compact ? null : { pid: stamp(r.pid), run: text(object(r.labels)['herdr.run']) },
     lifecycle, rawStatus,

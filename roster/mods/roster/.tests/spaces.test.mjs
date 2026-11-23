@@ -120,7 +120,8 @@ test('machine headers follow the stock order: icon, name, then +, the connection
   for (const [key, head] of [['local', local], ['edge', edge], ['zed', zed]]) {
     assert.equal(head.attributes.h[0], 30); assert.equal(head.attributes.text_size[0], 11); assert.ok(head.attributes.hover);
     const label = byId(head, 'group-label:spaces:machine:' + key);
-    assert.equal(label.attributes.text_size[0], 14); assert.ok(label.attributes.font_semibold); assert.equal(label.attributes.text_color[0], '#eeeeee');
+    // Bold at the Spaces tab's 12px.
+    assert.equal(label.attributes.text_size[0], 12); assert.ok(label.attributes.font_bold); assert.equal(label.attributes.text_color[0], '#eeeeee');
     assert.deepEqual(byId(head, 'group-icon:spaces:machine:' + key).attributes.size, [18]);
     assert.deepEqual(byId(head, 'group-chevron:spaces:machine:' + key).attributes.size, [11]);
     assert.deepEqual(byId(head, 'machine-state:spaces:machine:' + key).attributes.size, [6]);

@@ -61,20 +61,50 @@ function verifiedRepository(row, repositories) {
     && typeof e.source === 'string' && e.source.trim() ? canonicalRepository(e.remote) : null))];
   return ids.length === 1 ? ids[0] : null;
 }
-function placement(row, scopes, repositories = []) {
+// Identified: a role label or an agent that reports a status. Plain shells and raw IDs are not.
+export const identified = row => row.role !== 'unknown' || row.rawStatus !== 'unknown';
+function placement(row, scopes, repositories = [], spaces = {}) {
   if (row.project.id) return { key: tuple('project', row.project.id), label: row.project.displayName, projectId: row.project.id };
   const facts = scopes.filter(e => e?.associationKey === row.associationKey && row.associationKey);
   if (row.core.verified && facts.length === 1 && facts[0].verified === true && facts[0].scope === 'core-wide'
     && facts[0].coreId === row.core.id && typeof facts[0].source === 'string' && facts[0].source.trim()) {
     return { key: tuple('infrastructure'), label: 'Infrastructure', projectId: null };
   }
-  // Project first; a verified repository is the fallback; everything else is Other.
+  // Project first; a verified repository is the fallback.
   const repository = verifiedRepository(row, repositories);
   if (repository) return { key: tuple('repository', repository), label: repository, projectId: null, repository };
+  // Unidentified shells and raw IDs wait in their own folded group.
+  if (!identified(row)) return { key: tuple('unidentified'), label: 'Unidentified', projectId: null };
+  // Then the Herdr Space that shows the terminal, named as a Space: not a project or repo claim.
+  const space = Object.hasOwn(spaces, row.address) ? spaces[row.address] : null;
+  if (space) return { key: tuple('space', space.machine, space.id), label: space.name, projectId: null, space };
   return { key: tuple('other'), label: 'Other', projectId: null };
 }
-// Projects, then repositories, then Infrastructure, then Other.
-const rank = group => group.key === tuple('other') ? 3 : group.label === 'Infrastructure' ? 2 : group.repository ? 1 : 0;
+const token = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(value) ? value : null;
+const ROLE_TITLES = { coordinator: 'Coordinator', planner: 'Planner', developer: 'Developer', reviewer: 'Reviewer', watcher: 'Watcher', supervisor: 'Supervisor' };
+// What an alert can prove. The recipient is verified only when the alerting terminal names
+// a delivery (herdr.delivery) and exactly one other live terminal on the same machine
+// carries the same delivery. The issue comes from the alert itself or that recipient; the
+// reason only from the terminal's own reported message. Names, folders and tabs never count.
+export function alertFacts(row, rows, spaces = {}, navigation = {}) {
+  const context = row.project.id ? row.project.displayName : (Object.hasOwn(spaces, row.address) ? spaces[row.address].name : null);
+  const delivery = token(row.labels?.['herdr.delivery']);
+  const peers = delivery ? rows.filter(r => r !== row && current(r) && r.core.alias === row.core.alias && r.labels?.['herdr.delivery'] === delivery) : [];
+  const recipientRow = peers.length === 1 ? peers[0] : null;
+  const item = row.workItem ?? recipientRow?.workItem ?? null;
+  const reason = typeof row.reportMessage === 'string' && row.reportMessage.trim() ? row.reportMessage.trim() : null;
+  const missing = [];
+  if (!item) missing.push({ field: 'issue', detail: recipientRow ? 'no herdr.issue on this terminal or its recipient' : 'no herdr.issue on this terminal' });
+  if (!reason) missing.push({ field: 'reason', detail: 'no status message reported by this terminal' });
+  if (!recipientRow) missing.push({ field: 'recipient', detail: !delivery ? 'no herdr.delivery label on this terminal'
+    : peers.length ? 'more than one live terminal on this machine shares its herdr.delivery' : 'no other live terminal on this machine shares its herdr.delivery' });
+  return { context, issue: item ? (item.kind === 'pr' ? 'PR #' : '#') + item.numberOrId : null, reason, missing,
+    recipient: recipientRow ? { identity: rowIdentity(recipientRow), role: recipientRow.role, title: ROLE_TITLES[recipientRow.role] ?? 'agent',
+      label: recipientRow.displayLabel, address: recipientRow.address, navigation: navigationTarget(recipientRow, rows, navigation) } : null };
+}
+// Projects, repositories, Spaces (Herdr's order), Infrastructure, Other, then Unidentified.
+const rank = group => group.key === tuple('unidentified') ? 5 : group.key === tuple('other') ? 4 : group.label === 'Infrastructure' ? 3
+  : group.space ? 2 : group.repository ? 1 : 0;
 function counts(rows) {
   const unique = distinct(rows);
   return { identities: unique.length, working: unique.filter(r => current(r) && r.appStatus === 'working').length,
@@ -86,10 +116,10 @@ function counts(rows) {
 // ambient storage, inferred assignments or rewritten native fields live here.
 // collapseUnassigned: the Other project group and the Status Unknown group start
 // folded (a count stays on the header); an explicit fold in state always wins.
-export function projectRoster(reduced, inputState = {}, { scopes = [], repositories = [], navigation = {}, collapseUnassigned = false } = {}) {
+export function projectRoster(reduced, inputState = {}, { scopes = [], repositories = [], spaces = {}, navigation = {}, collapseUnassigned = false } = {}) {
   const state = viewState(inputState), rows = sortRows(reduced.rows), instances = [];
   const filtered = rows.filter(r => !filterReasons(r, state).length);
-  const placements = new Map(rows.map(r => [rowIdentity(r), placement(r, scopes, repositories)]));
+  const placements = new Map(rows.map(r => [rowIdentity(r), placement(r, scopes, repositories, spaces)]));
   const byAssociation = new Map(rows.filter(r => r.associationKey).map(r => [r.associationKey, r]));
   const open = (key, fallback = false) => !(state.folds[key] ?? fallback);
   function header(path, label, depth, defaultCollapsed = false, extra = {}) {
@@ -97,7 +127,7 @@ export function projectRoster(reduced, inputState = {}, { scopes = [], repositor
     instances.push({ kind: 'section', key, label, depth, collapsed: !open(key, defaultCollapsed), ...extra });
     return open(key, defaultCollapsed);
   }
-  function terminal(row, path, depth, contextOnly = false) {
+  function terminal(row, path, depth, contextOnly = false, extra = {}) {
     const identity = rowIdentity(row), outsideFilters = filterReasons(row, state);
     const parent = row.parent.resolution === 'verified' ? byAssociation.get(row.parent.associationKey) : null;
     const key = tuple(state.view, ...path, identity);
@@ -112,7 +142,8 @@ export function projectRoster(reduced, inputState = {}, { scopes = [], repositor
       health: 'unknown',
       diagnostic: row.role === 'supervisor' && current(row) && row.core.verified
         && distinct(rows.filter(r => r.role === 'supervisor' && current(r) && r.core.verified && r.core.id === row.core.id)).length > 1 ? 'multiple-supervisors' : null,
-      display: { ...row.roster.display, error: row.rawStatus === 'error' && !row.statusConflict ? 'Error' : null } });
+      space: Object.hasOwn(spaces, row.address) ? spaces[row.address] : null,
+      display: { ...row.roster.display, error: row.rawStatus === 'error' && !row.statusConflict ? 'Error' : null }, ...extra });
     return key;
   }
   // Global actionable targets are independent of both filters and every fold.
@@ -120,7 +151,7 @@ export function projectRoster(reduced, inputState = {}, { scopes = [], repositor
   const attention = state.view === 'spaces' ? [] : rows.filter(r => r.roster.actionable);
   if (attention.length) {
     instances.push({ kind: 'section', key: tuple(state.view, 'attention'), label: 'Needs you', depth: 0, collapsed: false, counts: counts(attention) });
-    for (const row of attention) terminal(row, ['attention'], 1);
+    for (const row of attention) terminal(row, ['attention'], 1, false, { alert: alertFacts(row, rows, spaces, navigation) });
   }
   if (state.view === 'spaces') {
     // No agent rows here.
@@ -133,7 +164,7 @@ export function projectRoster(reduced, inputState = {}, { scopes = [], repositor
     }
   } else {
     const groups = [...new Map(filtered.map(r => [placements.get(rowIdentity(r)).key, placements.get(rowIdentity(r))])).values()]
-      .sort((a, b) => rank(a) - rank(b) || compare(a.key, b.key));
+      .sort((a, b) => rank(a) - rank(b) || (a.space && b.space ? compare(tuple(a.space.machine ?? ''), tuple(b.space.machine ?? '')) || a.space.order - b.space.order : 0) || compare(a.key, b.key));
     for (const group of groups) {
       const members = filtered.filter(r => placements.get(rowIdentity(r)).key === group.key), memberKeys = new Set(members.map(rowIdentity));
       const parentOf = new Map();
@@ -151,7 +182,8 @@ export function projectRoster(reduced, inputState = {}, { scopes = [], repositor
         if (seen.has(id)) for (const cyclic of path.slice(path.indexOf(id))) parentOf.delete(cyclic);
       }
       const path = ['projects', group.key];
-      if (!header(path, group.label, 0, collapseUnassigned && group.key === tuple('other'), { projectId: group.projectId, counts: counts(members) })) continue;
+      if (!header(path, group.label, 0, collapseUnassigned && [tuple('other'), tuple('unidentified')].includes(group.key),
+        { projectId: group.projectId, space: group.space ?? null, counts: counts(members) })) continue;
       // Iterative event stack prevents recursive overflow on deep actual ancestry.
       const stack = [{ type: 'siblings', siblings: members.filter(r => !parentOf.has(rowIdentity(r))), path, depth: 1 }];
       while (stack.length) {
@@ -164,7 +196,9 @@ export function projectRoster(reduced, inputState = {}, { scopes = [], repositor
           if (header(job.path, 'Done', job.depth, true, { count: job.siblings.length }))
             for (const row of [...job.siblings].reverse()) stack.push({ type: 'row', row, path: job.path, depth: job.depth + 1 });
         } else {
-          const key = terminal(job.row, job.path, job.depth, job.row.roster.state === 'child-needs-you');
+          // The roster stays complete: an alert's terminal is also listed in its group, but
+          // as an echo of the Needs you row, never a second equal-prominence alert.
+          const key = terminal(job.row, job.path, job.depth, job.row.roster.state === 'child-needs-you', job.row.roster.actionable ? { echo: true } : {});
           if (open(key)) stack.push({ type: 'siblings', siblings: members.filter(r => parentOf.get(rowIdentity(r)) === rowIdentity(job.row)),
             path: [...job.path, rowIdentity(job.row)], depth: job.depth + 1 });
         }

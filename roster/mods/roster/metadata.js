@@ -94,7 +94,10 @@ export function enrichMetadata(input, configInput = {}) {
     const selected = unique(terminalContexts.length ? terminalContexts : contexts, c => tuple(c.id, c.label));
     const executionContext = selected.length === 1 ? { id: selected[0].id, label: selected[0].label, source: selected[0].source, evidence: selected.map(c => ({ ...c })) }
       : { id: null, label: 'Context unknown', source: 'unknown', evidence: contexts.map(c => ({ ...c })) };
-    const fallback = row.tabNamed && row.tabTitle && !/^[0-9]+$/.test(row.tabTitle) ? row.tabTitle : row.name ?? row.core.name ?? row.address;
+    // A named tab labels only an agent that reports a status. A plain shell keeps its own
+    // terminal name or address, so a tab called "Watcher" never makes a shell look like one.
+    const agent = row.rawStatus !== 'unknown';
+    const fallback = agent && row.tabNamed && row.tabTitle && !/^[0-9]+$/.test(row.tabTitle) ? row.tabTitle : row.name ?? row.core.name ?? row.address;
     return { ...row, role, roleSource: role === 'unknown' ? 'unknown' : 'label:herdr.role',
       displayLabel: role === 'unknown' ? fallback : `${titles[role]}${workItem ? ` ${workItem.kind === 'pr' ? 'PR ' : ''}#${workItem.numberOrId}` : ''}`,
       workItem, workItemResolution: taskConflict ? 'conflict' : workItem ? 'verified-reference' : taskPresent ? 'invalid' : 'unknown',

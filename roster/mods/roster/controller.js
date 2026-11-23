@@ -12,22 +12,41 @@ export class Controller {
     this.feed.update(snapshot, this.host.now(), evidence, { refresh, nativeNavigation: this.nativeNavigation });
     return this.feed;
   }
+  project() {
+    return projectRoster(this.feed.reduced, this.state, { navigation: this.feed.navigation, scopes: this.feed.evidence.scopes ?? [],
+      repositories: this.feed.evidence.repositories ?? [], spaces: this.feed.spaces ?? {}, collapseUnassigned: this.collapseUnassigned });
+  }
   render() {
     this.observe();
-    this.projection = projectRoster(this.feed.reduced, this.state, { navigation: this.feed.navigation, scopes: this.feed.evidence.scopes ?? [],
-      repositories: this.feed.evidence.repositories ?? [], collapseUnassigned: this.collapseUnassigned });
+    this.projection = this.project();
     return this.projection;
+  }
+  // "Open {role}" on an alert: re-read now, and go only if the same verified recipient is
+  // still the alert's recipient and its exact target is unchanged since it was drawn.
+  openRecipient(projection, key) {
+    const old = projection.instances.find(i => i.key === key && i.kind === 'terminal')?.alert?.recipient;
+    if (!old) return { enabled: false, reason: 'not-actionable-instance' };
+    this.observe();
+    const now = this.project().instances.find(i => i.key === key && i.kind === 'terminal')?.alert?.recipient;
+    if (!now || now.identity !== old.identity) return { enabled: false, reason: 'target-changed' };
+    if (!now.navigation.enabled) return { enabled: false, reason: now.navigation.reason };
+    if (!old.navigation.enabled || JSON.stringify(now.navigation.target) !== JSON.stringify(old.navigation.target)) return { enabled: false, reason: 'target-changed' };
+    this.go(now.navigation.target);
+    return { enabled: true, reason: null, target: now.navigation.target };
+  }
+  // Native targets: the exact pane id to focus, or the exact address to peek; verified
+  // routes keep the terminal form for both.
+  go(target) {
+    this.host.run(target.action === 'focus' ? 'pane.focus' : 'terminal.peek',
+      target.scope === 'native' && target.action === 'focus' ? { pane: target.pane } : { terminal: target.address });
   }
   change(event) { this.state = transition(this.state, event); }
   activate(projection, key) {
     this.observe();
     const plan = actionIntent(this.feed.reduced, projection, key, this.feed.navigation,
       { state: this.state, generation: this.feed.generation, scopes: this.feed.evidence.scopes ?? [],
-        repositories: this.feed.evidence.repositories ?? [] });
-    // Native targets: the exact pane id to focus, or the exact address to peek; verified
-    // routes keep the terminal form for both.
-    if (plan.enabled) this.host.run(plan.intent.action === 'focus' ? 'pane.focus' : 'terminal.peek',
-      plan.intent.scope === 'native' && plan.intent.action === 'focus' ? { pane: plan.intent.pane } : { terminal: plan.intent.address });
+        repositories: this.feed.evidence.repositories ?? [], spaces: this.feed.spaces ?? {} });
+    if (plan.enabled) this.go(plan.intent);
     return plan;
   }
   async refresh(deadline) {

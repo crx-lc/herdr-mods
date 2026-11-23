@@ -21,9 +21,10 @@ const world = () => fakeHost([terminal('t1', 'blocked'), terminal('t2', 'working
 test('production default folds one Other group and Status Unknown with counts; Needs you stays open', () => {
   const f = world(), { view, cx } = viewOf(f);
   let tree = view.render(cx), p = view.controller.projection;
-  assert.deepEqual(sections(p).map(s => [s.label, s.collapsed]), [['Needs you', false], ['Other', true]]);
+  // The shell with no role and no status (t4) waits in a folded Unidentified group.
+  assert.deepEqual(sections(p).map(s => [s.label, s.collapsed]), [['Needs you', false], ['Other', true], ['Unidentified', true]]);
   assert.deepEqual(terminals(p).map(i => i.row.address), ['t1'], 'only Needs you rows are drawn');
-  assert.match(textOf(tree), /Other · 5 ▸/);
+  assert.match(textOf(tree), /Other · 4 ▸/); assert.match(textOf(tree), /Unidentified · 1 ▸/);
   view.controller.change({ type: 'view', view: 'status' }); tree = view.render(cx); p = view.controller.projection;
   assert.deepEqual(sections(p).map(s => [s.label, s.collapsed]), [['Needs you', false], ['Working', false], ['Idle', false], ['Unknown', true]]);
   assert.match(textOf(tree), /Unknown · 1 ▸/);

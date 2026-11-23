@@ -76,6 +76,24 @@ export function nativeTargets(snapshot, generation) {
   }
   return { generation, unavailable: null, byAddress };
 }
+// The Herdr Space that shows each terminal, from one snapshot: exactly one pane shows the
+// address, its tab belongs to exactly one Space, and that Space is on the terminal's own
+// machine. A Space is where a terminal is shown, not proof of project or repository.
+export function spacesByAddress(snapshot) {
+  const out = {};
+  const spaces = (snapshot.spaces ?? []).filter(s => s && validId(s.id));
+  for (const terminal of snapshot.terminals ?? []) {
+    const address = terminal?.address, parts = addressParts(address);
+    if (!parts || Object.hasOwn(out, address)) continue;
+    const panes = (snapshot.panes ?? []).filter(p => p?.terminal === address);
+    if (panes.length !== 1) continue;
+    const owners = spaces.filter(s => (s.tabs ?? []).some(t => t?.id === panes[0].tab));
+    if (owners.length !== 1 || (owners[0].machine ?? null) !== (parts.alias || null)) continue;
+    const space = owners[0];
+    out[address] = { id: space.id, name: validId(space.name) ? space.name : space.id, machine: space.machine ?? null, order: spaces.indexOf(space) };
+  }
+  return out;
+}
 export class Feed {
   constructor() { this.generation = 0; this.fingerprint = null; this.history = []; this.documents = []; }
   update(snapshot, now, evidence = emptyEvidence(), { refresh = false, nativeNavigation = false } = {}) {
@@ -127,6 +145,7 @@ export class Feed {
       return r.presentation === 'pane' ? panes.length === 1
         : r.presentation === 'pane-less' && panes.length === 0;
     });
+    this.spaces = spacesByAddress(snapshot);
     this.navigation = { generation: this.generation, routes,
       ...(nativeNavigation ? { native: nativeTargets(snapshot, this.generation) } : {}) };
     return this;
