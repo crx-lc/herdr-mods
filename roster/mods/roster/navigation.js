@@ -52,6 +52,8 @@ export function actionIntent(reduced, projection, key, evidence = {}, current) {
   const instance = fresh.instances.find(i => i.key === key && i.kind === 'terminal' && i.identity === old.identity);
   if (!instance || instance.contextOnly || instance.outsideFilters.length) return disabled('not-actionable-instance');
   const check = navigationTarget(rows[0], reduced.rows, evidence);
-  return check.enabled ? { enabled: true, reason: null, intent: { type: 'navigate', ...check.target } }
-    : disabled(check.reason);
+  if (!check.enabled) return disabled(check.reason);
+  // The exact target drawn must still be the exact target now.
+  if (!old.navigation?.enabled || tuple(old.navigation.target) !== tuple(check.target)) return disabled('target-changed');
+  return { enabled: true, reason: null, intent: { type: 'navigate', ...check.target } };
 }

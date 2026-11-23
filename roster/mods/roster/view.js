@@ -1,7 +1,7 @@
 import { Controller } from './controller.js';
 import { LayoutOptIn } from './layout.js';
 import { desktopHost, desktopLayoutHost } from './desktop.js';
-import { actionReason, rowContext, detailFields, detailPages, detailLabel, hoverText } from './detail.js';
+import { actionReason, rowContext, detailFields, detailPages, detailLabel, hoverText, reasonText } from './detail.js';
 
 export function timerDeadline(cx, promise) {
   return new Promise((resolve, reject) => {
@@ -208,15 +208,24 @@ export function createRosterView(kit, app, options = {}) {
         const hover = hoverText(i, waiting ? i.display.detail ?? 'Waiting' : status);
         // One compact line per agent: name, machine, known context, badges. Everything
         // unknown or secondary (project, parent, route, reasons) lives in Info/Details.
-        const element = click(i.key, label, () => { if (!this.reader) this.controller.activate(projection, i.key); })
-          .flex_1().min_w(0).h(24).gap(4).tooltip(hover);
+        // Click re-reads the snapshot and focuses only the exact pane drawn; otherwise it
+        // says why. Info and the child fold are sibling controls, never this click.
+        const element = click(i.key, label, cx => {
+          if (this.reader) return;
+          const plan = this.controller.activate(projection, i.key);
+          if (plan.enabled) { if (this.openMessage) this.message = ''; this.openMessage = false; }
+          else { this.message = reasonText(plan.reason); this.openMessage = true; }
+          cx?.notify?.();
+        }).flex_1().min_w(0).h(24).gap(4).tooltip(hover);
+        // Visibly navigable or not: a pointer and full-color name only for a pane Roster can open.
+        if (i.navigation.enabled) element.cursor_pointer(); else element.cursor_default();
         const selected = this.controls.at(-1);
         Object.assign(selected, { rowIndex: index, instance: i, detail: label, hover,
           disabledReason: i.navigation.enabled ? null : explanation });
         // Neutral monogram only for a known project: an "Unassigned" initial says nothing.
         if (context.knownProject) element.child(h().w(16).h(16).flex_none().justify_center().rounded(4).bg(theme.raised)
           .accessibility_label(context.knownProject + ' project icon fallback').child(labelText(Array.from(context.knownProject)[0] ?? '?', 10)));
-        element.child(labelText(row.displayLabel, 12).id('row-name:' + i.key).font_semibold().flex_1());
+        element.child(labelText(row.displayLabel, 12, i.navigation.enabled ? fg : muted).id('row-name:' + i.key).font_semibold().flex_1());
         element.child(labelText(context.machineShort, 10, muted).id('row-machine:' + i.key).flex_none().max_w(84));
         if (context.knownContext) element.child(labelText(context.knownContext, 10, muted).id('row-execution-context:' + i.key).flex_none().max_w(72));
         const stateColor = ({ Working: theme.working, 'Needs you': theme.blocked, 'Child needs you': theme.blocked,

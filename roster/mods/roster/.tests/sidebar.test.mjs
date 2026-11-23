@@ -29,7 +29,9 @@ test('actual main entry defaults passive, captures exactly once, renders labels 
   assert.match(textOf(tree), /▾ Needs you · 1 .*▸ Other · 2$/);
   assert.equal(rows(view.controller.projection).length, 1, 'only the Needs you copy is drawn');
   assert.ok(flatten(tree).some(e => e.attributes.accessibility_label?.[0].includes('Context unknown')));
-  assert.ok(flatten(tree).some(e => e.attributes.tooltip?.[0].includes('unverified'))); assert.doesNotMatch(textOf(tree), /Open unavailable:/); assert.ok(rows(view.controller.projection).every(i => !i.navigation.enabled));
+  // Stock desktop: a local terminal without a pane and a remote terminal say why they cannot open.
+  assert.deepEqual(rows(view.controller.projection).map(i => i.navigation.reason), ['no-pane']);
+  assert.ok(flatten(tree).some(e => e.attributes.tooltip?.[0].replace(/\n/g, ' ').includes('no pane shows this terminal'))); assert.doesNotMatch(textOf(tree), /Open unavailable:/); assert.ok(rows(view.controller.projection).every(i => !i.navigation.enabled));
   assert.ok(view.controller.feed.reduced.rows.every(r => !r.core.verified && r.project.id === null));
   assert.ok(flatten(tree).some(e => e.attributes.accessibility_label?.[0].includes('GitHub')));
   assert.equal(flatten(tree).some(e => /project icon fallback/.test(e.attributes.accessibility_label?.[0] ?? '')), false);

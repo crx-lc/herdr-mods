@@ -2,7 +2,23 @@
 const reasons = { 'unverified-identity': 'Open unavailable: terminal identity is unverified',
   'not-current-live': 'Open unavailable: terminal is stale or absent',
   'missing-or-ambiguous-route-evidence': 'Open unavailable: current route is unverified',
-  'outside-current-filters': 'Outside current filters', 'context-only': 'Context for a child that needs you' };
+  'outside-current-filters': 'Outside current filters', 'context-only': 'Context for a child that needs you',
+  'remote-pane-unsupported': 'Open unavailable: only panes on this computer open from Roster',
+  'no-pane': 'Open unavailable: no pane shows this terminal',
+  'multiple-panes': 'Open unavailable: more than one pane shows this terminal',
+  'pane-tab-unverified': 'Open unavailable: its pane is not in a tab on this computer',
+  'local-layout-not-ready': 'Open unavailable: this computer\'s layout is not ready',
+  'pane-model-invalid': 'Open unavailable: the pane list is inconsistent',
+  'ambiguous-terminal': 'Open unavailable: more than one terminal has this address',
+  'ambiguous-incarnation': 'Open unavailable: more than one terminal has this address',
+  'incarnation-unknown': 'Open unavailable: terminal start time is unknown',
+  'terminal-changed': 'Open unavailable: the terminal changed since the list was drawn',
+  'pane-evidence-stale': 'Not opened: the list changed; try again',
+  'projection-state-changed': 'Not opened: the list changed; try again',
+  'target-changed': 'Not opened: the pane changed; try again',
+  'not-actionable-instance': 'Not opened: this row is no longer in the list',
+  'identity-changed': 'Not opened: the terminal changed; try again' };
+export const reasonText = reason => reasons[reason] ?? ('Open unavailable: ' + reason);
 export function actionReason(instance) {
   return instance.navigation.enabled ? 'Open available' : reasons[instance.navigation.reason]
     ?? ('Open unavailable: ' + instance.navigation.reason);

@@ -3,11 +3,13 @@ import { projectRoster, transition, viewState } from './projection.js';
 import { actionIntent } from './navigation.js';
 import { LocalReader } from './local-reader.js';
 export class Controller {
-  constructor(host, { collapseUnassigned = true } = {}) { this.host = host; this.collapseUnassigned = collapseUnassigned; this.feed = new Feed(); this.state = viewState(); this.cursor = null; this.reader = new LocalReader(host); }
+  constructor(host, { collapseUnassigned = true } = {}) { this.host = host; this.collapseUnassigned = collapseUnassigned; this.feed = new Feed(); this.state = viewState(); this.cursor = null; this.reader = new LocalReader(host);
+    // Only a host that declares it (the stock desktop adapter) offers local pane focus.
+    this.localPaneFocus = host.localPaneFocus === true; }
   observe(refresh = false) {
     const snapshot = capture(this.host);
     const evidence = this.host.evidence ? (snapshot, generation) => this.host.evidence(snapshot, generation) : emptyEvidence();
-    this.feed.update(snapshot, this.host.now(), evidence, { refresh });
+    this.feed.update(snapshot, this.host.now(), evidence, { refresh, localPaneFocus: this.localPaneFocus });
     return this.feed;
   }
   render() {
@@ -22,7 +24,9 @@ export class Controller {
     const plan = actionIntent(this.feed.reduced, projection, key, this.feed.navigation,
       { state: this.state, generation: this.feed.generation, scopes: this.feed.evidence.scopes ?? [],
         repositories: this.feed.evidence.repositories ?? [] });
-    if (plan.enabled) this.host.run(plan.intent.action === 'focus' ? 'pane.focus' : 'terminal.peek', { terminal: plan.intent.address });
+    // A local pane is focused by its exact pane id; verified routes keep the terminal form.
+    if (plan.enabled) this.host.run(plan.intent.action === 'focus' ? 'pane.focus' : 'terminal.peek',
+      plan.intent.scope === 'local-pane' ? { pane: plan.intent.pane } : { terminal: plan.intent.address });
     return plan;
   }
   async refresh(deadline) {
@@ -33,7 +37,7 @@ export class Controller {
     const admitted = await this.reader.refresh(this.feed, this.host.now(), deadline);
     if (admitted) {
       // Same capture and proof, no additional getters; assess fresh text immediately.
-      this.feed.update(this.feed.snapshot, this.host.now(), this.feed.evidence);
+      this.feed.update(this.feed.snapshot, this.host.now(), this.feed.evidence, { localPaneFocus: this.localPaneFocus });
     }
     return admitted;
   }

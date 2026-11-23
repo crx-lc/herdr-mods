@@ -1,4 +1,4 @@
-import { normalizeApp, addressParts } from './normalize.js';
+import { normalizeApp, addressParts, stamp } from './normalize.js';
 import { resolveIdentities } from './identity.js';
 import { enrichMetadata } from './metadata.js';
 import { reduceRoster } from './attention.js';
@@ -40,9 +40,32 @@ function validPanes(panes) {
   return panes.every(p => p && validId(p.pane) && validId(p.tab)
     && (p.terminal === null || !!addressParts(p.terminal)) && !ids.has(p.pane) && !!ids.add(p.pane));
 }
+// Panes on this computer, from the same synchronous snapshot only. A terminal is a
+// candidate when exactly one live terminal has that bare address and exactly one
+// pane in a tab on this computer shows it. Names, folders and titles are never used.
+export function localPanes(snapshot, generation) {
+  const none = unavailable => ({ generation, unavailable, byAddress: {} });
+  const local = snapshot.machines.filter(m => m?.name === null);
+  if (local.length !== 1 || local[0].layout !== 'ready') return none('local-layout-not-ready');
+  if (!validPanes(snapshot.panes)) return none('pane-model-invalid');
+  const tabs = new Set(snapshot.spaces.filter(s => s && (s.machine ?? null) === null)
+    .flatMap(s => (s.tabs ?? []).map(t => t?.id)).filter(id => validId(id) && !id.includes('/')));
+  const byAddress = {};
+  for (const terminal of snapshot.terminals) {
+    const address = terminal?.address;
+    if (typeof address !== 'string' || address.includes('/') || !addressParts(address) || Object.hasOwn(byAddress, address)) continue;
+    const panes = snapshot.panes.filter(p => p.terminal === address);
+    if (!panes.length) continue;
+    const same = snapshot.terminals.filter(t => t?.address === address);
+    const reason = same.length !== 1 ? 'ambiguous-terminal' : terminal.state !== 'live' ? 'not-current-live'
+      : panes.length !== 1 ? 'multiple-panes' : panes[0].pane.includes('/') || !tabs.has(panes[0].tab) ? 'pane-tab-unverified' : null;
+    byAddress[address] = reason ? { reason } : { pane: panes[0].pane, tab: panes[0].tab, incarnation: stamp(terminal.created_ms), generation };
+  }
+  return { generation, unavailable: null, byAddress };
+}
 export class Feed {
   constructor() { this.generation = 0; this.fingerprint = null; this.history = []; this.documents = []; }
-  update(snapshot, now, evidence = emptyEvidence(), { refresh = false } = {}) {
+  update(snapshot, now, evidence = emptyEvidence(), { refresh = false, localPaneFocus = false } = {}) {
     const snapshotFingerprint = JSON.stringify(snapshotFacts(snapshot));
     const snapshotChanged = refresh || snapshotFingerprint !== this.snapshotFingerprint;
     if (snapshotChanged) { this.generation++; this.documents = []; }
@@ -91,7 +114,8 @@ export class Feed {
       return r.presentation === 'pane' ? panes.length === 1
         : r.presentation === 'pane-less' && panes.length === 0;
     });
-    this.navigation = { generation: this.generation, routes };
+    this.navigation = { generation: this.generation, routes,
+      ...(localPaneFocus ? { localPanes: localPanes(snapshot, this.generation) } : {}) };
     return this;
   }
   accept(documents, generation, fingerprint) {
