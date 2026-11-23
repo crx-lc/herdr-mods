@@ -3,7 +3,7 @@ import { emptyEvidence } from './feed.js';
 export function desktopHost(app, deadline) {
   return { terminals: app.terminals, machines: app.machines, panes: app.panes, spaces: app.spaces,
     agents: app.agents, focused: app.focused, now: () => Date.now(), evidence: emptyEvidence,
-    run: (command, args) => app.run(command, args), readTextFile: app.readTextFile, deadline, localPaneFocus: true };
+    run: (command, args) => app.run(command, args), readTextFile: app.readTextFile, deadline, nativeNavigation: true };
 }
 export function desktopLayoutHost(app) {
   const path = name => `${app.appHome()}/layouts/${name}.json`;

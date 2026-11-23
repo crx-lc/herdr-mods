@@ -29,9 +29,10 @@ test('actual main entry defaults passive, captures exactly once, renders labels 
   assert.match(textOf(tree), /▾ Needs you · 1 .*▸ Other · 2$/);
   assert.equal(rows(view.controller.projection).length, 1, 'only the Needs you copy is drawn');
   assert.ok(flatten(tree).some(e => e.attributes.accessibility_label?.[0].includes('Context unknown')));
-  // Stock desktop: a local terminal without a pane and a remote terminal say why they cannot open.
-  assert.deepEqual(rows(view.controller.projection).map(i => i.navigation.reason), ['no-pane']);
-  assert.ok(flatten(tree).some(e => e.attributes.tooltip?.[0].replace(/\n/g, ' ').includes('no pane shows this terminal'))); assert.doesNotMatch(textOf(tree), /Open unavailable:/); assert.ok(rows(view.controller.projection).every(i => !i.navigation.enabled));
+  // Stock desktop navigates natively: a live terminal with no pane would peek, exactly that address.
+  // Rendering offers it; nothing runs until a click.
+  assert.deepEqual(rows(view.controller.projection).map(i => [i.navigation.target?.action, i.navigation.target?.address]), [['peek', 't1']]);
+  assert.doesNotMatch(textOf(tree), /Open unavailable:/);
   assert.ok(view.controller.feed.reduced.rows.every(r => !r.core.verified && r.project.id === null));
   assert.ok(flatten(tree).some(e => e.attributes.accessibility_label?.[0].includes('GitHub')));
   assert.equal(flatten(tree).some(e => /project icon fallback/.test(e.attributes.accessibility_label?.[0] ?? '')), false);
@@ -41,7 +42,10 @@ test('actual main entry defaults passive, captures exactly once, renders labels 
 test('default adapter ignores purported host identity provider and preserves separate aliases', () => {
   const f = fakeHost([terminal('t1'), terminal('edge/t1')]); prove(f.host, { documents: [{ text: '{"producer":{"core":"core-a"}}' }] });
   const c = new Controller(desktopHost(appOf(f.host), p => p), expanded), p = c.render();
-  assert.equal(rows(p).length, 2); assert.ok(c.feed.reduced.rows.every(r => !r.core.verified)); assert.equal(p.order.length, 0);
+  assert.equal(rows(p).length, 2); assert.ok(c.feed.reduced.rows.every(r => !r.core.verified));
+  // Separate aliases stay separate native targets: each peeks its own exact address.
+  assert.deepEqual(p.order.map(o => [o.target.action, o.target.address]).sort(), [['peek', 'edge/t1'], ['peek', 't1']]);
+  assert.equal(f.calls.length, 0);
 });
 
 for (const [address, core, presentation] of [['t1', 'core-a', 'pane'], ['edge/t1', 'core-b', 'pane'], ['t1', 'core-a', 'pane-less'], ['edge/t1', 'core-b', 'pane-less']]) {

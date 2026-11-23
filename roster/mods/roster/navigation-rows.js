@@ -4,9 +4,9 @@ export const rowIdentity = row => tuple(row.terminalKey, row.incarnation);
 
 // Evidence is a current host assertion, not a new App API. It must be invalidated
 // on every acquisition generation, disconnect, alias change or pane change.
-export function navigationTarget(row, rows, { generation = null, routes = [], localPanes = null } = {}) {
+export function navigationTarget(row, rows, { generation = null, routes = [], native = null } = {}) {
   const disabled = reason => ({ enabled: false, reason, target: null });
-  if (!row?.core?.verified && localPanes) return localPaneTarget(row, rows, localPanes, generation);
+  if (!row?.core?.verified && native) return nativeTarget(row, rows, native, generation);
   if (!row?.core?.verified || !row.associationKey) return disabled('unverified-identity');
   if (row.lifecycle !== 'live' || row.freshness !== 'current') return disabled('not-current-live');
   if (rows.filter(r => r.terminalKey === row.terminalKey && r.lifecycle !== 'finished').length !== 1) return disabled('ambiguous-incarnation');
@@ -24,24 +24,25 @@ export function navigationTarget(row, rows, { generation = null, routes = [], lo
     action: e.presentation === 'pane' ? 'focus' : 'peek' } };
 }
 
-// A pane on this computer, without a Core id: the same snapshot must show exactly one
-// live terminal at this bare address, started at this row's incarnation, in exactly
-// one pane of a local tab. Remote rows wait for a verified Core; nothing is guessed.
-function localPaneTarget(row, rows, localPanes, generation) {
+// The host's own model, without a Core id: the same snapshot must show exactly one live
+// terminal at this exact address (local or remote), started at this row's incarnation,
+// in at most one pane on its own machine. A pane focuses; a live pane-less terminal peeks.
+function nativeTarget(row, rows, native, generation) {
   const disabled = reason => ({ enabled: false, reason, target: null });
   const parts = addressParts(row?.address, row?.localAlias);
-  if (!parts || row.address.includes('/') || row.core?.alias !== '') return disabled('remote-pane-unsupported');
+  if (!parts || (parts.alias || '') !== (row.core?.alias ?? '')) return disabled('invalid-route');
   if (row.lifecycle !== 'live' || row.freshness !== 'current') return disabled('not-current-live');
   if (!Number.isSafeInteger(row.incarnation)) return disabled('incarnation-unknown');
   if (rows.filter(r => r.terminalKey === row.terminalKey && r.lifecycle !== 'finished').length !== 1) return disabled('ambiguous-incarnation');
-  if (localPanes.unavailable) return disabled(localPanes.unavailable);
-  const entry = Object.hasOwn(localPanes.byAddress ?? {}, row.address) ? localPanes.byAddress[row.address] : null;
-  if (!entry) return disabled('no-pane');
+  if (native.unavailable) return disabled(native.unavailable);
+  const entry = Object.hasOwn(native.byAddress ?? {}, row.address) ? native.byAddress[row.address] : null;
+  if (!entry) return disabled('not-current-live');
   if (entry.reason) return disabled(entry.reason);
   if (entry.incarnation !== row.incarnation) return disabled('terminal-changed');
-  if (generation == null || entry.generation !== generation || localPanes.generation !== generation) return disabled('pane-evidence-stale');
-  return { enabled: true, reason: null, target: { scope: 'local-pane', coreId: null, terminalId: parts.terminalId,
-    associationKey: null, incarnation: row.incarnation, address: row.address, pane: entry.pane, action: 'focus' } };
+  if (generation == null || entry.generation !== generation || native.generation !== generation) return disabled('pane-evidence-stale');
+  return { enabled: true, reason: null, target: { scope: 'native', coreId: null, terminalId: parts.terminalId,
+    associationKey: null, incarnation: row.incarnation, address: row.address, pane: entry.pane,
+    action: entry.presentation === 'pane' ? 'focus' : 'peek' } };
 }
 
 // Only visible terminal instances enter here. Headers and context rows cannot win.

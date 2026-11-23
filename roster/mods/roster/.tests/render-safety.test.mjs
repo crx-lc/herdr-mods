@@ -12,7 +12,7 @@ function desk() {
     terminal('t3', 'idle', { name: 'keep-b', parent: 't1', created_ms: 200 }), terminal('t4', 'working', { name: 'keep-c' })]);
   f.values.panes = ['t1', 't2', 't3', 't4'].map(t => ({ pane: 'p-' + t, terminal: t, tab: 'tab-' + t }));
   f.values.spaces = ['t1', 't2', 't3', 't4'].map(t => tab('tab-' + t));
-  f.host.localPaneFocus = true; f.host.run = (command, args) => f.calls.push([command, args]);
+  f.host.nativeNavigation = true; f.host.run = (command, args) => f.calls.push([command, args]);
   return f;
 }
 function setup(f) {

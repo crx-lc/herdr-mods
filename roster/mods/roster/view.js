@@ -263,6 +263,9 @@ export function createRosterView(kit, app, options = {}) {
         }).flex_1().min_w(0).h(24).gap(4).tooltip(hover);
         // Visibly navigable or not: a pointer and full-color name only for a pane Roster can open.
         if (i.navigation.enabled) element.cursor_pointer(); else element.cursor_default();
+        // Like the stock list: a hover tint, and the row of the terminal that has focus is marked.
+        element.hover(el => el.bg(theme.hover ?? theme.raised));
+        if (c.cursor !== i.key && c.feed.snapshot?.focused?.terminal === row.address) element.bg(theme.raised);
         const selected = this.controls.at(-1);
         Object.assign(selected, { rowIndex: index, instance: i, detail: label, hover,
           disabledReason: i.navigation.enabled ? null : explanation });
