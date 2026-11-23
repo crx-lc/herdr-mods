@@ -1,7 +1,7 @@
 import { Controller } from './controller.js';
 import { LayoutOptIn } from './layout.js';
 import { desktopHost, desktopLayoutHost } from './desktop.js';
-import { spaceRows, spaceFill } from './spaces.js';
+import { spaceRows, spaceFill, spacePlace, GitIdentities } from './spaces.js';
 import { actionReason, rowContext, detailLabel, hoverText, reasonText, agentFacts } from './detail.js';
 
 // Stock-style working spinner frames, drawn natively by frames().
@@ -33,6 +33,30 @@ export function createRosterView(kit, app, options = {}) {
       if (!app.checking()) cx.spawn(async cx => {
         for (;;) { if (await app.nextCommand() === 'focus') this.focus(cx); }
       });
+      // Git identity for worktree nesting: the stock panel's two read-only rev-parse
+      // queries, probed in the background (never in render, never under check).
+      const exec = options.exec ?? app.exec;
+      if (!app.checking() && typeof exec === 'function' && typeof cx.timer?.every === 'function') {
+        this.git = new GitIdentities({ exec, now: () => this.controller.host.now() });
+        this.machineReady = new Map();
+        cx.timer.every(1000, cx => this.pollGit(cx));
+      }
+    }
+    // Ask about Spaces' folders on ready machines; ask again on reconnect; redraw on answers.
+    pollGit(cx) {
+      if (!this.git || this.controller.state.view !== 'spaces') return;
+      const host = this.controller.host, machines = host.machines(), panes = host.panes();
+      const ready = new Set();
+      for (const m of machines) {
+        const name = m?.name ?? null, now = m?.layout === 'ready';
+        if (now) ready.add(name);
+        if (now && this.machineReady.get(name) === false) this.git.retry(name);
+        this.machineReady.set(name, now);
+      }
+      const places = host.spaces().filter(sp => ready.has(sp?.machine ?? null))
+        .map(sp => ({ machine: sp.machine ?? null, folder: spacePlace(sp, panes) }));
+      this.git.request(places, (ms, fn) => cx.timer.after(ms, fn));
+      if (this.git.takeChanged()) cx.notify();
     }
     focus(cx) { this.handle.focus(); cx.notify(); }
     async layoutAction(operation, cx) {
@@ -130,7 +154,11 @@ export function createRosterView(kit, app, options = {}) {
     renderSpaces(body, theme, { click, change, labelText, h, fg, muted, groupHeader }) {
       const c = this.controller, snapshot = c.feed.snapshot ?? {};
       const colors = typeof app.shared === 'function' ? app.shared('space.colors') ?? {} : {};
-      const rows = spaceRows({ spaces: snapshot.spaces, machines: snapshot.machines }, { colors, folds: c.state.folds });
+      const identityOf = space => this.git?.lookup(space.machine ?? null, spacePlace(space, snapshot.panes)) ?? null;
+      const rows = spaceRows({ spaces: snapshot.spaces, machines: snapshot.machines }, { colors, folds: c.state.folds, identityOf });
+      // The list scrolls by its direct children; count them to find the active row's place.
+      let drawn = 0, activeAt = -1, activeId = null;
+      const add = element => { body.child(element); drawn++; };
       for (const row of rows) {
         if (row.kind === 'machine') {
           // As in the stock list: icon, name, state when not connected, then +, the
@@ -143,26 +171,36 @@ export function createRosterView(kit, app, options = {}) {
             .accessibility_label('New space on ' + row.label)
             .on_click((_e, cx) => { cx.stop_propagation(); if (!this.reader) newSpace(); }).child('+'));
           extras.push(div().id('machine-state:' + row.key).size(6).rounded(3).flex_none().bg(row.ready ? theme.ansi2 ?? theme.working ?? fg : dim));
-          body.child(groupHeader(row.key, row.label + (row.collapsed ? ', folded' : ''), row.label,
+          add(groupHeader(row.key, row.label + (row.collapsed ? ', folded' : ''), row.label,
             change({ type: 'fold', key: row.key, collapsed: !row.collapsed }),
             { icon: row.machine ? 'server' : 'monitor', collapsed: row.collapsed, extras,
               tooltip: row.machine ? row.label + ' · ' + (row.ready ? 'connected' : row.loading ? 'loading' : 'not connected') : row.label }));
-          if (!row.collapsed && row.count === 0 && row.ready) body.child(click('spaces:new:' + (row.machine ?? 'local'), 'New space on ' + row.label, newSpace)
+          if (!row.collapsed && row.count === 0 && row.ready) add(click('spaces:new:' + (row.machine ?? 'local'), 'New space on ' + row.label, newSpace)
             .h(28).flex_none().px(8).gap(7).rounded(7).text_size(12).text_color(dim).cursor_pointer()
             .hover(el => el.bg(theme.hover ?? theme.raised).text_color(fg)).child(icon('plus', 12)).child('New space there'));
           continue;
         }
-        const element = click(row.key, 'Space ' + row.name + (row.machine ? ' on ' + row.machine : '') + (row.active ? ', shown' : ''),
-          () => c.host.run('space.select', { id: row.id })).h(30).flex_none().gap(9).cursor_pointer().tooltip(row.name);
+        const element = click(row.key, 'Space ' + row.name + (row.machine ? ' on ' + row.machine : '') + (row.tree ? ', worktree' : '') + (row.active ? ', shown' : ''),
+          () => c.host.run('space.select', { id: row.id })).h(row.tree ? 28 : 30).flex_none().gap(9).cursor_pointer().tooltip(row.name);
         if (row.active) element.bg(theme.selected ?? theme.raised);
         else element.hover(el => el.bg(theme.hover ?? theme.raised));
-        element.child(h().id('space-avatar:' + row.id).w(18).h(18).flex_none().justify_center().rounded(5).bg(spaceFill(row.color, theme))
-            .child(div().text_size(10.5).font_bold().text_color('#ffffff').child(row.initial)))
-          .child(labelText(row.name, 12, fg).id('space-name:' + row.id).flex_1());
+        // A linked worktree sits indented under its main checkout with a branch mark, as in stock.
+        if (row.tree) element.pl(30).child(icon('branch', 13).id('space-tree:' + row.id).text_color(theme.dim ?? muted));
+        else element.child(h().id('space-avatar:' + row.id).w(18).h(18).flex_none().justify_center().rounded(5).bg(spaceFill(row.color, theme))
+            .child(div().text_size(10.5).font_bold().text_color('#ffffff').child(row.initial)));
+        element.child(labelText(row.name, 12, fg).id('space-name:' + row.id).flex_1());
         if (row.branch) element.child(labelText(row.branch, 11, muted).id('space-branch:' + row.id).flex_none().max_w(110));
-        body.child(element);
+        if (row.active) { activeAt = drawn; activeId = row.id; }
+        add(element);
       }
       if (!rows.length) body.child(labelText('No Spaces', 12, muted).p(6));
+      // As the stock list does: when the active Space or its place changes, ask the list
+      // to bring it into view. A visible row stays put. The one render-time request here:
+      // a scroll request only, no state change and no redraw.
+      if (activeId !== this.revealed?.id || activeAt !== this.revealed?.at) {
+        this.revealed = { id: activeId, at: activeAt };
+        if (activeAt >= 0) this.rowScroll.scroll_to_item(activeAt);
+      }
     }
     renderModal(reader, projection, theme, { labelText, h, v, fg, muted }) {
       const c = this.controller;

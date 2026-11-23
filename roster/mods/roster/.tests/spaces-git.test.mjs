@@ -1,0 +1,159 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createRosterView } from '../view.js';
+import { gitIdentity, GitIdentities, nestWorktrees, spacePlace, spaceRows, GIT_TOP, GIT_COMMON } from '../spaces.js';
+import { fakeHost, terminal, kit, context, appOf, flatten, textOf, layoutHostUnused } from './sidebar-fixtures.mjs';
+
+const ok = stdout => ({ code: 0, stdout, stderr: '' });
+const repo = (top, common = top + '/.git') => ({ status: 'repo', top, common, linked: common !== top + '/.git' });
+
+test('identity is verified only from two clean answers; Git\'s own "no" is none, anything else unsure', () => {
+  assert.deepEqual(gitIdentity(ok('/r/main\n'), ok('/r/main/.git\n')), repo('/r/main'));
+  assert.deepEqual(gitIdentity(ok('/r/wt\n'), ok('/r/main/.git\n')), repo('/r/wt', '/r/main/.git'));
+  assert.deepEqual(gitIdentity({ code: 128, stdout: '', stderr: 'fatal: not a git repository (or any of the parent directories): .git' }, ok('x')), { status: 'none' });
+  for (const [top, common] of [[null, ok('/c')], [{ code: 1, stdout: '', stderr: 'error: cannot run git' }, ok('/c')],
+    [ok(''), ok('/c')], [ok('/a\n/b\n'), ok('/c')], [ok('/a'), ok('/c\u0007')], [ok(42), ok('/c')]])
+    assert.deepEqual(gitIdentity(top, common), { status: 'unsure' });
+});
+
+function prober({ atOnce = 2, answer } = {}) {
+  const calls = [], timers = [], pending = [];
+  let now = 0;
+  const host = { now: () => now, exec: (cmd, args, options) => { calls.push([cmd, args, options]);
+    const r = answer?.(args, options); if (r) return Promise.resolve(r);
+    return new Promise((resolve, reject) => pending.push({ resolve, reject, args, options })); } };
+  const ids = new GitIdentities(host, { atOnce, retryMs: 1000, deadlineMs: 50 });
+  const after = (ms, fn) => timers.push({ ms, fn });
+  return { ids, calls, timers, pending, after, tick: ms => { now += ms; }, settle: () => new Promise(r => setTimeout(r, 0)) };
+}
+
+test('probes run exactly the two read-only queries in the folder on its machine, cached and capped', async () => {
+  const p = prober({ answer: (args, o) => args.includes('--show-toplevel') ? ok(o.cwd + '\n') : ok('/r/main/.git\n') });
+  p.ids.request([{ machine: null, folder: '/r/main' }, { machine: 'edge', folder: '/r/main' }, { machine: null, folder: '/r/main' }, { machine: null, folder: null }], p.after);
+  await p.settle(); await p.settle();
+  assert.deepEqual(p.calls.map(c => [c[0], c[1], c[2].cwd, c[2].on]), [
+    ['git', [...GIT_TOP], '/r/main', null], ['git', [...GIT_COMMON], '/r/main', null],
+    ['git', [...GIT_TOP], '/r/main', 'edge'], ['git', [...GIT_COMMON], '/r/main', 'edge']]);
+  assert.deepEqual(GIT_TOP, ['rev-parse', '--show-toplevel']); assert.deepEqual(GIT_COMMON, ['rev-parse', '--path-format=absolute', '--git-common-dir']);
+  assert.ok(p.calls.every(c => c[2].timeout > 0));
+  assert.equal(p.ids.lookup(null, '/r/main').status, 'repo'); assert.equal(p.ids.lookup('edge', '/r/main').linked, false);
+  assert.equal(p.ids.takeChanged(), true); assert.equal(p.ids.takeChanged(), false);
+  // Cached: asking again runs nothing.
+  p.ids.request([{ machine: null, folder: '/r/main' }], p.after); await p.settle();
+  assert.equal(p.calls.length, 4);
+});
+
+test('a hung probe times out to unsure on the host timer; at most N run at once; unsure retries, none does not', async () => {
+  const p = prober({ atOnce: 2 });
+  p.ids.request(['/a', '/b', '/c'].map(folder => ({ machine: null, folder })), p.after);
+  assert.equal(p.calls.length, 4, 'two places at once, two queries each');
+  assert.equal(p.ids.lookup(null, '/c').status, 'probing', 'flat while probing');
+  p.timers[0].fn(); await p.settle(); await p.settle();
+  assert.equal(p.ids.lookup(null, '/a').status, 'unsure');
+  assert.equal(p.calls.length, 6, 'the next place starts when one ends');
+  // /b: Git says no repo.
+  p.pending.filter(x => x.options.cwd === '/b').forEach(x => x.resolve({ code: 128, stdout: '', stderr: 'fatal: not a git repository' }));
+  await p.settle(); await p.settle();
+  assert.equal(p.ids.lookup(null, '/b').status, 'none');
+  p.ids.request([{ machine: null, folder: '/a' }, { machine: null, folder: '/b' }], p.after);
+  assert.equal(p.calls.length, 6, 'nothing retried before retryMs');
+  p.tick(1500); p.ids.request([{ machine: null, folder: '/a' }, { machine: null, folder: '/b' }], p.after);
+  assert.equal(p.calls.filter(c => c[2].cwd === '/a').length, 4, 'unsure asked again'); assert.equal(p.calls.filter(c => c[2].cwd === '/b').length, 2, 'none is remembered');
+  // A rejected exec (machine unreachable) is unsure too.
+  const q = prober({ answer: () => null }); q.ids.request([{ machine: 'edge', folder: '/x' }], q.after);
+  q.pending[0].reject(Error('unreachable')); await q.settle(); await q.settle();
+  assert.equal(q.ids.lookup('edge', '/x').status, 'unsure');
+  q.ids.retry(null); q.ids.request([{ machine: 'edge', folder: '/x' }], q.after); assert.equal(q.calls.length, 2, 'another machine reconnecting does not retry edge');
+  q.ids.retry('edge'); q.ids.request([{ machine: 'edge', folder: '/x' }], q.after); assert.equal(q.calls.length, 4, 'edge reconnecting retries edge');
+});
+
+const sp = (id, name, extra = {}) => ({ id, name, machine: null, active: false, branch: null, tabs: [{ id: 'tab-' + id }], ...extra });
+test('worktrees nest under the first main checkout with the same verified common dir; saved order otherwise kept', () => {
+  const ids = { main: repo('/r/main'), wt1: repo('/r/wt1', '/r/main/.git'), wt2: repo('/r/wt2', '/r/main/.git'), other: repo('/o'),
+    orphan: repo('/q/wt', '/q/main/.git'), probing: { status: 'probing' }, none: { status: 'none' } };
+  const list = ['wt1', 'other', 'main', 'orphan', 'wt2', 'probing', 'none'].map(id => sp(id, id));
+  const out = nestWorktrees(list, s => ids[s.id]);
+  assert.deepEqual(out.map(r => r.space.id + (r.tree ? ':' + r.tree : '')), ['other', 'main', 'wt1:middle', 'wt2:last', 'orphan', 'probing', 'none']);
+  // Same common dir path on another machine never nests: spaceRows groups by machine first.
+  const rows = spaceRows({ spaces: [sp('m', 'main'), sp('edge/w', 'wt', { machine: 'edge' })], machines: [{ name: null, layout: 'ready' }, { name: 'edge', layout: 'ready' }] },
+    { identityOf: s => s.id === 'm' ? repo('/r/main') : repo('/r/wt', '/r/main/.git') });
+  assert.deepEqual(rows.filter(r => r.kind === 'space').map(r => [r.id, r.tree]), [['m', null], ['edge/w', null]]);
+});
+
+test('a Space\'s place is its first pane\'s live folder, else the folder it was made with', () => {
+  const space = { tabs: [{ id: 'a' }, { id: 'b' }], folder: '/made' };
+  assert.equal(spacePlace(space, [{ tab: 'x', cwd: '/elsewhere' }, { tab: 'b', cwd: '/live' }, { tab: 'a', cwd: '/first' }]), '/live');
+  assert.equal(spacePlace(space, [{ tab: 'a', cwd: null }]), '/made');
+  assert.equal(spacePlace({ tabs: [], folder: '' }, []), null);
+});
+
+function desk() {
+  const f = fakeHost([terminal('t1')]);
+  f.values.machines = [{ name: null, layout: 'ready' }, { name: 'edge', layout: 'loading' }];
+  f.values.spaces = [sp('s-main', 'Main', { active: true }), sp('s-other', 'Other'), sp('s-wt', 'Feature'), sp('edge/s-r', 'Remote', { machine: 'edge' })];
+  f.values.panes = [{ pane: 'p1', terminal: 't1', tab: 'tab-s-main', cwd: '/r/main' }, { pane: 'p2', terminal: null, tab: 'tab-s-wt', cwd: '/r/wt' },
+    { pane: 'p3', terminal: null, tab: 'tab-s-other', cwd: '/o' }, { pane: 'edge/p4', terminal: null, tab: 'tab-edge/s-r', cwd: '/r/main' }];
+  f.host.run = (command, args) => f.calls.push([command, args]);
+  const execs = [], answers = { '/r/main': ['/r/main', '/r/main/.git'], '/r/wt': ['/r/wt', '/r/main/.git'], '/o': ['/o', '/o/.git'] };
+  const exec = (cmd, args, options) => { execs.push([cmd, args, options]);
+    const [top, common] = answers[options.cwd]; return Promise.resolve(ok((args.includes('--show-toplevel') ? top : common) + '\n')); };
+  return { f, exec, execs };
+}
+function view(d, { checking = false, initialView } = {}) {
+  const app = { ...appOf(d.f.host), checking: () => checking };
+  const Type = createRosterView(kit, app, { host: d.f.host, layoutHost: layoutHostUnused, exec: d.exec, ...(initialView ? { initialView } : {}) });
+  const v = new Type(), c = context(); const every = [];
+  c.cx.timer.every = (ms, fn) => every.push({ ms, fn }); c.cx.timer.after = () => {};
+  v.init({}, c.cx);
+  return { v, ...c, every, render: () => v.render(c.cx), poll: () => every.forEach(e => e.fn(c.cx)) };
+}
+const settle = () => new Promise(r => setTimeout(r, 0));
+const byId = (tree, id) => flatten(tree).find(e => e.attributes.id?.[0] === id);
+
+test('the view probes from its timer only, on ready machines, in Spaces; render never runs Git', async () => {
+  const d = desk(), s = view(d);
+  assert.deepEqual(s.every.map(e => e.ms), [1000]);
+  s.render(); s.render(); assert.equal(d.execs.length, 0, 'render runs nothing');
+  s.poll(); await settle(); await settle();
+  assert.deepEqual([...new Set(d.execs.map(e => e[2].cwd + '@' + e[2].on))].sort(), ['/o@null', '/r/main@null', '/r/wt@null'], 'not on the loading machine');
+  assert.ok(d.execs.every(e => e[0] === 'git'));
+  const notifies = s.stats.notify; s.poll(); assert.equal(s.stats.notify, notifies + 1, 'answers ask for one redraw');
+  s.poll(); assert.equal(s.stats.notify, notifies + 1);
+  // Not in agent views, and never under herdr-app check.
+  const quiet = desk(), p = view(quiet, { initialView: 'projects' }); p.poll(); await settle();
+  assert.equal(p.every.length, 1); assert.equal(quiet.execs.length, 0, 'no Git while an agent view is shown');
+  const checked = desk(), k = view(checked, { checking: true }); assert.equal(k.every.length, 0); assert.equal(checked.execs.length, 0);
+});
+
+test('a verified worktree is drawn indented under its main checkout; others stay as they were', async () => {
+  const d = desk(), s = view(d);
+  let tree = s.render();
+  const order = tree => flatten(byId(tree, 'roster-rows')).filter(e => /^space:/.test(e.attributes.id?.[0] ?? '')).map(e => e.attributes.id[0]);
+  assert.deepEqual(order(tree), ['space:s-main', 'space:s-other', 'space:s-wt', 'space:edge/s-r'], 'flat while probing');
+  s.poll(); await settle(); await settle(); tree = s.render();
+  assert.deepEqual(order(tree), ['space:s-main', 'space:s-wt', 'space:s-other', 'space:edge/s-r']);
+  const wt = byId(tree, 'space:s-wt');
+  assert.equal(wt.attributes.h[0], 28); assert.deepEqual(wt.attributes.pl, [30]);
+  assert.equal(byId(wt, 'space-tree:s-wt').attributes.svg[0], 'mods/roster/icons/branch.svg');
+  assert.equal(byId(wt, 'space-avatar:s-wt'), undefined);
+  assert.match(wt.attributes.accessibility_label[0], /Feature, worktree/);
+  assert.equal(byId(tree, 'space-tree:s-other'), undefined, 'its own repository: a regular row');
+  assert.equal(byId(tree, 'space-tree:edge/s-r'), undefined, 'another machine is never nested');
+  assert.deepEqual(d.f.calls, [], 'the saved order is never written');
+});
+
+test('a worktree whose main checkout has no Space stays a regular row', async () => {
+  const d = desk(); d.f.values.spaces = d.f.values.spaces.filter(x => x.id !== 's-main');
+  const s = view(d); s.poll(); await settle(); await settle(); const tree = s.render();
+  assert.equal(byId(tree, 'space-tree:s-wt'), undefined); assert.ok(byId(tree, 'space-avatar:s-wt'));
+});
+
+test('the active Space is brought into view once when it or its place changes', () => {
+  const d = desk(), s = view(d);
+  s.render();
+  assert.deepEqual(s.v.rowScroll.requests, [1], 'header, then Main');
+  s.render(); assert.deepEqual(s.v.rowScroll.requests, [1], 'unchanged: no new request');
+  d.f.values.spaces = d.f.values.spaces.map(x => ({ ...x, active: x.id === 'edge/s-r' })); s.render();
+  assert.deepEqual(s.v.rowScroll.requests, [1, 5], 'machine headers count as rows');
+  const notifies = s.stats.notify; s.render(); assert.equal(s.stats.notify, notifies);
+});
