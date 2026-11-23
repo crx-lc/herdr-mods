@@ -22,7 +22,10 @@ test('actual main entry defaults passive, captures exactly once, renders labels 
     .replace("'herdr'", JSON.stringify(url(Object.keys(app).map(k => `export const ${k} = globalThis.__rosterTestApp.${k};`).join('\n'))))
     .replace("'./view.js'", JSON.stringify(new URL('../view.js', import.meta.url).href));
   const Type = (await import(url(source))).default, view = new Type(), c = context(); view.init({}, c.cx);
-  const tree = view.render(c.cx); checkCounts(f.counts); assert.equal(c.stats.focus, 0); assert.equal(f.calls.length, 0);
+  let tree = view.render(c.cx); checkCounts(f.counts); assert.equal(c.stats.focus, 0); assert.equal(f.calls.length, 0);
+  // The panel starts on Spaces, the first tab; the agent views are one click away.
+  assert.equal(view.controller.state.view, 'spaces'); assert.equal(rows(view.controller.projection).length, 0);
+  view.controller.change({ type: 'view', view: 'projects' }); tree = view.render(c.cx);
   assert.match(textOf(tree), /Planner #12/); assert.match(textOf(tree), /\bGH\b/); assert.doesNotMatch(textOf(tree), /Context unknown/);
   // Production default: Needs you stays open; the Other group starts folded with its count.
   assert.ok(view.controller.projection.instances.filter(i => i.kind === 'section' && i.label === 'Other').every(i => i.collapsed));
@@ -222,7 +225,7 @@ test('compact sidebar keeps a single default toolbar and puts row badges on the 
     const top = byId(tree, 'roster-toolbar');
     assert.equal(top.attributes.h[0], 26);
     assert.ok(top.attributes.flex_row);
-    assert.deepEqual(top.children.flatMap(e => e.attributes.id ?? []), ['mode:projects', 'mode:status', 'tools:toggle']);
+    assert.deepEqual(top.children.flatMap(e => e.attributes.id ?? []), ['mode:spaces', 'mode:projects', 'mode:status', 'tools:toggle']);
     assert.equal(byId(tree, 'roster-options'), undefined);
     const rows = byId(tree, 'roster-rows');
     assert.ok(rows.attributes.flex_1);

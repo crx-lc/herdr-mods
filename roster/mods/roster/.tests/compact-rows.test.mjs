@@ -11,7 +11,8 @@ const byId = (tree, id) => flatten(tree).find(e => e.attributes.id?.[0] === id);
 const sections = p => p.instances.filter(i => i.kind === 'section');
 const terminals = p => p.instances.filter(i => i.kind === 'terminal');
 function viewOf(f) {
-  const Type = createRosterView(kit, appOf(f.host), { host: f.host, layoutHost: layoutHostUnused });
+  // Production defaults for the agent views; only the start tab is set to Projects.
+  const Type = createRosterView(kit, appOf(f.host), { host: f.host, layoutHost: layoutHostUnused, initialView: 'projects' });
   const view = new Type(), c = context(); view.init({}, c.cx); return { view, ...c };
 }
 const world = () => fakeHost([terminal('t1', 'blocked'), terminal('t2', 'working'), terminal('edge/t3', 'idle'),
@@ -48,7 +49,7 @@ test('compact row draws a known context and never a guessed one; tab names stay 
   f.values.spaces = [{ tabs: [{ id: 'tab-a', name: 'Sample project', named: true }, { id: 'tab-b', name: 'Context sample', named: true }] }];
   prove(f.host, { settings: JSON.stringify({ version: 1, projects: [], projectBindings: [], processProviders: [], projectProviders: [], icons: [],
     contexts: [{ coreId: cores[0].id, terminalId: 't1', incarnation: 100, id: 'ctx', label: 'Sample context', source: 'verified' }] }) });
-  const Type = createRosterView(kit, appOf(f.host), { host: f.host, layoutHost: layoutHostUnused, collapseUnassigned: false });
+  const Type = createRosterView(kit, appOf(f.host), { host: f.host, layoutHost: layoutHostUnused, collapseUnassigned: false, initialView: 'projects' });
   const view = new Type(), c = context(); view.init({}, c.cx);
   const tree = view.render(c.cx), p = view.controller.projection;
   const one = terminals(p).find(i => i.row.address === 't1'), two = terminals(p).find(i => i.row.address === 't2');

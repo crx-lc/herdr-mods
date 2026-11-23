@@ -1,6 +1,6 @@
 import { tuple } from './normalize.js';
 import { rowIdentity, navigationTarget } from './navigation-rows.js';
-import { projectRoster, viewState } from './projection.js';
+import { projectRoster, viewState, VIEWS } from './projection.js';
 export { rowIdentity, navigationTarget, navigationOrder, moveCursor } from './navigation-rows.js';
 
 // Action state is JSON-shaped caller evidence, not a UI-default request.
@@ -19,7 +19,7 @@ function validActionState(state) {
     const entries = dataEntries(state);
     if (!entries) return false;
     return entries.every(([key, value]) => {
-      if (key === 'view') return value === 'projects' || value === 'status';
+      if (key === 'view') return VIEWS.includes(value);
       if (key === 'coreIds' || key === 'contextIds') {
         if (value === null) return true;
         if (!Array.isArray(value)) return false;

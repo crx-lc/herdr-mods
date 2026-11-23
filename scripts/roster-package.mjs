@@ -10,7 +10,7 @@ export const SHIPPING = Object.freeze([
   'MODULES.md', 'README.md', 'attention.js', 'controller.js', 'delegations.js',
   'desktop.js', 'detail.js', 'feed.js', 'icons.js', 'identity.js', 'layout.js', 'local-reader.js',
   'main.js', 'metadata.js', 'mod.json', 'navigation-rows.js', 'navigation.js',
-  'normalize.js', 'projection.js', 'settings.js', 'view.js',
+  'normalize.js', 'projection.js', 'settings.js', 'spaces.js', 'view.js',
 ].sort());
 const omitted = new Set(['.tests', '.cache', '.backups', 'gpui-kit.d.ts', 'herdr.d.ts', 'jsconfig.json']);
 const native = new Set(['herdr', 'gpui-kit', 'gpui-base']);

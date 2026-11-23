@@ -17,7 +17,7 @@ function desk() {
 }
 function setup(f) {
   // Production defaults: Other starts folded, so the test opens it like a person would.
-  const Type = createRosterView(kit, appOf(f.host), { host: f.host, layoutHost: layoutHostUnused });
+  const Type = createRosterView(kit, appOf(f.host), { host: f.host, layoutHost: layoutHostUnused, initialView: 'projects' });
   const view = new Type(), c = context(); view.init({}, c.cx);
   let tree = view.render(c.cx);
   const other = view.controller.projection.instances.find(i => i.kind === 'section' && i.label === 'Other');

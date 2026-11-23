@@ -3,7 +3,7 @@ import { projectRoster, transition, viewState } from './projection.js';
 import { actionIntent } from './navigation.js';
 import { LocalReader } from './local-reader.js';
 export class Controller {
-  constructor(host, { collapseUnassigned = true } = {}) { this.host = host; this.collapseUnassigned = collapseUnassigned; this.feed = new Feed(); this.state = viewState(); this.cursor = null; this.reader = new LocalReader(host);
+  constructor(host, { collapseUnassigned = true, initialView = 'projects' } = {}) { this.host = host; this.collapseUnassigned = collapseUnassigned; this.feed = new Feed(); this.state = viewState({ view: initialView }); this.cursor = null; this.reader = new LocalReader(host);
     // Only a host that declares it (the stock desktop adapter) navigates natively.
     this.nativeNavigation = host.nativeNavigation === true; }
   observe(refresh = false) {

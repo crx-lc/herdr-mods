@@ -1,6 +1,7 @@
 import { Controller } from './controller.js';
 import { LayoutOptIn } from './layout.js';
 import { desktopHost, desktopLayoutHost } from './desktop.js';
+import { spaceRows, spaceFill } from './spaces.js';
 import { actionReason, rowContext, detailFields, detailPages, detailLabel, hoverText, reasonText } from './detail.js';
 
 // Stock-style working spinner frames, drawn natively by frames().
@@ -19,7 +20,9 @@ export function createRosterView(kit, app, options = {}) {
       this.handle = cx.focus_handle();
       this.rowScroll = ScrollHandle.new();
       this.optionsScroll = ScrollHandle.new();
-      this.controller = new Controller(options.host ?? desktopHost(app), { collapseUnassigned: options.collapseUnassigned ?? true });
+      this.controller = new Controller(options.host ?? desktopHost(app), { collapseUnassigned: options.collapseUnassigned ?? true,
+        // Spaces is the first tab and where the panel starts: daily navigation.
+        initialView: options.initialView ?? 'spaces' });
       this.optIn = new LayoutOptIn(options.layoutHost ?? desktopLayoutHost(app));
       this.reader = null; this.readerControls = [];
       this.controls = []; this.message = ''; this.selection = null; this.reading = false; this.toolsOpen = false;
@@ -127,6 +130,32 @@ export function createRosterView(kit, app, options = {}) {
       }
       cx.notify();
     }
+    // Herdr's Spaces, in the stock list's order and look. A click selects the Space natively.
+    renderSpaces(body, theme, { click, change, labelText, h, fg, muted }) {
+      const c = this.controller, snapshot = c.feed.snapshot ?? {};
+      const colors = typeof app.shared === 'function' ? app.shared('space.colors') ?? {} : {};
+      const rows = spaceRows({ spaces: snapshot.spaces, machines: snapshot.machines }, { colors, folds: c.state.folds });
+      for (const row of rows) {
+        if (row.kind === 'machine') {
+          const header = click(row.key, (row.collapsed ? 'Show ' : 'Hide ') + row.label + ' Spaces', change({ type: 'fold', key: row.key, collapsed: !row.collapsed }))
+            .h(26).flex_none().gap(6).tooltip(row.label + (row.ready ? '' : row.loading ? ' · loading' : ' · not connected')).text_size(11).text_color(muted);
+          header.child(labelText((row.collapsed ? '▸ ' : '▾ ') + row.label + (row.collapsed ? ' · ' + row.count : ''), 11, muted).flex_1())
+            .child(div().id('machine-state:' + row.key).flex_none().text_size(9).text_color(row.ready ? theme.ansi2 ?? theme.working ?? fg : muted).child('●'));
+          body.child(header);
+          continue;
+        }
+        const element = click(row.key, 'Space ' + row.name + (row.machine ? ' on ' + row.machine : '') + (row.active ? ', shown' : ''),
+          () => c.host.run('space.select', { id: row.id })).h(30).flex_none().gap(9).cursor_pointer().tooltip(row.name);
+        if (row.active) element.bg(theme.selected ?? theme.raised);
+        else element.hover(el => el.bg(theme.hover ?? theme.raised));
+        element.child(h().id('space-avatar:' + row.id).w(18).h(18).flex_none().justify_center().rounded(5).bg(spaceFill(row.color, theme))
+            .child(div().text_size(10.5).font_bold().text_color('#ffffff').child(row.initial)))
+          .child(labelText(row.name, 12, fg).id('space-name:' + row.id).flex_1());
+        if (row.branch) element.child(labelText(row.branch, 11, muted).id('space-branch:' + row.id).flex_none().max_w(110));
+        body.child(element);
+      }
+      if (!rows.length) body.child(labelText('No Spaces', 12, muted).p(6));
+    }
     renderDetails(root, theme, cx, reader) {
       const { div, h_flex, v_flex } = kit, page = reader.pages[reader.page];
       const fg = theme.foreground ?? theme.text;
@@ -184,7 +213,8 @@ export function createRosterView(kit, app, options = {}) {
       const root = v().id('roster').size_full().p(5).gap(3).bg(theme.surface).text_color(fg).text_size(12)
         .track_focus(this.handle).on_key_down((e, cx) => this.key(e, cx));
       const toolbar = h().id('roster-toolbar').h(26).flex_none().gap(3);
-      toolbar.child(button('mode:projects', 'Projects', change({ type: 'view', view: 'projects' }), { active: viewMode === 'projects' }))
+      toolbar.child(button('mode:spaces', 'Spaces', change({ type: 'view', view: 'spaces' }), { active: viewMode === 'spaces' }))
+        .child(button('mode:projects', 'Projects', change({ type: 'view', view: 'projects' }), { active: viewMode === 'projects' }))
         .child(button('mode:status', 'Status', change({ type: 'view', view: 'status' }), { active: viewMode === 'status' }))
         .child(div().flex_1().min_w(0));
       const settingsOpen = this.toolsOpen;
@@ -304,7 +334,8 @@ export function createRosterView(kit, app, options = {}) {
         }
         body.child(line);
       }
-      if (!projection.instances.length) body.child(labelText('No observed terminals', 12, muted).p(6));
+      if (viewMode === 'spaces') this.renderSpaces(body, theme, { click, change, labelText, h, fg, muted });
+      else if (!projection.instances.length) body.child(labelText('No observed terminals', 12, muted).p(6));
       root.child(body);
       if (this.message) root.child(labelText(this.message, 11, muted).id('roster-message').h(16).flex_none()
         .tooltip(this.message).accessibility_label(this.message));

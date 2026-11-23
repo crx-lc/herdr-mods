@@ -7,15 +7,17 @@ const distinct = rows => [...new Map(rows.map(r => [rowIdentity(r), r])).values(
 const current = r => r.lifecycle === 'live' && r.freshness === 'current';
 const finished = r => r.lifecycle === 'finished';
 
+// Spaces lists Herdr's Spaces (spaces.js); Projects and Status list agents.
+export const VIEWS = Object.freeze(['spaces', 'projects', 'status']);
 export function viewState(input = {}) {
-  return { view: input.view === 'status' ? 'status' : 'projects',
+  return { view: VIEWS.includes(input.view) ? input.view : 'projects',
     coreIds: input.coreIds == null ? null : [...new Set(input.coreIds)].sort((a, b) => compare(tuple(a), tuple(b))),
     contextIds: input.contextIds == null ? null : [...new Set(input.contextIds)].sort((a, b) => compare(tuple(a), tuple(b))),
     folds: Object.fromEntries(Object.entries(input.folds ?? {}).filter(([, v]) => typeof v === 'boolean').sort(([a], [b]) => compare(a, b))) };
 }
 export function transition(state, event) {
   const next = viewState(state);
-  if (event?.type === 'view') next.view = event.view === 'status' ? 'status' : 'projects';
+  if (event?.type === 'view') next.view = VIEWS.includes(event.view) ? event.view : 'projects';
   if (event?.type === 'filters') {
     if (Object.hasOwn(event, 'coreIds')) next.coreIds = event.coreIds;
     if (Object.hasOwn(event, 'contextIds')) next.contextIds = event.contextIds;
@@ -114,12 +116,15 @@ export function projectRoster(reduced, inputState = {}, { scopes = [], repositor
     return key;
   }
   // Global actionable targets are independent of both filters and every fold.
-  const attention = rows.filter(r => r.roster.actionable);
+  // Spaces is navigation through Herdr's own Spaces, not another agent grouping.
+  const attention = state.view === 'spaces' ? [] : rows.filter(r => r.roster.actionable);
   if (attention.length) {
     instances.push({ kind: 'section', key: tuple(state.view, 'attention'), label: 'Needs you', depth: 0, collapsed: false, counts: counts(attention) });
     for (const row of attention) terminal(row, ['attention'], 1);
   }
-  if (state.view === 'status') {
+  if (state.view === 'spaces') {
+    // No agent rows here.
+  } else if (state.view === 'status') {
     for (const label of ['Child needs you', 'Working', 'Done', 'Idle', 'Offline', 'Stale', 'Unknown']) {
       const members = filtered.filter(r => status(r) === label && !r.roster.actionable);
       if (!members.length) continue;

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 // Behavior tests below predate default-collapsed Unassigned/Unknown groups; they opt out.
-export const expanded = { collapseUnassigned: false };
+export const expanded = { collapseUnassigned: false, initialView: 'projects' };
 export const run = '11111111-1111-4111-8111-111111111111';
 export const terminal = (address, status = 'working', extra = {}) => ({ address, state: 'live', status, created_ms: 100,
   pid: 100, argv: ['codex-auto'], keep: false, parent: null, labels: {}, ...extra });
@@ -37,7 +37,7 @@ export class Element {
   constructor() { this.children = []; this.attributes = {}; }
   child(v) { this.children.push(v); return this; }
 }
-for (const name of ['flex', 'flex_col', 'flex_row', 'gap', 'p', 'pl', 'w', 'h', 'id', 'text_size', 'bg', 'text_color', 'size_full', 'flex_1', 'overflow_y_scrollbar', 'track_focus', 'on_key_down', 'on_click', 'accessibility_label', 'tooltip', 'items_center', 'min_w', 'min_h', 'max_h', 'max_w', 'px', 'rounded', 'flex_none', 'truncate', 'font_semibold', 'justify_center', 'track_scroll', 'cursor_pointer', 'cursor_default', 'frames', 'hover', 'border', 'border_color', 'py', 'w_full', 'whitespace_normal', 'line_height']) {
+for (const name of ['flex', 'flex_col', 'flex_row', 'gap', 'p', 'pl', 'w', 'h', 'id', 'text_size', 'bg', 'text_color', 'size_full', 'flex_1', 'overflow_y_scrollbar', 'track_focus', 'on_key_down', 'on_click', 'accessibility_label', 'tooltip', 'items_center', 'min_w', 'min_h', 'max_h', 'max_w', 'px', 'rounded', 'flex_none', 'truncate', 'font_semibold', 'justify_center', 'track_scroll', 'cursor_pointer', 'cursor_default', 'frames', 'hover', 'font_bold', 'border', 'border_color', 'py', 'w_full', 'whitespace_normal', 'line_height']) {
   Element.prototype[name] = function (...args) { this.attributes[name] = args; return this; };
 }
 // Like GPUI: cx.notify() during render throws ("not allowed during the `render` phase").
