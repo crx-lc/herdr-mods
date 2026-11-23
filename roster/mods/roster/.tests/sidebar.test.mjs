@@ -269,7 +269,8 @@ test('350px vertical budget retains multiple rows with Options, selection and a 
     view.controller.change({ type: 'view', view: mode }); view.toolsOpen = open;
     view.message = 'Sample layout result'; view.controller.cursor = 'mode:projects';
     const tree = view.render(cx), body = flatten(tree).find(e => e.attributes.id?.[0] === 'roster-rows');
-    const fixedHeight = tree.children.filter(e => e !== body).reduce((sum, e) => sum + (e.attributes.h?.[0] ?? e.attributes.max_h?.[0] ?? 350), 0);
+    const stack = flatten(tree).find(e => e.attributes.id?.[0] === 'roster-stack'); assert.ok(stack.children.includes(body));
+    const fixedHeight = tree.children.filter(e => e !== stack).reduce((sum, e) => sum + (e.attributes.h?.[0] ?? e.attributes.max_h?.[0] ?? 350), 0);
     const available = 350 - 2 * tree.attributes.p[0] - (tree.children.length - 1) * tree.attributes.gap[0] - fixedHeight;
     // Two 64px rows plus a 24px group and intervening gaps, also at zoom 1.1.
     assert.ok(available - (350 - 350 / 1.1) >= 2 * 64 + 24 + 2 * 3, `only ${available}px left in ${mode}, options=${open}`);

@@ -2,7 +2,7 @@ import { Controller } from './controller.js';
 import { LayoutOptIn } from './layout.js';
 import { desktopHost, desktopLayoutHost } from './desktop.js';
 import { spaceRows, spaceFill } from './spaces.js';
-import { actionReason, rowContext, detailFields, detailPages, detailLabel, hoverText, reasonText } from './detail.js';
+import { actionReason, rowContext, detailLabel, hoverText, reasonText, agentFacts } from './detail.js';
 
 // Stock-style working spinner frames, drawn natively by frames().
 export const WORKING_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
@@ -54,52 +54,46 @@ export function createRosterView(kit, app, options = {}) {
       const reader = this.reader;
       return reader && reader.state === JSON.stringify(this.controller.state) && reader.toolsOpen === this.toolsOpen ? reader : null;
     }
+    // Agent details open as a compact modal over the list. The list stays mounted under
+    // it, so its scroll position and expanded groups never change.
     openDetails(control, cx) {
       if (!control?.instance) return;
-      const fields = detailFields(control.instance);
-      this.reader = { sourceKey: control.instance.key, returnKey: control.key, fields,
-        pages: detailPages(fields), page: 0, state: JSON.stringify(this.controller.state), toolsOpen: this.toolsOpen };
-      this.readerCursor = 'details:next';
-      // Discard normal callbacks immediately, before the next render/key event.
-      this.controls = []; this.readerControls = [];
+      this.reader = { sourceKey: control.instance.key, returnKey: control.key,
+        state: JSON.stringify(this.controller.state), toolsOpen: this.toolsOpen, technical: false };
+      this.readerCursor = null; this.readerControls = [];
       cx.notify();
     }
     closeDetails(cx, returnToOrigin = true) {
       const reader = this.reader;
       if (!reader) return;
-      this.reader = null; this.readerControls = []; this.controls = [];
-      if (returnToOrigin) this.returnTo(reader);
+      this.reader = null; this.readerControls = [];
+      // Esc/× keep the list's controls; a view, filter or Options change makes them stale.
+      if (returnToOrigin) this.returnTo(reader); else this.controls = [];
       cx.notify();
     }
-    // Back/Esc: put the cursor back on the exact originating control if its instance is
-    // still listed, and scroll to it; otherwise select Projects. Decided now, not in render.
+    // Esc or ×: the cursor goes back to the exact control the modal was opened from, on the
+    // same row, if that row is still listed; otherwise to Projects. No scrolling.
     returnTo(reader) {
       const c = this.controller, projection = c.render();
-      const index = projection.instances.findIndex(i => i.kind === 'terminal' && i.key === reader.sourceKey);
-      if (index < 0) { this.place('mode:projects'); return; }
-      const instance = projection.instances[index];
+      const instance = projection.instances.find(i => i.kind === 'terminal' && i.key === reader.sourceKey);
+      if (!instance) { this.place('mode:projects'); return; }
       const parent = c.feed.reduced.rows.some(r => r.parent?.associationKey && r.parent.associationKey === instance.row.associationKey);
       const key = reader.returnKey === 'fold:' + reader.sourceKey && !parent ? reader.sourceKey : reader.returnKey;
       if (key === 'details:open') this.footerSourceKey = reader.sourceKey;
       c.cursor = key; this.cursorAt = { key, index: null };
-      this.rowScroll.scroll_to_item(index);
-    }
-    pageDetails(direction, cx) {
-      const reader = this.reader;
-      if (!reader) return;
-      reader.page = direction === 'first' ? 0 : direction === 'last' ? reader.pages.length - 1
-        : Math.max(0, Math.min(reader.pages.length - 1, reader.page + direction));
-      cx.notify();
     }
     key(event, cx) {
       const chord = event.keystroke;
       // Details left over from a changed view are dropped here, in the event, not in render.
       if (this.reader && !this.activeReader()) { this.reader = null; this.readerControls = []; }
       if (this.reader) {
+        const controls = this.readerControls, at = controls.findIndex(i => i.key === this.readerCursor);
         if (chord === 'escape') this.closeDetails(cx);
-        else if (['left', 'up', 'right', 'down', 'home', 'end'].includes(chord))
-          this.pageDetails(chord === 'home' ? 'first' : chord === 'end' ? 'last' : ['left', 'up'].includes(chord) ? -1 : 1, cx);
-        else if (chord === 'enter') this.readerControls.find(i => i.key === this.readerCursor)?.activate(cx);
+        else if (['up', 'down', 'left', 'right'].includes(chord) && controls.length) {
+          const step = ['up', 'left'].includes(chord) ? -1 : 1;
+          this.readerCursor = controls[at < 0 ? (step > 0 ? 0 : controls.length - 1) : (at + step + controls.length) % controls.length].key;
+          cx.notify();
+        } else if (chord === 'enter') (at < 0 ? controls[0] : controls[at])?.activate(cx);
         else return;
         cx.stop_propagation();
         return;
@@ -156,33 +150,46 @@ export function createRosterView(kit, app, options = {}) {
       }
       if (!rows.length) body.child(labelText('No Spaces', 12, muted).p(6));
     }
-    renderDetails(root, theme, cx, reader) {
-      const { div, h_flex, v_flex } = kit, page = reader.pages[reader.page];
-      const fg = theme.foreground ?? theme.text;
-      this.controls = []; this.readerControls = [];
-      const button = (key, text, activate, disabled = false) => {
-        this.readerControls.push({ key, activate: disabled ? () => {} : activate });
-        return h_flex().id(key).h(24).flex_none().px(6).items_center().rounded(4)
-          .bg(this.readerCursor === key ? theme.selected ?? theme.raised : theme.surface)
-          .accessibility_label(text + (disabled ? ' (end reached)' : '')).on_click((_e, cx) => {
-            this.readerCursor = key; this.focus(cx); if (!disabled) activate(cx);
-          }).child(div().text_size(12).text_color(disabled ? theme.muted ?? fg : fg).child(text));
+    renderModal(reader, projection, theme, { labelText, h, v, fg, muted }) {
+      const c = this.controller;
+      this.readerControls = [];
+      const control = (key, label, text, activate, color = fg) => {
+        this.readerControls.push({ key, label, activate });
+        return h().id(key).h(22).flex_none().px(6).rounded(4).accessibility_label(label).tooltip(label)
+          .bg(this.readerCursor === key ? theme.selected ?? theme.raised : theme.raised ?? theme.surface)
+          .hover(el => el.bg(theme.hover ?? theme.selected ?? theme.surface))
+          .on_click((_e, cx) => { this.readerCursor = key; this.focus(cx); activate(cx); })
+          .child(labelText(text, 12, color));
       };
-      const readerView = v_flex().id('roster-details').flex_1().min_h(0).gap(4);
-      readerView.child(h_flex().h(24).flex_none().gap(4)
-        .child(button('details:back', 'Back (Esc)', cx => this.closeDetails(cx)))
-        .child(div().text_size(12).child('Details at opening')));
-      readerView.child(div().h(18).flex_none().text_size(12).child(page.label));
-      readerView.child(div().h(18).flex_none().text_size(11)
-        .child('Page ' + (reader.page + 1) + '/' + reader.pages.length + ' · field ' + page.fieldPage + '/' + page.fieldPages));
-      // Fresh literal text, definite width from both sides of the stretch container.
-      // No truncated helper or clipping ancestor: only the active bounded page exists.
-      readerView.child(div().id('roster-detail-value').w_full().flex_none().whitespace_normal()
-        .text_size(12).line_height(1.25).text_color(fg).child(page.text));
-      readerView.child(h_flex().h(24).flex_none().gap(4)
-        .child(button('details:previous', 'Previous', cx => this.pageDetails(-1, cx), reader.page === 0))
-        .child(button('details:next', 'Next', cx => this.pageDetails(1, cx), reader.page === reader.pages.length - 1)));
-      return root.child(readerView);
+      const box = v().id('roster-details').absolute().top(0).left(0).right(0).p(8).gap(3).rounded(8)
+        .bg(theme.raised ?? theme.surface).border(1).border_color(theme.border ?? muted).accessibility_label('Agent details');
+      box.child(h().h(22).flex_none().gap(6)
+        .child(labelText('Agent details', 12, fg).font_semibold().flex_1())
+        .child(control('details:close', 'Close agent details (Esc)', '×', cx => this.closeDetails(cx))));
+      const instance = projection.instances.find(i => i.kind === 'terminal' && i.key === reader.sourceKey);
+      if (!instance) return box.child(labelText('This agent is no longer listed.', 12, muted));
+      const facts = agentFacts(instance, { snapshot: c.feed.snapshot ?? {}, rows: c.feed.reduced.rows,
+        home: typeof app.home === 'function' ? app.home() : null });
+      // Label and full value; values wrap and are never cut.
+      const line = (field, size = 12, color = fg) => {
+        const value = field.href
+          ? control('details:link', 'Open ' + field.label + ' ' + field.value, field.value, cx => cx.open_url(field.href), theme.accent ?? fg)
+          : div().min_w(0).flex_1().whitespace_normal().text_size(size).text_color(color).child(field.value);
+        return h().id('detail:' + field.id).min_h(18).flex_none().gap(6).items_start()
+          .child(div().w(92).flex_none().text_size(11).text_color(muted).child(field.label)).child(value);
+      };
+      for (const field of facts.fields) box.child(line(field));
+      // The terminal action passes the same click-time check as the row.
+      if (instance.navigation.enabled) box.child(control('details:go', 'Go to terminal: ' + instance.row.displayLabel, 'Go to terminal', cx => {
+        const plan = c.activate(projection, instance.key);
+        if (plan.enabled) this.closeDetails(cx, false);
+        else { this.message = reasonText(plan.reason); this.openMessage = true; cx.notify(); }
+      }));
+      else box.child(labelText(actionReason(instance), 11, muted).id('details:unavailable').whitespace_normal());
+      box.child(control('details:technical', (reader.technical ? 'Hide' : 'Show') + ' technical details',
+        (reader.technical ? '▾ ' : '▸ ') + 'Technical details', cx => { reader.technical = !reader.technical; cx.notify(); }, muted));
+      if (reader.technical) for (const field of facts.technical) box.child(line(field, 11, muted));
+      return box;
     }
     render(cx) {
       const projection = this.controller.render(), theme = app.theme(), props = app.props();
@@ -208,7 +215,8 @@ export function createRosterView(kit, app, options = {}) {
         if (active) content.font_semibold();
         return element.child(content);
       };
-      const change = event => cx => { this.closeDetails(cx, false); c.change(event); cx.notify(); };
+      // A state change discards the old callbacks until the next render draws new ones.
+      const change = event => cx => { this.closeDetails(cx, false); this.controls = []; c.change(event); cx.notify(); };
       const viewMode = c.state.view;
       const root = v().id('roster').size_full().p(5).gap(3).bg(theme.surface).text_color(fg).text_size(12)
         .track_focus(this.handle).on_key_down((e, cx) => this.key(e, cx));
@@ -220,14 +228,13 @@ export function createRosterView(kit, app, options = {}) {
       const settingsOpen = this.toolsOpen;
       const filtered = c.state.coreIds !== null || c.state.contextIds !== null;
       toolbar.child(button('tools:toggle', (settingsOpen ? 'Hide' : 'Show') + ' filters and Agents slot controls' + (filtered ? ' (filters active)' : ''),
-        cx => { this.closeDetails(cx, false); this.toolsOpen = !this.toolsOpen; cx.notify(); }, { active: settingsOpen || filtered, text: filtered ? 'Options •' : 'Options' }));
+        cx => { this.closeDetails(cx, false); this.controls = []; this.toolsOpen = !this.toolsOpen; cx.notify(); }, { active: settingsOpen || filtered, text: filtered ? 'Options •' : 'Options' }));
       root.child(toolbar);
       if (!this.reading && this.controller.feed.evidence.admissions?.length) {
         this.reading = true;
         cx.spawn(async cx => { try { if (await this.controller.refresh(p => timerDeadline(cx, p))) cx.notify(); } finally { this.reading = false; } });
       }
       const reader = this.activeReader();
-      if (reader) return this.renderDetails(root, theme, cx, reader);
       if (settingsOpen) {
         const tools = v().id('roster-options').min_h(0).flex_none().gap(2).overflow_y_scrollbar().track_scroll(this.optionsScroll);
         let optionIndex = 0;
@@ -321,9 +328,13 @@ export function createRosterView(kit, app, options = {}) {
         if (statusView && waiting) element.child(badge('◈ Waiting', theme.accent ?? muted).id('row-waiting:' + i.key)
           .accessibility_label('Waiting for delegate').tooltip('Waiting for delegate'));
         else if (!(statusView && !i.display.error && section?.label === i.status)) element.child(badge(status, stateColor));
-        const line = h().h(24).flex_none().min_w(0).gap(2).pl(Math.min(i.depth, 3) * 8).child(element);
-        const info = button('info:' + i.key, 'Details for ' + row.displayLabel,
-          cx => this.openDetails({ key: 'info:' + i.key, instance: i }, cx), { text: 'Info' }).px(0).w(30);
+        const line = h().id('line:' + i.key).h(24).flex_none().min_w(0).gap(2).pl(Math.min(i.depth, 3) * 8).child(element)
+          .on_hover((on, cx) => { if (on) this.hoverKey = i.key; else if (this.hoverKey === i.key) this.hoverKey = null; cx.notify(); });
+        // A discreet ⓘ, drawn on hover or keyboard focus; its place is always reserved.
+        const infoShown = this.hoverKey === i.key || [i.key, 'info:' + i.key].includes(c.cursor) || reader?.sourceKey === i.key;
+        const info = click('info:' + i.key, 'Agent details for ' + row.displayLabel, cx => this.openDetails({ key: 'info:' + i.key, instance: i }, cx))
+          .w(18).h(24).flex_none().px(0).justify_center().tooltip('Agent details')
+          .child(labelText(infoShown ? 'ⓘ' : '', 12, muted).id('info-glyph:' + i.key));
         Object.assign(this.controls.at(-1), { rowIndex: index, instance: i, detail: label, hover, disabledReason: selected.disabledReason });
         line.child(info);
         if (parents.has(row.associationKey)) {
@@ -336,7 +347,10 @@ export function createRosterView(kit, app, options = {}) {
       }
       if (viewMode === 'spaces') this.renderSpaces(body, theme, { click, change, labelText, h, fg, muted });
       else if (!projection.instances.length) body.child(labelText('No observed terminals', 12, muted).p(6));
-      root.child(body);
+      // The modal lies over the list; the list underneath keeps its scroll and folds.
+      const stack = v().id('roster-stack').relative().flex_1().min_h(0).child(body);
+      if (reader) stack.child(this.renderModal(reader, projection, theme, { labelText, h, v, fg, muted }));
+      root.child(stack);
       if (this.message) root.child(labelText(this.message, 11, muted).id('roster-message').h(16).flex_none()
         .tooltip(this.message).accessibility_label(this.message));
       const footerOwner = this.controls.find(control => control.key === c.cursor)

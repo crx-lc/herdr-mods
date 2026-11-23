@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { detailPages, detailFields } from '../detail.js';
+import { detailFields } from '../detail.js';
 import { createRosterView } from '../view.js';
 import { fakeHost, terminal, kit, context, appOf, flatten, textOf, layoutHostUnused, expanded } from './sidebar-fixtures.mjs';
 const byId = (tree, id) => flatten(tree).find(e => e.attributes.id?.[0] === id);
@@ -35,62 +35,19 @@ test('Back/Esc keep exact duplicate instance; a later state change never drags t
     let tree = s.render(); s.click(tree, 'info:' + origin.key); tree = s.render();
     s.f.values.terminals.splice(1, 1); s.render(); // disappear then reappear before return
     s.f.values.terminals.push(terminal('t2', 'blocked', { name: 'Sample' })); s.render();
-    if (close === 'escape') s.key('escape'); else s.click(tree, 'details:back');
-    s.key('enter'); s.render();
+    const scrolls = s.view.rowScroll.requests.length;
+    if (close === 'escape') s.key('escape'); else s.click(tree, 'details:close');
+    s.render();
     assert.equal(s.view.controller.cursor, 'info:' + origin.key);
-    assert.equal(s.view.rowScroll.requests.at(-1), s.view.controls.find(c => c.key === 'info:' + origin.key).rowIndex);
+    assert.equal(s.view.rowScroll.requests.length, scrolls, 'closing the modal never scrolls the list');
+    // Enter on that ⓘ reopens the same row's details, never a terminal action.
+    s.key('enter'); assert.equal(s.view.reader.sourceKey, origin.key); s.key('escape'); s.render();
   }
   s.view.controller.cursor = rows[0].key; s.key('d'); s.render();
   s.key('escape'); assert.equal(s.view.controller.cursor, rows[0].key);
   s.view.controller.change({ type: 'view', view: 'status' }); s.render();
   assert.equal(s.view.controller.cursor, rows[0].key, 'render leaves the cursor alone');
   assert.equal(s.view.reader, null); assert.equal(s.f.calls.length, 0);
-});
-const pagesOf = value => detailPages([{ id: 'x', label: 'X', value }]);
-function coverage(value, pages) {
-  assert.equal(pages.map(p => p.text).join(''), value);
-  let offset = 0;
-  for (const p of pages) {
-    assert.equal(p.start, offset); assert.equal(p.end, offset + p.text.length);
-    assert.equal(value.slice(p.start, p.end), p.text); offset = p.end;
-    assert.ok(Array.from(p.text).length <= 64); assert.ok((p.text.match(/\r\n|[\r\n]/g) ?? []).length <= 3);
-    if (value.length) assert.ok(p.text.length, 'progress, no empty continuation');
-    const a = value.charCodeAt(p.end - 1), b = value.charCodeAt(p.end);
-    assert.ok(!(a >= 0xd800 && a <= 0xdbff && b >= 0xdc00 && b <= 0xdfff));
-  }
-  assert.equal(offset, value.length);
-}
-// Test-only independent Unicode oracle. Production remains independent of Intl.
-const segmenter = new Intl.Segmenter('en', { granularity: 'grapheme' });
-function feasibleBoundaries(value) {
-  const pages = pagesOf(value); coverage(value, pages);
-  const boundaries = new Set([...segmenter.segment(value)].map(s => s.index)); boundaries.add(value.length);
-  for (const p of pages) assert.ok(boundaries.has(p.end), 'split supported grapheme at UTF-16 offset ' + p.end);
-}
-const tag = '\u{1f3f4}\u{e0067}\u{e0062}\u{e0073}\u{e0063}\u{e0074}\u{e007f}';
-test('63/64/65 boundaries preserve flags, RI parity and odd tails, tags, CRLF, combining and ZWJ', () => {
-  for (const n of [0, 1, 2, 3, 62, 63, 64, 65]) for (const unit of ['🇧🇷', tag, '\r\n', 'e\u0301', '👩🏽‍💻', '❤\ufe0f']) {
-    feasibleBoundaries('a'.repeat(n) + unit.repeat(40) + 'END');
-  }
-  for (const n of [63, 64, 65]) feasibleBoundaries('🇦'.repeat(n) + 'END');
-  assert.equal(Array.from(pagesOf('a' + '🇧🇷'.repeat(40))[0].text).length, 63);
-  for (const value of ['\r\n'.repeat(20), 'a\rb\rc\rd\re', 'a\nb\nc\nd\ne', 'a\r\nb\nc\rd\r\ne', 'x'.repeat(63) + '\r\nEND']) feasibleBoundaries(value);
-});
-test('seeded adversarial lossless fuzz and independent feasible-boundary oracle', () => {
-  let seed = 7189;
-  const rand = n => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed % n; };
-  const atoms = ['a', ' ', '\t', '界', '😀', '🇧🇷', '🇦', tag, '\r\n', '\r', '\n', 'e\u0301', '👩🏽‍💻', '❤\ufe0f'];
-  for (let run = 0; run < 1500; run++) {
-    let value = '';
-    for (let n = rand(180); n > 0; n--) value += atoms[rand(atoms.length)];
-    feasibleBoundaries(value + 'FINAL-SENTINEL');
-    coverage(value + '\ud800\udc00\ud800END\udc00', pagesOf(value + '\ud800\udc00\ud800END\udc00'));
-  }
-});
-test('oversized combining, tag and ZWJ runs use bounded lossless fallback and terminate', () => {
-  for (const value of ['e' + '\u0301'.repeat(10000), '\u{1f3f4}' + '\u{e0067}'.repeat(10000) + '\u{e007f}', '👩‍'.repeat(10000)]) {
-    const source = value + 'FINAL'; coverage(source, pagesOf(source)); assert.ok(pagesOf(source).at(-1).text.endsWith('FINAL'));
-  }
 });
 test('compact row shows a bounded machine name and no unknown context; full diagnostic stays in Details/hover', () => {
   const s = setup();

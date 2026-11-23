@@ -95,7 +95,8 @@ for (const mode of ['projects', 'status']) {
     // Worst fixed regions: Options, selected disabled row, and a layout message.
     view.toolsOpen = true; view.message = 'Sample layout result';
     const full = view.render(cx), body = byId(full, 'roster-rows');
-    const fixed = full.children.filter(e => e !== body).reduce((n, e) => n + (e.attributes.h?.[0] ?? e.attributes.max_h?.[0] ?? 350), 0);
+    const stack = byId(full, 'roster-stack'); assert.ok(stack.children.includes(body));
+    const fixed = full.children.filter(e => e !== stack).reduce((n, e) => n + (e.attributes.h?.[0] ?? e.attributes.max_h?.[0] ?? 350), 0);
     const available = 350 - 2 * full.attributes.p[0] - (full.children.length - 1) * full.attributes.gap[0] - fixed;
     assert.ok(available - (350 - 350 / 1.1) >= 2 * 64 + 24 + 2 * 3, `only ${available}px for rows`);
     assert.equal(f.calls.length, 0);
