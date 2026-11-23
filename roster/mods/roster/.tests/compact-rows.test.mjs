@@ -109,7 +109,7 @@ test('repository facts that are unverified, mis-scoped, conflicting or path-shap
     [{ associationKey: key, coreId: 'core-b', remote: 'https://github.com/sample/repo', verified: false, source: 'x' }],
     [{ associationKey: key, coreId: 'core-a', remote: 'https://github.com/sample/repo', verified: true, source: 'x' }],
     [{ associationKey: key, coreId: 'core-b', remote: 'https://github.com/sample/repo', verified: true, source: ' ' }],
-    [{ associationKey: key, coreId: 'core-b', remote: '/home/sample/repo', verified: true, source: 'x' }],
+    [{ associationKey: key, coreId: 'core-b', remote: '~/sample/repo', verified: true, source: 'x' }],
     [{ associationKey: key, coreId: 'core-b', remote: 'https://github.com/sample/repo', verified: true, source: 'x' },
       { associationKey: key, coreId: 'core-b', remote: 'https://github.com/sample/other', verified: true, source: 'x' }]]) {
     const f = pilot(); prove(f.host, { repositories });
@@ -125,7 +125,7 @@ test('canonical repository identity normalizes remote spellings and rejects name
   for (const remote of ['https://github.com/sample/repo.git', 'https://GitHub.com/sample/repo', 'git@github.com:sample/repo.git',
     'ssh://git@github.com/sample/repo.git', 'ssh://git@github.com:22/sample/repo', 'https://user@github.com/sample/repo/'])
     assert.equal(canonicalRepository(remote), 'github.com/sample/repo', remote);
-  for (const remote of [null, '', 'repo', 'sample/repo', '/home/sample/repo', String.raw`C:\repos\repo`, 'C:/repos/repo', 'file:///home/sample/repo',
+  for (const remote of [null, '', 'repo', 'sample/repo', '~/sample/repo', String.raw`~\sample\repo`, '~', 'file://~/sample/repo',
     'https://github.com/../repo', 'https://github.com/sample/repo extra', 'http://github.com/sample/repo', 'https://github.com/a/b/c'])
     assert.equal(canonicalRepository(remote), null, String(remote));
 });
