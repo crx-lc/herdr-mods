@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRosterView } from '../view.js';
-import { gitIdentity, GitIdentities, nestWorktrees, spacePlace, spaceRows, GIT_TOP, GIT_COMMON } from '../spaces.js';
+import { gitIdentity, GitIdentities, nestWorktrees, spacePlace, spaceRows, GIT_TOP, GIT_COMMON, GIT_STATUS, GIT_COUNTS, GIT_BRANCH, gitState, repoName, spaceTail } from '../spaces.js';
 import { fakeHost, terminal, kit, context, appOf, flatten, textOf, layoutHostUnused } from './sidebar-fixtures.mjs';
 
 const ok = stdout => ({ code: 0, stdout, stderr: '' });
@@ -38,9 +38,11 @@ test('probes run exactly the two read-only queries in the folder on its machine,
   assert.ok(p.calls.every(c => c[2].timeout > 0));
   assert.equal(p.ids.lookup(null, '/r/main').status, 'repo'); assert.equal(p.ids.lookup('edge', '/r/main').linked, false);
   assert.equal(p.ids.takeChanged(), true); assert.equal(p.ids.takeChanged(), false);
-  // Cached: asking again runs nothing.
+  // Identity is cached; the next request reads the checkout's state once, then nothing until stateMs.
+  p.ids.request([{ machine: null, folder: '/r/main' }], p.after); await p.settle(); await p.settle();
+  assert.deepEqual(p.calls.slice(4).map(c => [c[1], c[2].cwd, c[2].on]), [[[...GIT_STATUS], '/r/main', null], [[...GIT_COUNTS], '/r/main', null], [[...GIT_BRANCH], '/r/main', null]]);
   p.ids.request([{ machine: null, folder: '/r/main' }], p.after); await p.settle();
-  assert.equal(p.calls.length, 4);
+  assert.equal(p.calls.length, 7);
 });
 
 test('a hung probe times out to unsure on the host timer; at most N run at once; unsure retries, none does not', async () => {
@@ -156,4 +158,71 @@ test('the active Space is brought into view once when it or its place changes', 
   d.f.values.spaces = d.f.values.spaces.map(x => ({ ...x, active: x.id === 'edge/s-r' })); s.render();
   assert.deepEqual(s.v.rowScroll.requests, [1, 5], 'machine headers count as rows');
   const notifies = s.stats.notify; s.render(); assert.equal(s.stats.notify, notifies);
+});
+
+test('state queries are read-only and fetch nothing; each answer only counts when its query succeeded', () => {
+  for (const args of [GIT_STATUS, GIT_COUNTS, GIT_BRANCH, GIT_TOP, GIT_COMMON])
+    assert.ok(!args.some(a => /^(fetch|pull|push|commit|add|reset|checkout|switch|gc|update-index|remote|config)$/.test(a)), args.join(' '));
+  assert.equal(GIT_STATUS[0], '--no-optional-locks', 'status must not rewrite the index');
+  assert.deepEqual(GIT_COUNTS, ['rev-list', '--left-right', '--count', 'HEAD...@{upstream}']);
+  assert.deepEqual(gitState(ok(' M a.js\n?? b.js\n'), ok('2\t3\n'), ok('feature\n')), { dirty: true, ahead: 2, behind: 3, branch: 'feature' });
+  assert.deepEqual(gitState(ok(''), { code: 128, stdout: '', stderr: 'fatal: no upstream configured for branch' }, { code: 1, stdout: '' }),
+    { dirty: false, ahead: null, behind: null, branch: null }, 'no upstream: no arrows; detached: no branch');
+  for (const counts of [ok('2'), ok('a\tb'), ok('2\t3\t4'), null, { code: 0, stdout: 7 }])
+    assert.deepEqual([gitState(null, counts, null).ahead, gitState(null, counts, null).behind], [null, null]);
+  assert.equal(gitState({ code: 1, stdout: ' M x' }, null, null).dirty, null, 'a failed status shows no ●');
+  assert.deepEqual(['/r/herdr-mods/.git', '/r/x.git', '/r/proj/.bare', 'C:/r/Win/.git'].map(repoName), ['herdr-mods', 'x', 'proj', 'Win']);
+});
+
+test('the tail names repository and branch where useful, and only the indicators that need action', () => {
+  const g = (extra = {}) => ({ status: 'repo', common: '/r/herdr-mods/.git', branch: 'feature', dirty: false, ahead: 0, behind: 0, ...extra });
+  assert.deepEqual(spaceTail({ name: 'Work' }, g(), null), { text: 'herdr-mods · feature', dirty: false, ahead: 0, behind: 0, tooltip: '' });
+  assert.equal(spaceTail({ name: 'herdr-mods' }, g({ branch: 'main' }), null).text, '', 'repo named like the Space, main branch');
+  assert.equal(spaceTail({ name: 'Feature' }, g(), 'last').text, '', 'nested row: no repo; branch named like the Space');
+  assert.deepEqual(spaceTail({ name: 'Work' }, g({ dirty: true, ahead: 2, behind: 3 }), null),
+    { text: 'herdr-mods · feature', dirty: true, ahead: 2, behind: 3, tooltip: 'Uncommitted changes in this checkout · 2 local commits to push · 3 upstream commits to pull' });
+  assert.equal(spaceTail({ name: 'Work' }, g({ ahead: 1 }), null).tooltip, '1 local commit to push');
+  assert.equal(spaceTail({ name: 'Work' }, g({ behind: 1 }), null).tooltip, '1 upstream commit to pull');
+  assert.deepEqual(spaceTail({ name: 'Work' }, g({ dirty: null, ahead: null, behind: null }), null).tooltip, '', 'unknown hides everything');
+  // Before Git answers, the tail is Herdr's own branch, as before.
+  assert.equal(spaceTail({ name: 'Work', branch: 'feature' }, null, null).text, 'feature');
+});
+
+test('state refreshes in the background every stateMs; a failed refresh hides the indicators', async () => {
+  let states = [ok(' M a\n'), ok('1\t0\n'), ok('topic\n')];
+  const p = prober({ answer: (args, o) => args.includes('--show-toplevel') ? ok('/r\n') : args.includes('--git-common-dir') ? ok('/r/.git\n')
+    : states[[GIT_STATUS, GIT_COUNTS, GIT_BRANCH].findIndex(q => q.join() === args.join())] });
+  const ask = async () => { p.ids.request([{ machine: null, folder: '/r' }], p.after); await p.settle(); await p.settle(); };
+  await ask(); await ask();
+  assert.deepEqual(['dirty', 'ahead', 'behind', 'branch'].map(k => p.ids.lookup(null, '/r')[k]), [true, 1, 0, 'topic']);
+  states = [{ code: 128, stdout: '', stderr: 'fatal' }, { code: 128, stdout: '', stderr: 'fatal' }, { code: 128, stdout: '' }];
+  await ask(); assert.equal(p.ids.lookup(null, '/r').dirty, true, 'not again before stateMs');
+  p.tick(1500 * 30); await ask();
+  assert.deepEqual(['status', 'dirty', 'ahead', 'behind', 'branch'].map(k => p.ids.lookup(null, '/r')[k]), ['repo', null, null, null, null]);
+});
+
+test('Spaces draws ●, ↑ and ↓ as separate colored marks with a spelled-out tooltip; zeros are not drawn', async () => {
+  const d = desk();
+  const answers = { '/r/main': { dirty: ' M x\n', counts: '2\t3\n', branch: 'main\n' }, '/o': { dirty: '', counts: '0\t0\n', branch: 'topic\n' }, '/r/wt': { dirty: '', counts: '0\t4\n', branch: 'wt-branch\n' } };
+  const base = d.exec;
+  d.exec = (cmd, args, options) => {
+    const a = answers[options.cwd], q = [GIT_STATUS, GIT_COUNTS, GIT_BRANCH].findIndex(x => x.join() === args.join());
+    if (q < 0) return base(cmd, args, options);
+    d.execs.push([cmd, args, options]); return Promise.resolve(ok([a.dirty, a.counts, a.branch][q]));
+  };
+  const theme = { surface: '#111111', raised: '#222222', foreground: '#eeeeee', ansi1: '#aa0000', ansi2: '#00aa00', ansi3: '#aaaa00' };
+  const app = { ...appOf(d.f.host), checking: () => false, theme: () => theme };
+  const Type = createRosterView(kit, app, { host: d.f.host, layoutHost: layoutHostUnused, exec: d.exec });
+  const v = new Type(), c = context(), every = []; c.cx.timer.every = (ms, fn) => every.push(fn); c.cx.timer.after = () => {}; v.init({}, c.cx);
+  for (let n = 0; n < 2; n++) { every.forEach(fn => fn(c.cx)); await settle(); await settle(); }
+  const tree = v.render(c.cx);
+  assert.equal(byId(tree, 'space-branch:s-main'), undefined, 'repo "main" is the Space\'s own name and branch main is not shown');
+  assert.deepEqual(byId(tree, 'space-git:s-main').children.map(e => [e.attributes.id[0], textOf(e), e.attributes.text_color[0]]),
+    [['space-dirty:s-main', '●', '#aaaa00'], ['space-ahead:s-main', '↑2', '#00aa00'], ['space-behind:s-main', '↓3', '#aa0000']]);
+  assert.equal(byId(tree, 'space-git:s-main').attributes.tooltip[0], 'Uncommitted changes in this checkout · 2 local commits to push · 3 upstream commits to pull');
+  assert.equal(byId(tree, 'space-git:s-other'), undefined, 'clean and level: no marks');
+  assert.equal(textOf(byId(tree, 'space-branch:s-other')), 'o · topic');
+  assert.deepEqual(byId(tree, 'space-git:s-wt').children.map(e => textOf(e)), ['↓4'], 'only what needs action');
+  assert.equal(textOf(byId(tree, 'space-branch:s-wt')), 'wt-branch', 'nested row: branch only, no repo');
+  assert.ok(d.execs.every(e => e[0] === 'git'));
 });

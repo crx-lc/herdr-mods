@@ -41,7 +41,8 @@ export function spaceRows({ spaces = [], machines = [] } = {}, { colors = {}, fo
       const name = validName(space.name) ? space.name.trim() : space.id;
       rows.push({ kind: 'space', key: spaceKey(space.id), id: space.id, machine, name,
         initial: (Array.from(name)[0] ?? '?').toUpperCase(), color: color(colors?.[space.id]) ?? 'ansi6',
-        active: space.active === true, branch: branchTail(space), status: space.status ?? null, tree });
+        active: space.active === true, branch: branchTail(space), status: space.status ?? null, tree,
+        tail: spaceTail(space, identityOf(space), tree) });
     }
   }
   return rows;
@@ -78,11 +79,12 @@ export function gitIdentity(top, common) {
   return { status: 'repo', top: t, common: c, linked: c !== t + '/.git' };
 }
 
-// Background probe cache keyed by machine and folder. The host supplies exec, a
-// deadline timer and the clock; results are only read, never written to Herdr.
+// Background probe cache keyed by machine and folder. Identity is asked once (retried
+// when unsure); a verified repository's state is refreshed at most every stateMs. The host
+// supplies exec, a deadline timer and the clock; nothing is ever written to Git or Herdr.
 export class GitIdentities {
-  constructor(host, { atOnce = 4, retryMs = 60000, deadlineMs = 12000 } = {}) {
-    Object.assign(this, { host, atOnce, retryMs, deadlineMs });
+  constructor(host, { atOnce = 4, retryMs = 60000, deadlineMs = 12000, stateMs = 30000 } = {}) {
+    Object.assign(this, { host, atOnce, retryMs, deadlineMs, stateMs });
     this.cache = new Map(); this.queue = []; this.running = 0; this.changed = false;
   }
   lookup(machine, folder) { return folder ? this.cache.get(placeKey(machine, folder)) ?? null : null; }
@@ -91,10 +93,15 @@ export class GitIdentities {
     for (const { machine, folder } of places) {
       if (!folder) continue;
       const key = placeKey(machine, folder), entry = this.cache.get(key);
-      if (entry && (entry.status !== 'unsure' || now - entry.at < this.retryMs)) continue;
       if (this.queue.some(q => q.key === key)) continue;
-      this.cache.set(key, { status: 'probing', at: now });
-      this.queue.push({ key, machine: machine ?? null, folder });
+      const job = { key, machine: machine ?? null, folder };
+      if (!entry || (entry.status === 'unsure' && now - entry.at >= this.retryMs)) {
+        this.cache.set(key, { status: 'probing', at: now });
+        this.queue.push({ ...job, kind: 'identity' });
+      } else if (entry.status === 'repo' && !entry.stateBusy && !(now - (entry.stateAt ?? -Infinity) < this.stateMs)) {
+        entry.stateBusy = true;
+        this.queue.push({ ...job, kind: 'state' });
+      }
     }
     this.pump(after);
   }
@@ -103,20 +110,30 @@ export class GitIdentities {
   pump(after) {
     while (this.running < this.atOnce && this.queue.length) {
       const job = this.queue.shift(); this.running++;
-      this.probe(job, after).then(result => { this.cache.set(job.key, { ...result, at: this.host.now() }); },
-        () => { this.cache.set(job.key, { status: 'unsure', at: this.host.now() }); })
-        .finally(() => { this.running--; this.changed = true; this.pump(after); });
+      const done = job.kind === 'identity'
+        ? this.ask(job, [GIT_TOP, GIT_COMMON], gitIdentity, after).then(
+          result => { this.cache.set(job.key, { ...result, at: this.host.now() }); },
+          () => { this.cache.set(job.key, { status: 'unsure', at: this.host.now() }); })
+        : this.ask(job, [GIT_STATUS, GIT_COUNTS, GIT_BRANCH], gitState, after).then(
+          state => this.settleState(job.key, state),
+          // No answer: hide the indicators rather than show stale or guessed ones.
+          () => this.settleState(job.key, { dirty: null, ahead: null, behind: null, branch: null }));
+      done.finally(() => { this.running--; this.changed = true; this.pump(after); });
     }
   }
-  probe({ machine, folder }, after) {
+  settleState(key, state) {
+    const entry = this.cache.get(key);
+    if (entry?.status === 'repo') this.cache.set(key, { ...entry, ...state, stateAt: this.host.now(), stateBusy: false });
+  }
+  // The queries run together in the place's folder on its machine, with explicit arguments.
+  ask({ machine, folder }, queries, parse, after) {
     const options = { cwd: folder, on: machine, timeout: this.deadlineMs };
-    const ask = args => this.host.exec('git', [...args], options);
-    const both = Promise.all([ask(GIT_TOP), ask(GIT_COMMON)]).then(([t, c]) => gitIdentity(t, c));
+    const all = Promise.all(queries.map(args => this.host.exec('git', [...args], options))).then(answers => parse(...answers));
     // A request can hang: race it against the host's timer, not a sleep.
     return new Promise((resolve, reject) => {
       let settled = false;
       after(this.deadlineMs + 1000, () => { if (!settled) { settled = true; reject(Error('deadline')); } });
-      both.then(v => { if (!settled) { settled = true; resolve(v); } }, e => { if (!settled) { settled = true; reject(e); } });
+      all.then(v => { if (!settled) { settled = true; resolve(v); } }, e => { if (!settled) { settled = true; reject(e); } });
     });
   }
   // True once since the last call when an answer arrived.
@@ -140,4 +157,43 @@ export function nestWorktrees(list, identityOf) {
     kids.forEach((k, n) => out.push({ space: k, tree: n === kids.length - 1 ? 'last' : 'middle' }));
   }
   return out;
+}
+
+// The checkout's state, read-only and without fetching: uncommitted changes (status
+// without optional locks, so the index is not rewritten), commits ahead of and behind
+// the locally known upstream, and the checked-out branch.
+export const GIT_STATUS = Object.freeze(['--no-optional-locks', 'status', '--porcelain']);
+export const GIT_COUNTS = Object.freeze(['rev-list', '--left-right', '--count', 'HEAD...@{upstream}']);
+export const GIT_BRANCH = Object.freeze(['symbolic-ref', '-q', '--short', 'HEAD']);
+// Each answer is used only when its query succeeded; anything else hides that indicator.
+export function gitState(status, counts, branch) {
+  const state = { dirty: null, ahead: null, behind: null, branch: null };
+  if (status?.code === 0 && typeof status.stdout === 'string') state.dirty = status.stdout.trim().length > 0;
+  const m = counts?.code === 0 && typeof counts.stdout === 'string' ? /^(\d+)\s+(\d+)\s*$/.exec(counts.stdout) : null;
+  if (m) { state.ahead = Number(m[1]); state.behind = Number(m[2]); }
+  if (branch?.code === 0) state.branch = oneLine(branch.stdout);
+  return state;
+}
+// A repository's name from its common directory, as the stock list derives it: the folder
+// holding .git, a bare repository's own name, or the folder holding a hidden .bare.
+export function repoName(common) {
+  const parts = String(common ?? '').replace(/\/+$/, '').split('/');
+  const last = parts.at(-1) ?? '';
+  if (last === '.git') return parts.at(-2) || null;
+  if (last === '.bare') return parts.at(-2) || null;
+  return last.replace(/\.git$/, '') || null;
+}
+// The tail after a Space's name: repository and branch where they add something (no repo
+// on a nested worktree row or when it is the Space's name; no main/master or a branch named
+// like the Space), then the separate indicators, with a spelled-out tooltip.
+export function spaceTail(space, git, tree) {
+  const same = value => !!value && value.toLowerCase() === String(space?.name ?? '').trim().toLowerCase();
+  if (git?.status !== 'repo') return { text: branchTail(space), dirty: false, ahead: 0, behind: 0, tooltip: '' };
+  const repo = repoName(git.common), branch = git.branch ?? null;
+  const text = [tree || same(repo) ? '' : repo, !branch || same(branch) || ['main', 'master'].includes(branch) ? '' : branch].filter(Boolean).join(' · ');
+  const dirty = git.dirty === true, ahead = git.ahead > 0 ? git.ahead : 0, behind = git.behind > 0 ? git.behind : 0;
+  const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
+  const tooltip = [dirty ? 'Uncommitted changes in this checkout' : '', ahead ? plural(ahead, 'local commit', 'local commits') + ' to push' : '',
+    behind ? plural(behind, 'upstream commit', 'upstream commits') + ' to pull' : ''].filter(Boolean).join(' · ');
+  return { text, dirty, ahead, behind, tooltip };
 }
