@@ -146,7 +146,11 @@ test('single reviewer and unknown purpose use exact full detail; ended and last 
   for (const [role, expected] of [['reviewer', 'Waiting for Reviewer'], ['unknown', 'Waiting on 1 agent']]) {
     const { f, world } = waitingWorld(); world.doc.assignments = [world.doc.assignments[0]]; world.doc.assignments[0].role = role;
     prove(f.host, { settings, documents: [{ producer: world.producer, text: JSON.stringify(world.doc), generation: 1 }] });
-    const { view, cx } = viewOf(f); view.controller.change({ type: 'view', view: 'status' }); const tree = view.render(cx); assert.match(textOf(tree), new RegExp(expected));
+    const { view, cx } = viewOf(f); view.controller.change({ type: 'view', view: 'status' }); const tree = view.render(cx);
+    // Status draws the compact marker; the exact phrase is in the hover and the accessibility label.
+    const parent = find(view.controller.projection, 't1'), row = flatten(tree).find(e => e.attributes.id?.[0] === parent.key);
+    assert.match(textOf(row), /◈ Waiting/); assert.match(row.attributes.tooltip[0].replace(/\n/g, ' '), new RegExp(expected));
+    assert.match(row.attributes.accessibility_label[0], new RegExp(expected));
   }
   for (const kind of ['done', 'ended']) {
     const { f, world } = waitingWorld();

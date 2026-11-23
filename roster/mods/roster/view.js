@@ -3,6 +3,8 @@ import { LayoutOptIn } from './layout.js';
 import { desktopHost, desktopLayoutHost } from './desktop.js';
 import { actionReason, rowContext, detailFields, detailPages, detailLabel, hoverText, reasonText } from './detail.js';
 
+// Stock-style working spinner frames, drawn natively by frames().
+export const WORKING_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 export function timerDeadline(cx, promise) {
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -192,11 +194,17 @@ export function createRosterView(kit, app, options = {}) {
         root.child(tools);
       }
       const body = v().id('roster-rows').flex_1().min_h(0).gap(3).overflow_y_scrollbar().track_scroll(this.rowScroll);
+      let section = null;
       for (const [index, i] of projection.instances.entries()) {
         if (i.kind === 'section') {
+          section = i;
           const count = i.label === 'Working' ? i.counts?.working : i.label === 'Needs you' ? i.counts?.needsYou : i.counts?.identities ?? i.count;
           const heading = (i.collapsed ? '▸ ' : '▾ ') + i.label + (count != null ? ' · ' + count : '');
-          body.child(button(i.key, heading, change({ type: 'fold', key: i.key, collapsed: !i.collapsed })));
+          const header = button(i.key, heading, change({ type: 'fold', key: i.key, collapsed: !i.collapsed }));
+          // One subtle native spinner marks live work in Status; it is decoration, not a control.
+          if (viewMode === 'status' && i.label === 'Working') header.child(div().id('roster-working-indicator').flex_none().px(4)
+            .text_size(10).text_color(theme.working ?? theme.accent ?? muted).frames(WORKING_FRAMES, 80));
+          body.child(header);
           this.controls.at(-1).rowIndex = index;
           continue;
         }
@@ -238,7 +246,12 @@ export function createRosterView(kit, app, options = {}) {
           const providerChip = badge(provider === 'GitHub' ? 'GH' : 'ADO').accessibility_label(provider + ' provider badge').tooltip(provider);
           element.child(providerChip);
         }
-        element.child(badge(status, stateColor));
+        // Status groups by state, so a chip that repeats its header is dropped there; Projects
+        // mixes states and keeps every chip. Waiting stays in Working with a compact marker.
+        const statusView = viewMode === 'status';
+        if (statusView && waiting) element.child(badge('◈ Waiting', theme.accent ?? muted).id('row-waiting:' + i.key)
+          .accessibility_label('Waiting for delegate').tooltip('Waiting for delegate'));
+        else if (!(statusView && !i.display.error && section?.label === i.status)) element.child(badge(status, stateColor));
         const line = h().h(24).flex_none().min_w(0).gap(2).pl(Math.min(i.depth, 3) * 8).child(element);
         const info = button('info:' + i.key, 'Details for ' + row.displayLabel,
           cx => this.openDetails({ key: 'info:' + i.key, instance: i }, cx), { text: 'Info' }).px(0).w(30);
