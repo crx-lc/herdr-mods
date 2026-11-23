@@ -8,6 +8,7 @@ import { spawnSync } from 'node:child_process';
 // Deliberate shipping allowlist: additions require review here, not a broad extension glob.
 export const SHIPPING = Object.freeze([
   'MODULES.md', 'README.md', 'attention.js', 'controller.js', 'delegations.js',
+  'icons/chevron-down.svg', 'icons/chevron-right.svg', 'icons/monitor.svg', 'icons/plus.svg', 'icons/server.svg',
   'desktop.js', 'detail.js', 'feed.js', 'icons.js', 'identity.js', 'layout.js', 'local-reader.js',
   'main.js', 'metadata.js', 'mod.json', 'navigation-rows.js', 'navigation.js',
   'normalize.js', 'projection.js', 'settings.js', 'spaces.js', 'view.js',
@@ -59,13 +60,15 @@ export function inventory(root) {
   if (manifest.place !== 'none' || manifest.focusable !== true) throw Error('unexpected Roster manifest');
   const modules = files.filter(f => f.endsWith('.js'));
   const sources = modules.map(f => fs.readFileSync(path.join(root, f), 'utf8'));
-  // Conservative source policy: current package has only eager imports and no image assets.
-  // icons.js has an audited local svg(bytes) validator, not a renderer.
+  // Conservative source policy: only eager imports. icons.js has an audited local svg(bytes)
+  // validator, not a renderer. view.js may draw shipped icons only through its one helper,
+  // svg('mods/roster/icons/' + name + '.svg'); every other svg( or image( reference fails.
+  const ICON_HELPER = "svg('mods/roster/icons/' + name + '.svg')";
   // Comments can cause refusals; do not evaluate code to discover references.
   for (let i = 0; i < sources.length; i++) {
     if (/\bimport\s*(?:(?:\/\*[\s\S]*?\*\/|\/\/[^\n]*\n)\s*)*\(/.test(sources[i])
       || /\b(?:require|image)\s*(?:(?:\/\*[\s\S]*?\*\/|\/\/[^\n]*\n)\s*)*\(/.test(sources[i])
-      || (modules[i] !== 'icons.js' && /\bsvg\s*\(/.test(sources[i])))
+      || (modules[i] !== 'icons.js' && /\bsvg\s*\(/.test(modules[i] === 'view.js' ? sources[i].split(ICON_HELPER).join('') : sources[i])))
       throw Error(`unsupported dynamic import or asset reference: ${modules[i]}`);
   }
   // V8 parses actual static dependencies (including re-exports and escaped specifiers).

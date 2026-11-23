@@ -14,7 +14,9 @@ export function timerDeadline(cx, promise) {
   });
 }
 export function createRosterView(kit, app, options = {}) {
-  const { View, div, h_flex, v_flex, ScrollHandle } = kit;
+  const { View, div, h_flex, v_flex, ScrollHandle, svg } = kit;
+  // Roster's own icons, shipped in the mod folder; icon paths resolve against Herdr's root.
+  const icon = (name, size) => svg('mods/roster/icons/' + name + '.svg').size(size).flex_none();
   return class Roster extends View {
     init(_props, cx) {
       this.handle = cx.focus_handle();
@@ -125,17 +127,29 @@ export function createRosterView(kit, app, options = {}) {
       cx.notify();
     }
     // Herdr's Spaces, in the stock list's order and look. A click selects the Space natively.
-    renderSpaces(body, theme, { click, change, labelText, h, fg, muted }) {
+    renderSpaces(body, theme, { click, change, labelText, h, fg, muted, groupHeader }) {
       const c = this.controller, snapshot = c.feed.snapshot ?? {};
       const colors = typeof app.shared === 'function' ? app.shared('space.colors') ?? {} : {};
       const rows = spaceRows({ spaces: snapshot.spaces, machines: snapshot.machines }, { colors, folds: c.state.folds });
       for (const row of rows) {
         if (row.kind === 'machine') {
-          const header = click(row.key, (row.collapsed ? 'Show ' : 'Hide ') + row.label + ' Spaces', change({ type: 'fold', key: row.key, collapsed: !row.collapsed }))
-            .h(26).flex_none().gap(6).tooltip(row.label + (row.ready ? '' : row.loading ? ' · loading' : ' · not connected')).text_size(11).text_color(muted);
-          header.child(labelText((row.collapsed ? '▸ ' : '▾ ') + row.label + (row.collapsed ? ' · ' + row.count : ''), 11, muted).flex_1())
-            .child(div().id('machine-state:' + row.key).flex_none().text_size(9).text_color(row.ready ? theme.ansi2 ?? theme.working ?? fg : muted).child('●'));
-          body.child(header);
+          // As in the stock list: icon, name, state when not connected, then +, the
+          // connection dot and the fold chevron last.
+          const dim = theme.dim ?? muted, newSpace = () => c.host.run('space.new', { machine: row.machine ?? '' });
+          const extras = [];
+          if (!row.ready) extras.push(div().id('machine-note:' + row.key).flex_none().child(row.loading ? 'loading' : 'not connected'));
+          else extras.push(h().id('machine-add:' + row.key).flex_none().px(4).rounded(4).cursor_pointer()
+            .hover(el => el.bg(theme.hover ?? theme.raised).text_color(fg)).tooltip('New space on ' + (row.machine ?? 'this computer'))
+            .accessibility_label('New space on ' + row.label)
+            .on_click((_e, cx) => { cx.stop_propagation(); if (!this.reader) newSpace(); }).child('+'));
+          extras.push(div().id('machine-state:' + row.key).size(6).rounded(3).flex_none().bg(row.ready ? theme.ansi2 ?? theme.working ?? fg : dim));
+          body.child(groupHeader(row.key, row.label + (row.collapsed ? ', folded' : ''), row.label,
+            change({ type: 'fold', key: row.key, collapsed: !row.collapsed }),
+            { icon: row.machine ? 'server' : 'monitor', collapsed: row.collapsed, extras,
+              tooltip: row.machine ? row.label + ' · ' + (row.ready ? 'connected' : row.loading ? 'loading' : 'not connected') : row.label }));
+          if (!row.collapsed && row.count === 0 && row.ready) body.child(click('spaces:new:' + (row.machine ?? 'local'), 'New space on ' + row.label, newSpace)
+            .h(28).flex_none().px(8).gap(7).rounded(7).text_size(12).text_color(dim).cursor_pointer()
+            .hover(el => el.bg(theme.hover ?? theme.raised).text_color(fg)).child(icon('plus', 12)).child('New space there'));
           continue;
         }
         const element = click(row.key, 'Space ' + row.name + (row.machine ? ' on ' + row.machine : '') + (row.active ? ', shown' : ''),
@@ -221,6 +235,17 @@ export function createRosterView(kit, app, options = {}) {
         return element.child(content);
       };
       // A state change discards the old callbacks until the next render draws new ones.
+      const dim = theme.dim ?? muted;
+      // The stock group header: 26px, 11px dim text, optional leading icon, extras, chevron last.
+      const groupHeader = (key, label, title, activate, { icon: lead = null, collapsed = false, foldable = true, extras = [], tooltip = label, depth = 0 } = {}) => {
+        const head = click(key, label, activate).h(26).flex_none().px(8).pl(8 + Math.min(depth, 3) * 8).gap(7)
+          .text_size(11).text_color(dim).cursor_pointer().hover(el => el.bg(theme.hover ?? theme.raised)).tooltip(tooltip);
+        if (lead) head.child(icon(lead, 13).id('group-icon:' + key));
+        head.child(labelText(title, 11, dim).id('group-label:' + key).flex_1());
+        for (const extra of extras) head.child(extra);
+        if (foldable) head.child(icon(collapsed ? 'chevron-right' : 'chevron-down', 11).id('group-chevron:' + key));
+        return head;
+      };
       const change = event => cx => { this.closeDetails(cx, false); this.controls = []; c.change(event); cx.notify(); };
       const viewMode = c.state.view;
       const root = v().id('roster').size_full().p(5).gap(3).bg(theme.surface).text_color(fg).text_size(12)
@@ -230,6 +255,9 @@ export function createRosterView(kit, app, options = {}) {
         .child(button('mode:projects', 'Projects', change({ type: 'view', view: 'projects' }), { active: viewMode === 'projects' }))
         .child(button('mode:status', 'Status', change({ type: 'view', view: 'status' }), { active: viewMode === 'status' }))
         .child(div().flex_1().min_w(0));
+      // The stock Spaces title's +: a new Space, Herdr choosing where, as space.new does.
+      if (viewMode === 'spaces') toolbar.child(button('spaces:new', 'New space', () => c.host.run('space.new'), { text: '+' })
+        .w(24).px(0).justify_center().cursor_pointer());
       const settingsOpen = this.toolsOpen;
       const filtered = c.state.coreIds !== null || c.state.contextIds !== null;
       toolbar.child(button('tools:toggle', (settingsOpen ? 'Hide' : 'Show') + ' filters and Agents slot controls' + (filtered ? ' (filters active)' : ''),
@@ -278,11 +306,14 @@ export function createRosterView(kit, app, options = {}) {
         if (i.kind === 'section') {
           section = i;
           const count = i.label === 'Working' ? i.counts?.working : i.label === 'Needs you' ? i.counts?.needsYou : i.counts?.identities ?? i.count;
-          const heading = (i.collapsed ? '▸ ' : '▾ ') + i.label + (count != null ? ' · ' + count : '');
-          const header = button(i.key, heading, change({ type: 'fold', key: i.key, collapsed: !i.collapsed }));
+          const title = i.label + (count != null ? ' · ' + count : '');
+          // Needs you never folds, so it has no chevron.
+          const foldable = i.key !== JSON.stringify([viewMode, 'attention']);
           // One subtle native spinner marks live work in Status; it is decoration, not a control.
-          if (viewMode === 'status' && i.label === 'Working') header.child(div().id('roster-working-indicator').flex_none().px(4)
-            .text_size(10).text_color(theme.working ?? theme.accent ?? muted).frames(WORKING_FRAMES, 80));
+          const extras = viewMode === 'status' && i.label === 'Working' ? [div().id('roster-working-indicator').flex_none()
+            .text_size(10).text_color(theme.working ?? theme.accent ?? muted).frames(WORKING_FRAMES, 80)] : [];
+          const header = groupHeader(i.key, title + (foldable ? (i.collapsed ? ', folded' : ', open') : ''), title,
+            change({ type: 'fold', key: i.key, collapsed: !i.collapsed }), { collapsed: i.collapsed, foldable, extras, depth: i.depth });
           body.child(header);
           this.controls.at(-1).rowIndex = index;
           continue;
@@ -351,7 +382,7 @@ export function createRosterView(kit, app, options = {}) {
         }
         body.child(line);
       }
-      if (viewMode === 'spaces') this.renderSpaces(body, theme, { click, change, labelText, h, fg, muted });
+      if (viewMode === 'spaces') this.renderSpaces(body, theme, { click, change, labelText, h, fg, muted, groupHeader });
       else if (!projection.instances.length) body.child(labelText('No observed terminals', 12, muted).p(6));
       // The modal lies over the list; the list underneath keeps its scroll and folds.
       const stack = v().id('roster-stack').relative().flex_1().min_h(0).child(body);

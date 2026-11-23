@@ -17,7 +17,7 @@ test('actual main entry defaults passive, captures exactly once, renders labels 
   const app = appOf(f.host); globalThis.__rosterTestKit = kit; globalThis.__rosterTestApp = app; globalThis.localStorage = { getItem: () => { throw Error('unexpected state'); }, setItem: () => { throw Error('unexpected state'); } };
   const url = source => `data:text/javascript,${encodeURIComponent(source)}`;
   const source = (await readFile(new URL('../main.js', import.meta.url), 'utf8'))
-    .replace("'gpui-kit'", JSON.stringify(url('export const View = globalThis.__rosterTestKit.View; export const div = globalThis.__rosterTestKit.div; export const h_flex = globalThis.__rosterTestKit.h_flex; export const v_flex = globalThis.__rosterTestKit.v_flex;')))
+    .replace("'gpui-kit'", JSON.stringify(url('export const View = globalThis.__rosterTestKit.View; export const div = globalThis.__rosterTestKit.div; export const h_flex = globalThis.__rosterTestKit.h_flex; export const v_flex = globalThis.__rosterTestKit.v_flex; export const svg = globalThis.__rosterTestKit.svg;')))
     .replace("'gpui-base'", JSON.stringify(url('export const h_flex = globalThis.__rosterTestKit.h_flex; export const v_flex = globalThis.__rosterTestKit.v_flex; export const ScrollHandle = globalThis.__rosterTestKit.ScrollHandle;')))
     .replace("'herdr'", JSON.stringify(url(Object.keys(app).map(k => `export const ${k} = globalThis.__rosterTestApp.${k};`).join('\n'))))
     .replace("'./view.js'", JSON.stringify(new URL('../view.js', import.meta.url).href));
@@ -29,7 +29,8 @@ test('actual main entry defaults passive, captures exactly once, renders labels 
   assert.match(textOf(tree), /Planner #12/); assert.match(textOf(tree), /\bGH\b/); assert.doesNotMatch(textOf(tree), /Context unknown/);
   // Production default: Needs you stays open; the Other group starts folded with its count.
   assert.ok(view.controller.projection.instances.filter(i => i.kind === 'section' && i.label === 'Other').every(i => i.collapsed));
-  assert.match(textOf(tree), /▾ Needs you · 1 .*▸ Other · 2$/);
+  // Needs you never folds, so it has no chevron; Other starts folded.
+  assert.match(textOf(tree), /Needs you · 1 Planner.* Other · 2 ▸$/); assert.doesNotMatch(textOf(tree), /Needs you · 1 [▸▾]/);
   assert.equal(rows(view.controller.projection).length, 1, 'only the Needs you copy is drawn');
   assert.ok(flatten(tree).some(e => e.attributes.accessibility_label?.[0].includes('Context unknown')));
   // Stock desktop navigates natively: a live terminal with no pane would peek, exactly that address.

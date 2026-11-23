@@ -23,10 +23,10 @@ test('production default folds one Other group and Status Unknown with counts; N
   let tree = view.render(cx), p = view.controller.projection;
   assert.deepEqual(sections(p).map(s => [s.label, s.collapsed]), [['Needs you', false], ['Other', true]]);
   assert.deepEqual(terminals(p).map(i => i.row.address), ['t1'], 'only Needs you rows are drawn');
-  assert.match(textOf(tree), /▸ Other · 5/);
+  assert.match(textOf(tree), /Other · 5 ▸/);
   view.controller.change({ type: 'view', view: 'status' }); tree = view.render(cx); p = view.controller.projection;
   assert.deepEqual(sections(p).map(s => [s.label, s.collapsed]), [['Needs you', false], ['Working', false], ['Idle', false], ['Unknown', true]]);
-  assert.match(textOf(tree), /▸ Unknown · 1/);
+  assert.match(textOf(tree), /Unknown · 1 ▸/);
   assert.ok(!terminals(p).some(i => i.row.address === 't4'));
   // Expanding is an explicit fold and wins over the default.
   const unknown = sections(p).find(s => s.label === 'Unknown');

@@ -55,7 +55,7 @@ for (const how of ['selected row', 'its Info', 'its footer Details', 'hovered on
     assert.deepEqual(names.sort(), ['keep-a', 'keep-b', 'keep-c']);
     const group = s.view.controller.projection.instances.find(i => i.kind === 'section' && i.label === 'Other');
     assert.equal(group.collapsed, false); assert.equal(group.counts.identities, 3);
-    assert.match(textOf(tree), /▾ Other · 3/);
+    assert.match(textOf(tree), /Other · 3 ▾/);
     assert.equal(f.calls.length, 0);
   });
 }

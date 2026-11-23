@@ -37,7 +37,7 @@ export class Element {
   constructor() { this.children = []; this.attributes = {}; }
   child(v) { this.children.push(v); return this; }
 }
-for (const name of ['flex', 'flex_col', 'flex_row', 'gap', 'p', 'pl', 'w', 'h', 'id', 'text_size', 'bg', 'text_color', 'size_full', 'flex_1', 'overflow_y_scrollbar', 'track_focus', 'on_key_down', 'on_click', 'accessibility_label', 'tooltip', 'items_center', 'min_w', 'min_h', 'max_h', 'max_w', 'px', 'rounded', 'flex_none', 'truncate', 'font_semibold', 'justify_center', 'track_scroll', 'cursor_pointer', 'cursor_default', 'frames', 'hover', 'font_bold', 'on_hover', 'absolute', 'relative', 'top', 'left', 'right', 'items_start', 'border', 'border_color', 'py', 'w_full', 'whitespace_normal', 'line_height']) {
+for (const name of ['flex', 'flex_col', 'flex_row', 'gap', 'p', 'pl', 'w', 'h', 'id', 'text_size', 'bg', 'text_color', 'size_full', 'flex_1', 'overflow_y_scrollbar', 'track_focus', 'on_key_down', 'on_click', 'accessibility_label', 'tooltip', 'items_center', 'min_w', 'min_h', 'max_h', 'max_w', 'px', 'rounded', 'flex_none', 'truncate', 'font_semibold', 'justify_center', 'track_scroll', 'cursor_pointer', 'cursor_default', 'frames', 'hover', 'font_bold', 'size', 'on_hover', 'absolute', 'relative', 'top', 'left', 'right', 'items_start', 'border', 'border_color', 'py', 'w_full', 'whitespace_normal', 'line_height']) {
   Element.prototype[name] = function (...args) { this.attributes[name] = args; return this; };
 }
 // Like GPUI: cx.notify() during render throws ("not allowed during the `render` phase").
@@ -50,7 +50,10 @@ class GuardedView {
     };
   }
 }
-export const kit = { View: GuardedView, ScrollHandle: { new: () => ({ requests: [], scroll_to_item(index) { this.requests.push(index); } }) }, div: () => new Element(), h_flex: () => new Element().flex().flex_row(), v_flex: () => new Element().flex().flex_col() };
+// svg(path) records the icon path so tests can read it.
+export const kit = { View: GuardedView, svg: path => { const e = new Element(); e.attributes.svg = [path];
+  // Chevrons read as text so header assertions stay legible.
+  const glyph = { 'chevron-right': '▸', 'chevron-down': '▾' }[path.split('/').pop().replace('.svg', '')]; if (glyph) e.child(glyph); return e; }, ScrollHandle: { new: () => ({ requests: [], scroll_to_item(index) { this.requests.push(index); } }) }, div: () => new Element(), h_flex: () => new Element().flex().flex_row(), v_flex: () => new Element().flex().flex_col() };
 export function context() {
   const stats = { focus: 0, notify: 0, stop: 0 }, timers = [], tasks = [];
   const cx = { focus_handle: () => ({ focus: () => stats.focus++ }), notify: () => {
