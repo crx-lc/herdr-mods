@@ -24,9 +24,9 @@ test('actual main entry defaults passive, captures exactly once, renders labels 
   const Type = (await import(url(source))).default, view = new Type(), c = context(); view.init({}, c.cx);
   const tree = view.render(c.cx); checkCounts(f.counts); assert.equal(c.stats.focus, 0); assert.equal(f.calls.length, 0);
   assert.match(textOf(tree), /Planner #12/); assert.match(textOf(tree), /\bGH\b/); assert.doesNotMatch(textOf(tree), /Context unknown/);
-  // Production default: Needs you stays open; Unassigned groups start folded with their counts.
-  assert.ok(view.controller.projection.instances.filter(i => i.kind === 'section' && i.label.startsWith('Unassigned')).every(i => i.collapsed));
-  assert.match(textOf(tree), /▾ Needs you · 1 .*▸ Unassigned \(unbound\) · 1 ▸ Unassigned \(unknown\) · 1/);
+  // Production default: Needs you stays open; the Other group starts folded with its count.
+  assert.ok(view.controller.projection.instances.filter(i => i.kind === 'section' && i.label === 'Other').every(i => i.collapsed));
+  assert.match(textOf(tree), /▾ Needs you · 1 .*▸ Other · 2$/);
   assert.equal(rows(view.controller.projection).length, 1, 'only the Needs you copy is drawn');
   assert.ok(flatten(tree).some(e => e.attributes.tooltip?.[0].includes('Context unknown')));
   assert.ok(flatten(tree).some(e => e.attributes.tooltip?.[0].includes('unverified'))); assert.doesNotMatch(textOf(tree), /Open unavailable:/); assert.ok(rows(view.controller.projection).every(i => !i.navigation.enabled));

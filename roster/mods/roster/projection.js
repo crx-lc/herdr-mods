@@ -42,15 +42,37 @@ function status(row) {
   if (row.appStatus === 'idle') return 'Idle';
   return 'Unknown';
 }
-function placement(row, scopes) {
+// Canonical remote identity: host/owner/repo from an https, ssh:// or scp-like git remote.
+// Only an explicitly supplied remote is parsed; nothing is discovered or read here.
+export function canonicalRepository(remote) {
+  if (typeof remote !== 'string' || remote.length > 512 || /[\s\x00-\x1f\x7f]/.test(remote)) return null;
+  const match = /^(?:https:\/\/(?:[^@/]+@)?|ssh:\/\/(?:[^@/]+@)?|[A-Za-z0-9._-]+@)([A-Za-z0-9.-]+)(?::[0-9]+)?[:/]([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?\/?$/.exec(remote);
+  if (!match || ['.', '..'].includes(match[2]) || ['.', '..'].includes(match[3])) return null;
+  return match[1].toLowerCase() + '/' + match[2] + '/' + match[3];
+}
+// A repository fact counts only for a verified identity with exactly one verified,
+// sourced assertion; a role, folder, tab or machine alias never makes one.
+function verifiedRepository(row, repositories) {
+  if (!row.core.verified || !row.associationKey) return null;
+  const facts = repositories.filter(e => e?.associationKey === row.associationKey);
+  const ids = [...new Set(facts.map(e => e?.verified === true && e.coreId === row.core.id
+    && typeof e.source === 'string' && e.source.trim() ? canonicalRepository(e.remote) : null))];
+  return ids.length === 1 ? ids[0] : null;
+}
+function placement(row, scopes, repositories = []) {
   if (row.project.id) return { key: tuple('project', row.project.id), label: row.project.displayName, projectId: row.project.id };
   const facts = scopes.filter(e => e?.associationKey === row.associationKey && row.associationKey);
   if (row.core.verified && facts.length === 1 && facts[0].verified === true && facts[0].scope === 'core-wide'
     && facts[0].coreId === row.core.id && typeof facts[0].source === 'string' && facts[0].source.trim()) {
     return { key: tuple('infrastructure'), label: 'Infrastructure', projectId: null };
   }
-  return { key: tuple('unassigned', row.project.resolution), label: `Unassigned (${row.project.resolution})`, projectId: null };
+  // Project first; a verified repository is the fallback; everything else is Other.
+  const repository = verifiedRepository(row, repositories);
+  if (repository) return { key: tuple('repository', repository), label: repository, projectId: null, repository };
+  return { key: tuple('other'), label: 'Other', projectId: null };
 }
+// Projects, then repositories, then Infrastructure, then Other.
+const rank = group => group.key === tuple('other') ? 3 : group.label === 'Infrastructure' ? 2 : group.repository ? 1 : 0;
 function counts(rows) {
   const unique = distinct(rows);
   return { identities: unique.length, working: unique.filter(r => current(r) && r.appStatus === 'working').length,
@@ -60,12 +82,12 @@ function counts(rows) {
 
 // Input is the actual R2 result over R1 metadata rows. No acquisition, commands,
 // ambient storage, inferred assignments or rewritten native fields live here.
-// collapseUnassigned: Unassigned project groups and the Status Unknown group start
+// collapseUnassigned: the Other project group and the Status Unknown group start
 // folded (a count stays on the header); an explicit fold in state always wins.
-export function projectRoster(reduced, inputState = {}, { scopes = [], navigation = {}, collapseUnassigned = false } = {}) {
+export function projectRoster(reduced, inputState = {}, { scopes = [], repositories = [], navigation = {}, collapseUnassigned = false } = {}) {
   const state = viewState(inputState), rows = sortRows(reduced.rows), instances = [];
   const filtered = rows.filter(r => !filterReasons(r, state).length);
-  const placements = new Map(rows.map(r => [rowIdentity(r), placement(r, scopes)]));
+  const placements = new Map(rows.map(r => [rowIdentity(r), placement(r, scopes, repositories)]));
   const byAssociation = new Map(rows.filter(r => r.associationKey).map(r => [r.associationKey, r]));
   const open = (key, fallback = false) => !(state.folds[key] ?? fallback);
   function header(path, label, depth, defaultCollapsed = false, extra = {}) {
@@ -106,7 +128,7 @@ export function projectRoster(reduced, inputState = {}, { scopes = [], navigatio
     }
   } else {
     const groups = [...new Map(filtered.map(r => [placements.get(rowIdentity(r)).key, placements.get(rowIdentity(r))])).values()]
-      .sort((a, b) => (a.label === 'Infrastructure') - (b.label === 'Infrastructure') || compare(a.key, b.key));
+      .sort((a, b) => rank(a) - rank(b) || compare(a.key, b.key));
     for (const group of groups) {
       const members = filtered.filter(r => placements.get(rowIdentity(r)).key === group.key), memberKeys = new Set(members.map(rowIdentity));
       const parentOf = new Map();
@@ -124,7 +146,7 @@ export function projectRoster(reduced, inputState = {}, { scopes = [], navigatio
         if (seen.has(id)) for (const cyclic of path.slice(path.indexOf(id))) parentOf.delete(cyclic);
       }
       const path = ['projects', group.key];
-      if (!header(path, group.label, 0, collapseUnassigned && group.projectId === null && group.label !== 'Infrastructure', { projectId: group.projectId, counts: counts(members) })) continue;
+      if (!header(path, group.label, 0, collapseUnassigned && group.key === tuple('other'), { projectId: group.projectId, counts: counts(members) })) continue;
       // Iterative event stack prevents recursive overflow on deep actual ancestry.
       const stack = [{ type: 'siblings', siblings: members.filter(r => !parentOf.has(rowIdentity(r))), path, depth: 1 }];
       while (stack.length) {

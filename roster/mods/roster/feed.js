@@ -10,7 +10,7 @@ export function capture(host) {
   return copy({ terminals: host.terminals(), machines: host.machines(), panes: host.panes(),
     spaces: host.spaces(), agents: host.agents(), focused: host.focused() });
 }
-export const emptyEvidence = () => ({ cores: [], documents: [], routes: [], scopes: [], correlations: [], admissions: [] });
+export const emptyEvidence = () => ({ cores: [], documents: [], routes: [], scopes: [], repositories: [], correlations: [], admissions: [] });
 // Select acquisition facts, excluding UI focus, selection, scrolling and agent display.
 const pick = (record, keys) => record == null ? record : Object.fromEntries(keys.map(k => [k, record[k]]));
 const terminalFacts = t => pick(t, ['address', 'state', 'created_ms', 'finished_ms', 'pid', 'argv', 'keep', 'parent', 'name', 'labels']);

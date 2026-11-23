@@ -48,7 +48,7 @@ export function actionIntent(reduced, projection, key, evidence = {}, current) {
   if (!old) return disabled('not-actionable-instance');
   const rows = reduced.rows.filter(r => rowIdentity(r) === old.identity);
   if (rows.length !== 1) return disabled('identity-changed');
-  const fresh = projectRoster(reduced, current.state, { navigation: evidence, scopes: current.scopes ?? [] });
+  const fresh = projectRoster(reduced, current.state, { navigation: evidence, scopes: current.scopes ?? [], repositories: current.repositories ?? [] });
   const instance = fresh.instances.find(i => i.key === key && i.kind === 'terminal' && i.identity === old.identity);
   if (!instance || instance.contextOnly || instance.outsideFilters.length) return disabled('not-actionable-instance');
   const check = navigationTarget(rows[0], reduced.rows, evidence);

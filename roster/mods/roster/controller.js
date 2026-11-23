@@ -12,14 +12,16 @@ export class Controller {
   }
   render() {
     this.observe();
-    this.projection = projectRoster(this.feed.reduced, this.state, { navigation: this.feed.navigation, scopes: this.feed.evidence.scopes ?? [], collapseUnassigned: this.collapseUnassigned });
+    this.projection = projectRoster(this.feed.reduced, this.state, { navigation: this.feed.navigation, scopes: this.feed.evidence.scopes ?? [],
+      repositories: this.feed.evidence.repositories ?? [], collapseUnassigned: this.collapseUnassigned });
     return this.projection;
   }
   change(event) { this.state = transition(this.state, event); }
   activate(projection, key) {
     this.observe();
     const plan = actionIntent(this.feed.reduced, projection, key, this.feed.navigation,
-      { state: this.state, generation: this.feed.generation, scopes: this.feed.evidence.scopes ?? [] });
+      { state: this.state, generation: this.feed.generation, scopes: this.feed.evidence.scopes ?? [],
+        repositories: this.feed.evidence.repositories ?? [] });
     if (plan.enabled) this.host.run(plan.intent.action === 'focus' ? 'pane.focus' : 'terminal.peek', { terminal: plan.intent.address });
     return plan;
   }

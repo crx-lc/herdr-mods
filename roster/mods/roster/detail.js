@@ -30,6 +30,11 @@ export function detailFields(instance) {
     field('context', 'Execution context', context.context),
     field('state', 'State', [instance.display.error ?? instance.status, row.lifecycle, row.freshness].filter(Boolean).join(' · '))];
   if (row.project.resolution && row.project.id == null) fields[1].value += ' (' + row.project.resolution + ')';
+  // Name the unbound label literally; it is shown, never used to group.
+  const token = row.project.resolution === 'unbound' ? row.project.evidence?.[0]?.token : null;
+  if (token) fields[1].value += ': label herdr.project=' + token + (row.core.verified ? ' has no local binding' : ' needs a verified Core to bind');
+  const repository = instance.placement?.repository;
+  fields.splice(2, 0, field('repository', 'Repository', repository ?? 'Not verified'));
   if (row.roster.state === 'waiting') fields.push(field('waiting', 'Waiting', instance.display.detail ?? 'Waiting detail unavailable'));
   fields.push(field('provider', 'Work item / project provider', row.providerBadge?.accessibleName ?? 'Unknown'),
     field('availability', 'Action availability', actionReason(instance)));

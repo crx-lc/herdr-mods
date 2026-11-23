@@ -220,7 +220,7 @@ test('every mandatory field has independent complete pages including suffixes an
   i.identityDiagnostic = 'diagnostic'.repeat(80) + 'DIAGNOSTIC-END';
   i.outsideFilters = ['filter'.repeat(80) + 'FILTER-END'];
   const fields = detailFields(i);
-  assert.deepEqual(fields.map(f => f.id), ['name','project','parent','machine','context','state','waiting','provider','availability','filters','diagnostic']);
+  assert.deepEqual(fields.map(f => f.id), ['name','project','repository','parent','machine','context','state','waiting','provider','availability','filters','diagnostic']);
   const values = Object.fromEntries(fields.map(f=>[f.id,f.value]));
   for (const [id, suffix] of [['name','NAME-END'],['project','PROJECT-END'],['parent','PARENT-END'],['machine','HOST-END'],['context','CONTEXT-END'],['state','STATE-END'],['waiting','WAIT-END'],['provider','PROVIDER-END'],['availability','REASON-END'],['filters','FILTER-END'],['diagnostic','DIAGNOSTIC-END']]) assert.ok(values[id].includes(suffix));
   assertPages(fields, detailPages(fields));
