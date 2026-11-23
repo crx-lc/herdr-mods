@@ -1,7 +1,7 @@
 import { Controller } from './controller.js';
 import { LayoutOptIn } from './layout.js';
 import { desktopHost, desktopLayoutHost } from './desktop.js';
-import { actionReason, rowContext, detailFields, detailPages, detailLabel } from './detail.js';
+import { actionReason, rowContext, detailFields, detailPages, detailLabel, hoverText } from './detail.js';
 
 export function timerDeadline(cx, promise) {
   return new Promise((resolve, reject) => {
@@ -204,12 +204,14 @@ export function createRosterView(kit, app, options = {}) {
         const status = waiting ? i.display.compact ? '◈ Waiting' : i.display.label : i.display.error ?? i.status;
         const provider = row.providerBadge?.accessibleName;
         const context = rowContext(i), label = detailLabel(i), explanation = actionReason(i);
+        // Hover is short and pre-wrapped; the full label stays for screen readers and Info.
+        const hover = hoverText(i, waiting ? i.display.detail ?? 'Waiting' : status);
         // One compact line per agent: name, machine, known context, badges. Everything
         // unknown or secondary (project, parent, route, reasons) lives in Info/Details.
         const element = click(i.key, label, () => { if (!this.reader) this.controller.activate(projection, i.key); })
-          .flex_1().min_w(0).h(24).gap(4).tooltip(label);
+          .flex_1().min_w(0).h(24).gap(4).tooltip(hover);
         const selected = this.controls.at(-1);
-        Object.assign(selected, { rowIndex: index, instance: i, detail: label,
+        Object.assign(selected, { rowIndex: index, instance: i, detail: label, hover,
           disabledReason: i.navigation.enabled ? null : explanation });
         // Neutral monogram only for a known project: an "Unassigned" initial says nothing.
         if (context.knownProject) element.child(h().w(16).h(16).flex_none().justify_center().rounded(4).bg(theme.raised)
@@ -231,13 +233,13 @@ export function createRosterView(kit, app, options = {}) {
         const line = h().h(24).flex_none().min_w(0).gap(2).pl(Math.min(i.depth, 3) * 8).child(element);
         const info = button('info:' + i.key, 'Details for ' + row.displayLabel,
           cx => this.openDetails({ key: 'info:' + i.key, instance: i }, cx), { text: 'Info' }).px(0).w(30);
-        Object.assign(this.controls.at(-1), { rowIndex: index, instance: i, detail: label, disabledReason: selected.disabledReason });
+        Object.assign(this.controls.at(-1), { rowIndex: index, instance: i, detail: label, hover, disabledReason: selected.disabledReason });
         line.child(info);
         if (parents.has(row.associationKey)) {
           const collapsed = c.state.folds[i.key] ?? false;
           line.child(button('fold:' + i.key, collapsed ? 'Show children' : 'Hide children',
             change({ type: 'fold', key: i.key, collapsed: !collapsed }), { text: collapsed ? '▸' : '▾' }).px(0).w(18));
-          Object.assign(this.controls.at(-1), { rowIndex: index, instance: i, detail: label, disabledReason: selected.disabledReason });
+          Object.assign(this.controls.at(-1), { rowIndex: index, instance: i, detail: label, hover, disabledReason: selected.disabledReason });
         }
         body.child(line);
       }
@@ -270,7 +272,7 @@ export function createRosterView(kit, app, options = {}) {
       root.accessibility_label(selected?.label ?? 'Roster sidebar: Up and Down select, Enter activates');
       if (selected) {
         const footer = v().id('roster-focus-tooltip').h(selected.disabledReason ? 32 : 16).flex_none().min_w(0)
-          .tooltip(selected.label).accessibility_label(selected.label);
+          .tooltip(selected.hover ?? selected.label).accessibility_label(selected.label);
         if (selected.disabledReason) footer.child(labelText(selected.disabledReason, 11, muted)
           .id('roster-disabled-reason').h(16).flex_none());
         const summary = h().h(16).flex_none().min_w(0)

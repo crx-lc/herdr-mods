@@ -106,7 +106,7 @@ test('compact row shows a bounded machine name and no unknown context; full diag
     assert.deepEqual(machine.attributes.max_w, [84]); assert.deepEqual(machine.attributes.min_w, [0]); assert.ok(machine.attributes.truncate);
     assert.equal(byId(row, 'row-execution-context:' + i.key), undefined, 'unknown context is not drawn');
     assert.doesNotMatch(textOf(row), /Context unknown|Route|host unknown/);
-    assert.match(row.attributes.tooltip[0], /host unknown.*identity unverified/);
+    assert.match(row.attributes.accessibility_label[0], /host unknown.*identity unverified/);
     assert.match(detailFields(i).find(f => f.id === 'machine').value, /host unknown.*identity unverified/);
     assert.equal(detailFields(i).find(f => f.id === 'provider').value, 'Unknown');
     s.view.controller.render = original;

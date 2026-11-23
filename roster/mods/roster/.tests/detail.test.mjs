@@ -79,7 +79,7 @@ test('compact row keeps known project as a monogram only; parent/project read in
     assert.equal(el.attributes.h[0], 24);
     assert.ok(flatten(el).some(e => e.attributes.accessibility_label?.[0] === 'Sample project project icon fallback'));
     assert.doesNotMatch(textOf(el), /Project:|Parent:|Context unknown/);
-    assert.match(el.attributes.tooltip[0], /Project: Sample project.*Parent: Coordinator/);
+    assert.match(el.attributes.accessibility_label[0], /Project: Sample project.*Parent: Coordinator/);
     assert.equal(byId(el, 'info:' + i.key), undefined, 'Info must not bubble into terminal activation');
     const control = s.view.controls.find(c => c.key === 'info:' + i.key);
     assert.equal(control.instance.key, i.key);
@@ -183,7 +183,7 @@ for (const collapsed of [false, true]) test(`full waiting/context/reason reader 
     const p = render(); for (const i of p.instances) if (i.row?.roster.state === 'waiting') i.display.detail = waiting; return p;
   };
   const tree = s.view.render(s.cx), i = item(s.view); assert.equal(i.display.compact, !collapsed);
-  const tooltip = byId(tree, i.key).attributes.tooltip[0];
+  const tooltip = byId(tree, i.key).attributes.accessibility_label[0];
   for (const value of [waiting, 'Project: Sample project', 'Parent: Not reported', 'Context unknown', 'current route is unverified']) assert.ok(tooltip.includes(value));
   s.view.controller.cursor = i.key; key(s, 'd');
   assert.equal(fieldsOf(s.view.reader).waiting, waiting); assert.match(fieldsOf(s.view.reader).availability, /current route is unverified/);

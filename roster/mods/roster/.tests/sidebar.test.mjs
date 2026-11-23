@@ -28,7 +28,7 @@ test('actual main entry defaults passive, captures exactly once, renders labels 
   assert.ok(view.controller.projection.instances.filter(i => i.kind === 'section' && i.label === 'Other').every(i => i.collapsed));
   assert.match(textOf(tree), /▾ Needs you · 1 .*▸ Other · 2$/);
   assert.equal(rows(view.controller.projection).length, 1, 'only the Needs you copy is drawn');
-  assert.ok(flatten(tree).some(e => e.attributes.tooltip?.[0].includes('Context unknown')));
+  assert.ok(flatten(tree).some(e => e.attributes.accessibility_label?.[0].includes('Context unknown')));
   assert.ok(flatten(tree).some(e => e.attributes.tooltip?.[0].includes('unverified'))); assert.doesNotMatch(textOf(tree), /Open unavailable:/); assert.ok(rows(view.controller.projection).every(i => !i.navigation.enabled));
   assert.ok(view.controller.feed.reduced.rows.every(r => !r.core.verified && r.project.id === null));
   assert.ok(flatten(tree).some(e => e.attributes.accessibility_label?.[0].includes('GitHub')));
@@ -88,7 +88,7 @@ test('actual view renders static compact waiting, full hover AND keyboard focus 
   const { f } = waitingWorld(), { view, cx } = viewOf(f); let tree = view.render(cx), p = view.controller.projection;
   const parent = find(p, 't1'); assert.equal(parent.display.compact, true); assert.equal(p.counts.all.working, 3);
   const element = flatten(tree).find(e => e.attributes.id?.[0] === parent.key);
-  assert.match(element.attributes.tooltip[0], /Waiting on 3 agents/); assert.match(element.attributes.tooltip[0], /Project: Sample project/); assert.match(element.attributes.tooltip[0], /Context unknown/); assert.match(element.attributes.accessibility_label[0], /Waiting on 3 agents/);
+  assert.match(element.attributes.accessibility_label[0], /Waiting on 3 agents/); assert.match(element.attributes.accessibility_label[0], /Project: Sample project/); assert.match(element.attributes.accessibility_label[0], /Context unknown/); assert.match(element.attributes.accessibility_label[0], /Waiting on 3 agents/);
   assert.match(textOf(element), /◈/); view.controller.cursor = parent.key; tree = view.render(cx);
   assert.match(textOf(flatten(tree).find(e => e.attributes.id?.[0] === 'roster-focus-tooltip')), /Waiting on 3 agents/);
   view.controller.change({ type: 'fold', key: parent.key, collapsed: true }); tree = view.render(cx); assert.match(textOf(tree), /Waiting on 3 agents/);
@@ -222,7 +222,8 @@ test('compact sidebar keeps a single default toolbar and puts row badges on the 
     assert.equal(flatten(first).some(e => /project icon fallback/.test(e.attributes.accessibility_label?.[0] ?? '')), false);
     assert.equal(flatten(second).some(e => e.attributes.accessibility_label?.[0].includes('provider badge')), false);
     assert.doesNotMatch(textOf(rows), /Open unavailable|Waiting/);
-    assert.match(first.attributes.tooltip[0], /Open unavailable: terminal identity is unverified/);
+    assert.equal(first.attributes.tooltip[0].replace(/\n/g, ' '), 'Developer #12 · Working Open unavailable: terminal identity is unverified');
+    assert.match(first.attributes.accessibility_label[0], /Open unavailable: terminal identity is unverified/);
     if (mode === 'projects') {
       byId(tree, 'mode:status').attributes.on_click[0]({}, cx);
       tree = view.render(cx);

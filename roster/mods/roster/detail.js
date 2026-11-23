@@ -44,6 +44,31 @@ export function detailFields(instance) {
 }
 export const detailLabel = instance => detailFields(instance).map(f => f.label + ': ' + f.value).join(' · ');
 
+// Hover is a short, pre-wrapped summary; the full facts stay in Info and the
+// accessibility label. Each logical line is capped, then wrapped at spaces.
+export const HOVER_WIDTH = 40, HOVER_LINE_CAP = 80;
+const clip = (value, limit) => { const points = Array.from(value); return points.length > limit ? points.slice(0, limit - 1).join('') + '…' : value; };
+export function wrapText(value, width = HOVER_WIDTH) {
+  const lines = [];
+  let line = [];
+  for (const word of value.split(/\s+/).filter(Boolean)) {
+    let points = Array.from(word);
+    while (points.length) {
+      const room = width - (line.length ? line.length + 1 : 0);
+      if (points.length <= room) { line = line.length ? [...line, ' ', ...points] : points; points = []; }
+      else if (line.length) { lines.push(line.join('')); line = []; }
+      else { lines.push(points.slice(0, width).join('')); points = points.slice(width); }
+    }
+  }
+  if (line.length) lines.push(line.join(''));
+  return lines.join('\n');
+}
+export function hoverText(instance, status) {
+  const lines = [instance.row.displayLabel + ' · ' + status];
+  if (!instance.navigation.enabled) lines.push(actionReason(instance));
+  return lines.map(line => wrapText(clip(line.replace(/\s+/g, ' ').trim(), HOVER_LINE_CAP))).join('\n');
+}
+
 // Avoid common combining/joining boundaries where feasible without Intl. A run
 // longer than the page budget must still split; every UTF-16 source span survives.
 const continuation = char => /[\u0300-\u036f\u1ab0-\u1aff\u1dc0-\u1dff\u20d0-\u20ff\ufe00-\ufe0f\ufe20-\ufe2f\u200d]/u.test(char)

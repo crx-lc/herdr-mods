@@ -33,7 +33,7 @@ for (const mode of ['projects', 'status']) for (const state of ['working', 'bloc
       const drawnRow = textOf(byId(tree, child.key));
       assert.doesNotMatch(drawnRow, /Parent:|Project:|Context unknown|Unassigned/);
       assert.match(drawnRow, /This computer/);
-      for (const drawn of [byId(tree, child.key).attributes.tooltip[0], textOf(byId(tree, 'roster-focus-tooltip'))]) {
+      for (const drawn of [byId(tree, child.key).attributes.accessibility_label[0], textOf(byId(tree, 'roster-focus-tooltip'))]) {
         assert.match(drawn, /Parent: Coordinator/);
         assert.ok(drawn.includes(mapped ? 'Sample project' : 'Unassigned'));
         assert.match(drawn, /Local/);
@@ -53,7 +53,7 @@ for (const mode of ['projects', 'status']) {
     assert.equal(row.context.parent, null);
     view.controller.cursor = row.key; const tree = view.render(cx);
     assert.doesNotMatch(textOf(byId(tree, row.key)), /Unassigned|Context unknown|Parent:|Sample project/);
-    for (const drawn of [byId(tree, row.key).attributes.tooltip[0], textOf(byId(tree, 'roster-focus-tooltip'))]) {
+    for (const drawn of [byId(tree, row.key).attributes.accessibility_label[0], textOf(byId(tree, 'roster-focus-tooltip'))]) {
       assert.match(drawn, /Unassigned/);
       assert.match(drawn, /Context unknown/);
       assert.doesNotMatch(drawn, /Parent: Coordinator|Sample project/);
@@ -91,7 +91,7 @@ for (const mode of ['projects', 'status']) {
     assert.ok(footer.children[0].attributes.flex_none);
     assert.ok(textOf(footer.children[1]).includes(waiting));
     assert.match(textOf(footer.children[1]), /Sample project.*Context unknown/);
-    assert.ok(byId(tree, parent.key).attributes.tooltip[0].includes(waiting)); assert.match(byId(tree, parent.key).attributes.tooltip[0], /Project: Sample project/); assert.match(byId(tree, parent.key).attributes.tooltip[0], /Context unknown/);
+    assert.ok(byId(tree, parent.key).attributes.accessibility_label[0].includes(waiting)); assert.match(byId(tree, parent.key).attributes.accessibility_label[0], /Project: Sample project/); assert.match(byId(tree, parent.key).attributes.accessibility_label[0], /Context unknown/);
     // Worst fixed regions: Options, selected disabled row, and a layout message.
     view.toolsOpen = true; view.message = 'Sample layout result';
     const full = view.render(cx), body = byId(full, 'roster-rows');
