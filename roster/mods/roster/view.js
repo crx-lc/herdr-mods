@@ -21,8 +21,10 @@ export function createRosterView(kit, app, options = {}) {
       this.optionsScroll = ScrollHandle.new();
       this.controller = new Controller(options.host ?? desktopHost(app), { collapseUnassigned: options.collapseUnassigned ?? true });
       this.optIn = new LayoutOptIn(options.layoutHost ?? desktopLayoutHost(app));
-      this.reader = null; this.readerControls = []; this.returnControl = null;
+      this.reader = null; this.readerControls = [];
       this.controls = []; this.message = ''; this.selection = null; this.reading = false; this.toolsOpen = false;
+      // Where the cursor was when an event last placed it; Up/Down resume there if its row vanishes.
+      this.cursorAt = null;
       if (!app.checking()) cx.spawn(async cx => {
         for (;;) { if (await app.nextCommand() === 'focus') this.focus(cx); }
       });
@@ -37,25 +39,47 @@ export function createRosterView(kit, app, options = {}) {
       if (control?.rowIndex != null) this.rowScroll.scroll_to_item(control.rowIndex);
       if (control?.optionIndex != null) this.optionsScroll.scroll_to_item(control.optionIndex);
     }
+    // Render never changes state or asks for a redraw (GPUI throws on cx.notify() there).
+    // Everything below that moves the cursor, scrolls or closes Details runs in an event.
+    place(key) {
+      this.controller.cursor = key;
+      const index = this.controls.findIndex(control => control.key === key);
+      this.cursorAt = index < 0 ? null : { key, index };
+    }
+    // Details stay open only while the view they were opened over is unchanged.
+    activeReader() {
+      const reader = this.reader;
+      return reader && reader.state === JSON.stringify(this.controller.state) && reader.toolsOpen === this.toolsOpen ? reader : null;
+    }
     openDetails(control, cx) {
       if (!control?.instance) return;
       const fields = detailFields(control.instance);
       this.reader = { sourceKey: control.instance.key, returnKey: control.key, fields,
         pages: detailPages(fields), page: 0, state: JSON.stringify(this.controller.state), toolsOpen: this.toolsOpen };
-      this.returnControl = null;
       this.readerCursor = 'details:next';
       // Discard normal callbacks immediately, before the next render/key event.
       this.controls = []; this.readerControls = [];
       cx.notify();
     }
     closeDetails(cx, returnToOrigin = true) {
-      // A transition also cancels a Back/Esc return queued before this render.
-      if (!returnToOrigin) this.returnControl = null;
-      if (!this.reader) return;
-      if (returnToOrigin) this.returnControl = { key: this.reader.returnKey, sourceKey: this.reader.sourceKey,
-        state: this.reader.state, toolsOpen: this.reader.toolsOpen };
+      const reader = this.reader;
+      if (!reader) return;
       this.reader = null; this.readerControls = []; this.controls = [];
+      if (returnToOrigin) this.returnTo(reader);
       cx.notify();
+    }
+    // Back/Esc: put the cursor back on the exact originating control if its instance is
+    // still listed, and scroll to it; otherwise select Projects. Decided now, not in render.
+    returnTo(reader) {
+      const c = this.controller, projection = c.render();
+      const index = projection.instances.findIndex(i => i.kind === 'terminal' && i.key === reader.sourceKey);
+      if (index < 0) { this.place('mode:projects'); return; }
+      const instance = projection.instances[index];
+      const parent = c.feed.reduced.rows.some(r => r.parent?.associationKey && r.parent.associationKey === instance.row.associationKey);
+      const key = reader.returnKey === 'fold:' + reader.sourceKey && !parent ? reader.sourceKey : reader.returnKey;
+      if (key === 'details:open') this.footerSourceKey = reader.sourceKey;
+      c.cursor = key; this.cursorAt = { key, index: null };
+      this.rowScroll.scroll_to_item(index);
     }
     pageDetails(direction, cx) {
       const reader = this.reader;
@@ -66,6 +90,8 @@ export function createRosterView(kit, app, options = {}) {
     }
     key(event, cx) {
       const chord = event.keystroke;
+      // Details left over from a changed view are dropped here, in the event, not in render.
+      if (this.reader && !this.activeReader()) { this.reader = null; this.readerControls = []; }
       if (this.reader) {
         if (chord === 'escape') this.closeDetails(cx);
         else if (['left', 'up', 'right', 'down', 'home', 'end'].includes(chord))
@@ -82,18 +108,27 @@ export function createRosterView(kit, app, options = {}) {
       }
       if (!['up', 'down', 'enter'].includes(chord)) return;
       cx.stop_propagation();
-      const c = this.controller;
-      if (chord === 'enter') this.controls.find(i => i.key === c.cursor)?.activate(cx);
-      else {
-        const index = this.controls.findIndex(i => i.key === c.cursor), step = chord === 'up' ? -1 : 1;
-        c.cursor = this.controls[index < 0 ? (step > 0 ? 0 : this.controls.length - 1)
-          : (index + step + this.controls.length) % this.controls.length]?.key ?? null;
-        this.reveal(this.controls.find(i => i.key === c.cursor));
+      const c = this.controller, controls = this.controls, count = controls.length;
+      // Enter acts only on the exact control under the cursor. If that row vanished, Enter
+      // does nothing: a neighbour is never activated in its place.
+      if (chord === 'enter') controls.find(i => i.key === c.cursor)?.activate(cx);
+      else if (count) {
+        const index = controls.findIndex(i => i.key === c.cursor), step = chord === 'up' ? -1 : 1;
+        let next;
+        if (index >= 0) next = (index + step + count) % count;
+        else if (this.cursorAt?.key === c.cursor && this.cursorAt.index != null) {
+          // The selected row vanished: resume beside where it was.
+          const at = Math.min(this.cursorAt.index, count - 1);
+          next = step > 0 ? at : Math.max(0, Math.min(this.cursorAt.index, count) - 1);
+        } else next = step > 0 ? 0 : count - 1;
+        this.place(controls[next].key);
+        if (controls[next].key === 'details:open') this.footerSourceKey = controls[next].instance?.key ?? this.footerSourceKey;
+        this.reveal(controls[next]);
       }
       cx.notify();
     }
-    renderDetails(root, theme, cx) {
-      const { div, h_flex, v_flex } = kit, reader = this.reader, page = reader.pages[reader.page];
+    renderDetails(root, theme, cx, reader) {
+      const { div, h_flex, v_flex } = kit, page = reader.pages[reader.page];
       const fg = theme.foreground ?? theme.text;
       this.controls = []; this.readerControls = [];
       const button = (key, text, activate, disabled = false) => {
@@ -122,7 +157,8 @@ export function createRosterView(kit, app, options = {}) {
     }
     render(cx) {
       const projection = this.controller.render(), theme = app.theme(), props = app.props();
-      const c = this.controller, previousControls = this.controls, previousIndex = previousControls.findIndex(control => control.key === c.cursor);
+      const c = this.controller;
+      // this.controls is this render's output: the callbacks key events use. Nothing else is written.
       this.controls = [];
       const parents = new Set(c.feed.reduced.rows.map(r => r.parent?.associationKey).filter(Boolean));
       const fg = theme.foreground ?? theme.text;
@@ -134,7 +170,7 @@ export function createRosterView(kit, app, options = {}) {
         this.controls.push({ key, label, activate });
         return (column ? v() : h()).id(key).min_w(0).px(6).rounded(4).accessibility_label(label)
           .bg(c.cursor === key ? theme.selected ?? theme.raised : theme.surface)
-          .on_click((_e, cx) => { c.cursor = key; this.focus(cx); activate(cx); });
+          .on_click((_e, cx) => { this.place(key); this.focus(cx); activate(cx); });
       };
       const button = (key, label, activate, { active = false, text = label } = {}) => {
         const element = click(key, label, activate).h(24).flex_none().tooltip(label);
@@ -156,12 +192,12 @@ export function createRosterView(kit, app, options = {}) {
       toolbar.child(button('tools:toggle', (settingsOpen ? 'Hide' : 'Show') + ' filters and Agents slot controls' + (filtered ? ' (filters active)' : ''),
         cx => { this.closeDetails(cx, false); this.toolsOpen = !this.toolsOpen; cx.notify(); }, { active: settingsOpen || filtered, text: filtered ? 'Options •' : 'Options' }));
       root.child(toolbar);
-      if (this.reader && (this.reader.state !== JSON.stringify(c.state) || this.reader.toolsOpen !== this.toolsOpen)) this.closeDetails(cx, false);
       if (!this.reading && this.controller.feed.evidence.admissions?.length) {
         this.reading = true;
         cx.spawn(async cx => { try { if (await this.controller.refresh(p => timerDeadline(cx, p))) cx.notify(); } finally { this.reading = false; } });
       }
-      if (this.reader) return this.renderDetails(root, theme, cx);
+      const reader = this.activeReader();
+      if (reader) return this.renderDetails(root, theme, cx, reader);
       if (settingsOpen) {
         const tools = v().id('roster-options').min_h(0).flex_none().gap(2).overflow_y_scrollbar().track_scroll(this.optionsScroll);
         let optionIndex = 0;
@@ -272,23 +308,10 @@ export function createRosterView(kit, app, options = {}) {
       const footerOwner = this.controls.find(control => control.key === c.cursor)
         ?? (c.cursor === 'details:open' ? this.controls.find(control => control.key === this.footerSourceKey) : null);
       if (footerOwner?.instance) {
-        this.footerSourceKey = footerOwner.instance.key;
         this.controls.push({ ...footerOwner, key: 'details:open',
           activate: cx => this.openDetails({ key: 'details:open', instance: footerOwner.instance }, cx) });
       }
-      if (this.returnControl && (this.returnControl.state !== JSON.stringify(c.state)
-        || this.returnControl.toolsOpen !== this.toolsOpen)) this.returnControl = null;
-      if (this.returnControl) {
-        const origin = this.returnControl;
-        const surviving = this.controls.find(control => control.key === origin.key && control.instance?.key === origin.sourceKey)
-          ?? this.controls.find(control => control.key === origin.sourceKey);
-        c.cursor = surviving?.key ?? 'mode:projects';
-        this.reveal(surviving); this.returnControl = null;
-      }
-      if (c.cursor !== null && !this.controls.some(control => control.key === c.cursor)) {
-        c.cursor = this.controls[Math.min(Math.max(previousIndex, 0), this.controls.length - 1)]?.key ?? null;
-        cx.notify();
-      }
+      // A cursor whose row vanished selects nothing until the next key or click moves it.
       // Keep the disabled reason independent of long waiting/context text for keyboard selection.
       const selected = this.controls.find(control => control.key === c.cursor);
       root.accessibility_label(selected?.label ?? 'Roster sidebar: Up and Down select, Enter activates');
@@ -302,7 +325,8 @@ export function createRosterView(kit, app, options = {}) {
         if (selected.instance) summary.child(h().id('details:open').h(16).flex_none().px(3)
           .bg(c.cursor === 'details:open' ? theme.selected ?? theme.raised : theme.surface)
           .accessibility_label('Details (D)').on_click((_e, cx) => {
-            c.cursor = 'details:open'; this.focus(cx); this.controls.find(control => control.key === 'details:open')?.activate(cx);
+            this.footerSourceKey = selected.instance.key; this.place('details:open'); this.focus(cx);
+            this.controls.find(control => control.key === 'details:open')?.activate(cx);
           })
           .child(labelText('Details (D)', 11)));
         footer.child(summary);

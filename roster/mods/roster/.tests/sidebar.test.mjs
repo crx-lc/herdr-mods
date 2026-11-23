@@ -94,7 +94,10 @@ test('actual view renders static compact waiting, full hover AND keyboard focus 
   assert.match(textOf(element), /◈/); view.controller.cursor = parent.key; tree = view.render(cx);
   assert.match(textOf(flatten(tree).find(e => e.attributes.id?.[0] === 'roster-focus-tooltip')), /Waiting on 3 agents/);
   view.controller.change({ type: 'fold', key: parent.key, collapsed: true }); tree = view.render(cx); assert.match(textOf(tree), /Waiting on 3 agents/);
-  view.controller.change({ type: 'view', view: 'status' }); tree = view.render(cx); assert.match(textOf(tree), /Working · 3/); assert.match(textOf(tree), /Waiting on 3 agents/);
+  view.controller.change({ type: 'view', view: 'status' }); tree = view.render(cx); assert.match(textOf(tree), /Working · 3/);
+  // Status rows have new keys: the old cursor selects nothing, and the full phrase is on the row itself.
+  const statusParent = find(view.controller.projection, 't1'), statusRow = flatten(tree).find(e => e.attributes.id?.[0] === statusParent.key);
+  assert.match(statusRow.attributes.accessibility_label[0], /Waiting on 3 agents/); assert.match(statusRow.attributes.tooltip[0].replace(/\n/g, ' '), /Waiting on 3 agents/);
   assert.equal(f.calls.length, 0);
 });
 

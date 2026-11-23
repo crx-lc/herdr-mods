@@ -17,10 +17,11 @@ for (const id of ['mode:status', 'mode:projects', 'tools:toggle']) test('reader 
     const s = setup(), origin = s.view.controller.projection.instances.find(i => i.row?.address === 't2');
     s.view.controller.cursor = origin.key; s.render(); s.key('d');
     const tree = s.render();
-    if (pending) { s.key('escape'); assert.ok(s.view.returnControl); }
+    // Esc resolves the return at once (in the event); the toolbar click then moves on from there.
+    if (pending) { s.key('escape'); assert.equal(s.view.reader, null); assert.equal(s.view.controller.cursor, origin.key); }
     s.click(tree, id); s.key('enter'); // no stale action before render
     const result = s.render();
-    assert.equal(s.view.reader, null); assert.equal(s.view.returnControl, null);
+    assert.equal(s.view.reader, null);
     assert.equal(s.view.controller.cursor, id);
     assert.equal(byId(result, id).attributes.bg[0], appOf(s.f.host).theme().raised);
     assert.equal(s.view.controller.state.view, id === 'mode:status' ? 'status' : 'projects');
@@ -28,7 +29,7 @@ for (const id of ['mode:status', 'mode:projects', 'tools:toggle']) test('reader 
     assert.equal(s.f.calls.length, 0); assert.equal(s.stats.focus, 1, 'only clicked sidebar control requests focus');
   }
 });
-test('Back/Esc keep exact duplicate instance; pending return is cleared by external state change', () => {
+test('Back/Esc keep exact duplicate instance; a later state change never drags the cursor back', () => {
   const s = setup(), rows = s.view.controller.projection.instances.filter(i => i.row?.address === 't2');
   for (const origin of rows) for (const close of ['escape', 'back']) {
     let tree = s.render(); s.click(tree, 'info:' + origin.key); tree = s.render();
@@ -40,9 +41,10 @@ test('Back/Esc keep exact duplicate instance; pending return is cleared by exter
     assert.equal(s.view.rowScroll.requests.at(-1), s.view.controls.find(c => c.key === 'info:' + origin.key).rowIndex);
   }
   s.view.controller.cursor = rows[0].key; s.key('d'); s.render();
-  s.key('escape'); assert.ok(s.view.returnControl);
+  s.key('escape'); assert.equal(s.view.controller.cursor, rows[0].key);
   s.view.controller.change({ type: 'view', view: 'status' }); s.render();
-  assert.equal(s.view.returnControl, null); assert.equal(s.view.reader, null); assert.equal(s.f.calls.length, 0);
+  assert.equal(s.view.controller.cursor, rows[0].key, 'render leaves the cursor alone');
+  assert.equal(s.view.reader, null); assert.equal(s.f.calls.length, 0);
 });
 const pagesOf = value => detailPages([{ id: 'x', label: 'X', value }]);
 function coverage(value, pages) {

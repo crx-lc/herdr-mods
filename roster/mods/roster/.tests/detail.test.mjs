@@ -168,7 +168,11 @@ test('view, filter, fold and Options changes close locally; normal unhandled key
     const s = setup(); const i = item(s.view); assert.equal(s.stats.focus, 0);
     const before = s.stats.stop; key(s, 'd'); key(s, 'left'); assert.equal(s.stats.stop, before);
     s.view.controller.cursor = i.key; key(s, 'd'); s.view.render(s.cx);
-    s.view.controller.change(event); s.view.render(s.cx); assert.equal(s.view.reader, null); assert.equal(s.f.calls.length, 0);
+    // A state change behind the view's back: render shows the list without closing anything,
+    // and the next key event drops the stale Details.
+    s.view.controller.change(event); const tree = s.view.render(s.cx);
+    assert.equal(s.view.activeReader(), null); assert.equal(flatten(tree).some(e => e.attributes.id?.[0] === 'roster-details'), false);
+    key(s, 'escape'); assert.equal(s.view.reader, null); assert.equal(s.f.calls.length, 0);
   }
   const s = setup(); s.view.controller.cursor = item(s.view).key; key(s, 'd');
   click(s, s.view.render(s.cx), 'tools:toggle'); s.view.render(s.cx);

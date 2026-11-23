@@ -183,10 +183,15 @@ test('F5 Enter preserves mode/filter/fold position, Down advances and tooltip/a1
   assert.equal(f.calls.length, 0);
 });
 
-test('F5 disappeared selected control falls back deterministically without implicit terminal action', () => {
-  const f = fakeHost(), { view, cx } = viewOf(f); view.render(cx);
-  const key = find(view.controller.projection, 't1').key; view.controller.cursor = key;
-  const index = view.controls.findIndex(c => c.key === key); f.values.terminals = []; view.render(cx);
+test('F5 disappeared selected control: render leaves the cursor, Enter is inert, Down resumes beside it', () => {
+  const f = fakeHost([terminal('t1'), terminal('t2'), terminal('t3')]), { view, cx } = viewOf(f); view.render(cx);
+  const key = find(view.controller.projection, 't2').key;
+  view.place(key); const index = view.controls.findIndex(c => c.key === key);
+  f.values.terminals = [terminal('t1'), terminal('t3')]; const tree = view.render(cx);
+  assert.equal(view.controller.cursor, key, 'render does not move the cursor');
+  assert.equal(flatten(tree).some(e => e.attributes.id?.[0] === 'roster-focus-tooltip'), false, 'nothing is selected');
+  view.key({ keystroke: 'enter' }, cx); assert.equal(f.calls.length, 0, 'Enter never activates a neighbour');
+  view.key({ keystroke: 'down' }, cx);
   assert.equal(view.controller.cursor, view.controls[Math.min(index, view.controls.length - 1)].key);
   assert.equal(f.calls.length, 0);
 });

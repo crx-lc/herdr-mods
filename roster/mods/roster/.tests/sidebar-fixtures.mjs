@@ -40,10 +40,22 @@ export class Element {
 for (const name of ['flex', 'flex_col', 'flex_row', 'gap', 'p', 'pl', 'w', 'h', 'id', 'text_size', 'bg', 'text_color', 'size_full', 'flex_1', 'overflow_y_scrollbar', 'track_focus', 'on_key_down', 'on_click', 'accessibility_label', 'tooltip', 'items_center', 'min_w', 'min_h', 'max_h', 'max_w', 'px', 'rounded', 'flex_none', 'truncate', 'font_semibold', 'justify_center', 'track_scroll', 'cursor_pointer', 'cursor_default', 'frames', 'border', 'border_color', 'py', 'w_full', 'whitespace_normal', 'line_height']) {
   Element.prototype[name] = function (...args) { this.attributes[name] = args; return this; };
 }
-export const kit = { View: class {}, ScrollHandle: { new: () => ({ requests: [], scroll_to_item(index) { this.requests.push(index); } }) }, div: () => new Element(), h_flex: () => new Element().flex().flex_row(), v_flex: () => new Element().flex().flex_col() };
+// Like GPUI: cx.notify() during render throws ("not allowed during the `render` phase").
+class GuardedView {
+  constructor() {
+    const render = this.render;
+    if (typeof render === 'function') this.render = function (cx, ...rest) {
+      const outer = cx.phase; cx.phase = 'render';
+      try { return render.call(this, cx, ...rest); } finally { cx.phase = outer; }
+    };
+  }
+}
+export const kit = { View: GuardedView, ScrollHandle: { new: () => ({ requests: [], scroll_to_item(index) { this.requests.push(index); } }) }, div: () => new Element(), h_flex: () => new Element().flex().flex_row(), v_flex: () => new Element().flex().flex_col() };
 export function context() {
   const stats = { focus: 0, notify: 0, stop: 0 }, timers = [], tasks = [];
-  const cx = { focus_handle: () => ({ focus: () => stats.focus++ }), notify: () => stats.notify++, stop_propagation: () => stats.stop++,
+  const cx = { focus_handle: () => ({ focus: () => stats.focus++ }), notify: () => {
+    if (cx.phase === 'render') throw Error('cx.notify() is not allowed during the `render` phase; request a re-render from an event handler instead');
+    stats.notify++; }, stop_propagation: () => stats.stop++,
     timer: { after: (ms, callback) => { assert.equal(ms, 2000); timers.push(callback); } }, spawn: fn => { tasks.push(Promise.resolve().then(() => fn(cx))); } };
   return { cx, stats, timers, tasks };
 }
