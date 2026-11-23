@@ -183,7 +183,7 @@ export function createRosterView(kit, app, options = {}) {
           extras.push(div().id('machine-state:' + row.key).size(6).rounded(3).flex_none().bg(row.ready ? theme.ansi2 ?? theme.working ?? fg : dim));
           add(groupHeader(row.key, row.label + (row.collapsed ? ', folded' : ''), row.label,
             change({ type: 'fold', key: row.key, collapsed: !row.collapsed }),
-            { icon: os?.icon ?? (row.machine ? 'server' : 'monitor'), collapsed: row.collapsed, extras,
+            { icon: os?.icon ?? (row.machine ? 'server' : 'monitor'), collapsed: row.collapsed, extras, height: 30, titleSize: 14, iconSize: 18, strong: true,
               tooltip: [row.label, os?.tooltip, row.machine ? (row.ready ? 'connected' : row.loading ? 'loading' : 'not connected') : null].filter(Boolean).join(' · ') }));
           if (!row.collapsed && row.count === 0 && row.ready) add(click('spaces:new:' + (row.machine ?? 'local'), 'New space on ' + row.label, newSpace)
             .h(28).flex_none().px(8).gap(7).rounded(7).text_size(12).text_color(dim).cursor_pointer()
@@ -296,11 +296,15 @@ export function createRosterView(kit, app, options = {}) {
       // A state change discards the old callbacks until the next render draws new ones.
       const dim = theme.dim ?? muted;
       // The stock group header: 26px, 11px dim text, optional leading icon, extras, chevron last.
-      const groupHeader = (key, label, title, activate, { icon: lead = null, collapsed = false, foldable = true, extras = [], tooltip = label, depth = 0 } = {}) => {
-        const head = click(key, label, activate).h(26).flex_none().px(8).pl(8 + Math.min(depth, 3) * 8).gap(7)
+      // Machine headers in Spaces pass a larger, semibold title and an 18px icon; the +, dot and
+      // chevron keep the header's own 11px size and stay aligned.
+      const groupHeader = (key, label, title, activate, { icon: lead = null, collapsed = false, foldable = true, extras = [], tooltip = label, depth = 0,
+        height = 26, titleSize = 11, iconSize = 13, strong = false } = {}) => {
+        const head = click(key, label, activate).h(height).flex_none().px(8).pl(8 + Math.min(depth, 3) * 8).gap(7)
           .text_size(11).text_color(dim).cursor_pointer().hover(el => el.bg(theme.hover ?? theme.raised)).tooltip(tooltip);
-        if (lead) head.child(icon(lead, 13).id('group-icon:' + key));
-        head.child(labelText(title, 11, dim).id('group-label:' + key).flex_1());
+        if (lead) head.child(icon(lead, iconSize).id('group-icon:' + key));
+        const titleText = labelText(title, titleSize, strong ? fg : dim).id('group-label:' + key).flex_1();
+        head.child(strong ? titleText.font_semibold() : titleText);
         for (const extra of extras) head.child(extra);
         if (foldable) head.child(icon(collapsed ? 'chevron-right' : 'chevron-down', 11).id('group-chevron:' + key));
         return head;

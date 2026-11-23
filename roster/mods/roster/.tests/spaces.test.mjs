@@ -115,7 +115,19 @@ test('machine headers follow the stock order: icon, name, then +, the connection
   assert.equal(byId(local, 'group-icon:spaces:machine:local').attributes.svg[0], 'mods/roster/icons/monitor.svg');
   assert.equal(byId(edge, 'group-icon:spaces:machine:edge').attributes.svg[0], 'mods/roster/icons/server.svg');
   assert.equal(textOf(byId(local, 'group-label:spaces:machine:local')), 'This computer');
-  for (const head of [local, edge]) { assert.equal(head.attributes.h[0], 26); assert.equal(head.attributes.text_size[0], 11); assert.ok(head.attributes.hover); }
+  // Machine headers carry more weight: 30px, a 14px semibold name in the foreground color, 18px icons.
+  // The header's own 11px size still applies to +, so +, the dot and the chevron are unchanged.
+  for (const [key, head] of [['local', local], ['edge', edge], ['zed', zed]]) {
+    assert.equal(head.attributes.h[0], 30); assert.equal(head.attributes.text_size[0], 11); assert.ok(head.attributes.hover);
+    const label = byId(head, 'group-label:spaces:machine:' + key);
+    assert.equal(label.attributes.text_size[0], 14); assert.ok(label.attributes.font_semibold); assert.equal(label.attributes.text_color[0], '#eeeeee');
+    assert.deepEqual(byId(head, 'group-icon:spaces:machine:' + key).attributes.size, [18]);
+    assert.deepEqual(byId(head, 'group-chevron:spaces:machine:' + key).attributes.size, [11]);
+    assert.deepEqual(byId(head, 'machine-state:spaces:machine:' + key).attributes.size, [6]);
+  }
+  assert.equal(byId(local, 'machine-add:spaces:machine:local').attributes.text_size, undefined, '+ inherits the 11px header size');
+  // Space rows stay compact.
+  assert.equal(byId(tree, 'space:s1').attributes.h[0], 30); assert.equal(byId(tree, 'space-name:s1').attributes.text_size[0], 12);
   // A machine that is not connected says so and offers no +.
   assert.deepEqual(childIds(zed), ['group-icon:spaces:machine:zed', 'group-label:spaces:machine:zed', 'machine-note:spaces:machine:zed', 'machine-state:spaces:machine:zed', 'group-chevron:spaces:machine:zed']);
   assert.equal(textOf(byId(zed, 'machine-note:spaces:machine:zed')), 'loading');

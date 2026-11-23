@@ -90,3 +90,11 @@ test('no reads under herdr-app check or outside Spaces', async () => {
   const k = view({ checking: true }); assert.equal(k.every.length, 0); k.render(); assert.deepEqual(k.reads, []);
   const p = view(); p.v.controller.change({ type: 'view', view: 'projects' }); p.poll(); await settle(); assert.deepEqual(p.reads, []);
 });
+
+test('every OS icon is drawn in the same 18px box in machine headers', async () => {
+  const s = view({ read: (_p, { on }) => Promise.resolve(on === 'edge' ? UBUNTU : on === 'plain' ? 'ID=debian\nPRETTY_NAME=Debian' : null) });
+  s.poll(); await settle(); await settle(); s.poll(); const tree = s.render();
+  const icons = ['local', 'edge', 'zed', 'plain'].map(k => byId(tree, 'group-icon:spaces:machine:' + k));
+  assert.deepEqual(icons.map(e => e.attributes.svg[0].split('/').pop()), ['os-windows.svg', 'os-ubuntu.svg', 'server.svg', 'os-debian.svg']);
+  assert.ok(icons.every(e => e.attributes.size[0] === 18 && e.attributes.flex_none), 'one box for every icon');
+});
