@@ -189,13 +189,14 @@ export function createRosterView(kit, app, options = {}) {
         else element.child(h().id('space-avatar:' + row.id).w(18).h(18).flex_none().justify_center().rounded(5).bg(spaceFill(row.color, theme))
             .child(div().text_size(10.5).font_bold().text_color('#ffffff').child(row.initial)));
         element.child(labelText(row.name, 12, fg).id('space-name:' + row.id).flex_1());
-        // The tail: repository · branch, then separate marks for what needs a commit (●),
+        // The tail: repository · branch, then separate marks for what needs a commit (pencil),
         // a push (↑n) or an update from upstream (↓n); zeros and unknowns are not drawn.
         const tail = row.tail ?? { text: row.branch };
         if (tail.text) element.child(labelText(tail.text, 11, muted).id('space-branch:' + row.id).flex_none().max_w(130));
         if (tail.dirty || tail.ahead || tail.behind) {
           const marks = h().id('space-git:' + row.id).flex_none().gap(5).text_size(11.5).tooltip(tail.tooltip).accessibility_label(tail.tooltip);
-          if (tail.dirty) marks.child(div().id('space-dirty:' + row.id).text_color(theme.ansi3 ?? theme.accent ?? fg).child('●'));
+          // Uncommitted changes: a small pencil; dots belong to machine headers (Core connection).
+          if (tail.dirty) marks.child(icon('pencil', 11).id('space-dirty:' + row.id).text_color(theme.ansi3 ?? theme.accent ?? fg));
           if (tail.ahead) marks.child(div().id('space-ahead:' + row.id).text_color(theme.ansi2 ?? theme.working ?? fg).child('↑' + tail.ahead));
           if (tail.behind) marks.child(div().id('space-behind:' + row.id).text_color(theme.ansi1 ?? theme.blocked ?? fg).child('↓' + tail.behind));
           element.child(marks);

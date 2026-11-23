@@ -217,8 +217,10 @@ test('Spaces draws ●, ↑ and ↓ as separate colored marks with a spelled-out
   for (let n = 0; n < 2; n++) { every.forEach(fn => fn(c.cx)); await settle(); await settle(); }
   const tree = v.render(c.cx);
   assert.equal(byId(tree, 'space-branch:s-main'), undefined, 'repo "main" is the Space\'s own name and branch main is not shown');
-  assert.deepEqual(byId(tree, 'space-git:s-main').children.map(e => [e.attributes.id[0], textOf(e), e.attributes.text_color[0]]),
-    [['space-dirty:s-main', '●', '#aaaa00'], ['space-ahead:s-main', '↑2', '#00aa00'], ['space-behind:s-main', '↓3', '#aa0000']]);
+  const mark = e => e.attributes.svg ? e.attributes.svg[0].split('/').pop() : textOf(e);
+  assert.deepEqual(byId(tree, 'space-git:s-main').children.map(e => [e.attributes.id[0], mark(e), e.attributes.text_color[0]]),
+    [['space-dirty:s-main', 'pencil.svg', '#aaaa00'], ['space-ahead:s-main', '↑2', '#00aa00'], ['space-behind:s-main', '↓3', '#aa0000']]);
+  assert.ok(!textOf(byId(tree, 'space-git:s-main')).includes('●'), 'dots are reserved for machine connection state');
   assert.equal(byId(tree, 'space-git:s-main').attributes.tooltip[0], 'Uncommitted changes in this checkout · 2 local commits to push · 3 upstream commits to pull');
   assert.equal(byId(tree, 'space-git:s-other'), undefined, 'clean and level: no marks');
   assert.equal(textOf(byId(tree, 'space-branch:s-other')), 'o · topic');
