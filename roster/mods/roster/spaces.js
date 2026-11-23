@@ -197,3 +197,62 @@ export function spaceTail(space, git, tree) {
     behind ? plural(behind, 'upstream commit', 'upstream commits') + ' to pull' : ''].filter(Boolean).join(' · ');
   return { text, dirty, ahead, behind, tooltip };
 }
+
+// A machine's operating system, for the icon beside its name. This computer's platform
+// comes from Herdr's window(); Linux distributions from /etc/os-release read through
+// Herdr's read-only file API on that machine. LOGO is only a key into this fixed map of
+// bundled icons, never a path or URL; then ID; ID_LIKE is never used (Ubuntu is not Debian).
+export const OS_LOGO_ICONS = Object.freeze({ 'ubuntu-logo': 'os-ubuntu', 'debian-logo': 'os-debian' });
+export const OS_ID_ICONS = Object.freeze({ ubuntu: 'os-ubuntu', debian: 'os-debian' });
+export const OS_RELEASE = '/etc/os-release';
+export function parseOsRelease(text) {
+  if (typeof text !== 'string' || text.length > 65536) return null;
+  const fields = {};
+  for (const line of text.split(/\r?\n/)) {
+    const m = /^([A-Z][A-Z0-9_]{0,63})=(.*)$/.exec(line.trim());
+    if (!m) continue;
+    let value = m[2].trim();
+    if (/^"[^"]*"$/.test(value) || /^'[^']*'$/.test(value)) value = value.slice(1, -1);
+    if (value && value.length <= 256 && !/[\x00-\x1f\x7f]/.test(value)) fields[m[1]] = value;
+  }
+  return Object.keys(fields).length ? fields : null;
+}
+// { icon, tooltip } for a known OS, or null to keep the generic machine icon.
+export function machineOs({ platform = null, release = null } = {}) {
+  if (platform === 'windows') return { icon: 'os-windows', tooltip: 'Windows' };
+  const fields = typeof release === 'string' ? parseOsRelease(release) : release;
+  if (!fields) return null;
+  const icon = (Object.hasOwn(OS_LOGO_ICONS, fields.LOGO ?? '') ? OS_LOGO_ICONS[fields.LOGO] : null)
+    ?? (Object.hasOwn(OS_ID_ICONS, (fields.ID ?? '').toLowerCase()) ? OS_ID_ICONS[fields.ID.toLowerCase()] : null) ?? 'os-linux';
+  return { icon, tooltip: fields.PRETTY_NAME ?? fields.NAME ?? 'Linux' };
+}
+// Per-machine cache of os-release reads; ready machines only, deadline-raced, retried
+// when unsure. A missing file means the OS is unknown, so the generic icon stays.
+export class MachineOs {
+  constructor(host, { retryMs = 60000, deadlineMs = 8000 } = {}) {
+    Object.assign(this, { host, retryMs, deadlineMs });
+    this.cache = new Map(); this.changed = false;
+  }
+  lookup(machine) { const e = this.cache.get(machine ?? null); return e?.status === 'known' ? e.os : null; }
+  request(machines, platform, after) {
+    const now = this.host.now();
+    for (const machine of machines) {
+      const key = machine ?? null, entry = this.cache.get(key);
+      if (entry && (entry.status !== 'unsure' || now - entry.at < this.retryMs)) continue;
+      if (key === null && platform !== 'linux') {
+        const os = machineOs({ platform });
+        this.cache.set(key, os ? { status: 'known', os, at: now } : { status: 'unknown', at: now });
+        this.changed = true; continue;
+      }
+      this.cache.set(key, { status: 'reading', at: now });
+      let settled = false;
+      const finish = entry => { if (settled) return; settled = true; this.cache.set(key, { ...entry, at: this.host.now() }); this.changed = true; };
+      after(this.deadlineMs, () => finish({ status: 'unsure' }));
+      Promise.resolve().then(() => this.host.readTextFile(OS_RELEASE, { on: key })).then(
+        text => { const os = typeof text === 'string' ? machineOs({ release: text }) : null; finish(os ? { status: 'known', os } : { status: 'unknown' }); },
+        () => finish({ status: 'unsure' }));
+    }
+  }
+  retry(machine) { const e = this.cache.get(machine ?? null); if (e?.status === 'unsure') e.at = -Infinity; }
+  takeChanged() { const changed = this.changed; this.changed = false; return changed; }
+}

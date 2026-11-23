@@ -1,0 +1,19 @@
+icons/os-debian.svg — Debian Open Use Logo (without "Debian" label)
+
+Source: https://www.debian.org/logos/openlogo-nd.svg
+Copyright (c) 1999 Software in the Public Interest, Inc., and other contributors.
+
+The Debian Open Use Logo is released under the terms of the GNU Lesser General
+Public License, version 3 or any later version, or, at your option, of the
+Creative Commons Attribution-ShareAlike 3.0 Unported License
+(https://creativecommons.org/licenses/by-sa/3.0/). This copy is distributed
+under CC BY-SA 3.0 Unported.
+
+Modifications by the herdr-mods project: kept only the path outlines and the
+view box; removed the document type, entity declarations, editor metadata and
+fill colors so the icon is drawn in a single theme color. The modified file is
+shared under the same license.
+
+Debian is a registered trademark of Software in the Public Interest, Inc. Roster
+uses the logo only to show that a machine reports running Debian; it is not an
+official Debian product.

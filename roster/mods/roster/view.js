@@ -1,7 +1,7 @@
 import { Controller } from './controller.js';
 import { LayoutOptIn } from './layout.js';
 import { desktopHost, desktopLayoutHost } from './desktop.js';
-import { spaceRows, spaceFill, spacePlace, GitIdentities } from './spaces.js';
+import { spaceRows, spaceFill, spacePlace, GitIdentities, MachineOs } from './spaces.js';
 import { actionReason, rowContext, detailLabel, hoverText, reasonText, agentFacts } from './detail.js';
 
 // Stock-style working spinner frames, drawn natively by frames().
@@ -35,28 +35,36 @@ export function createRosterView(kit, app, options = {}) {
       });
       // Git identity for worktree nesting: the stock panel's two read-only rev-parse
       // queries, probed in the background (never in render, never under check).
-      const exec = options.exec ?? app.exec;
-      if (!app.checking() && typeof exec === 'function' && typeof cx.timer?.every === 'function') {
-        this.git = new GitIdentities({ exec, now: () => this.controller.host.now() });
+      const exec = options.exec ?? app.exec, readTextFile = options.readTextFile ?? app.readTextFile;
+      if (!app.checking() && typeof cx.timer?.every === 'function' && (typeof exec === 'function' || typeof readTextFile === 'function')) {
+        const now = () => this.controller.host.now();
+        if (typeof exec === 'function') this.git = new GitIdentities({ exec, now });
+        // Machine OS for the header icons: os-release through Herdr's read-only file API.
+        if (typeof readTextFile === 'function') this.os = new MachineOs({ readTextFile, now });
         this.machineReady = new Map();
         cx.timer.every(1000, cx => this.pollGit(cx));
       }
     }
     // Ask about Spaces' folders on ready machines; ask again on reconnect; redraw on answers.
     pollGit(cx) {
-      if (!this.git || this.controller.state.view !== 'spaces') return;
+      if (this.controller.state.view !== 'spaces') return;
       const host = this.controller.host, machines = host.machines(), panes = host.panes();
       const ready = new Set();
       for (const m of machines) {
         const name = m?.name ?? null, now = m?.layout === 'ready';
         if (now) ready.add(name);
-        if (now && this.machineReady.get(name) === false) this.git.retry(name);
+        if (now && this.machineReady.get(name) === false) { this.git?.retry(name); this.os?.retry(name); }
         this.machineReady.set(name, now);
       }
       const places = host.spaces().filter(sp => ready.has(sp?.machine ?? null))
         .map(sp => ({ machine: sp.machine ?? null, folder: spacePlace(sp, panes) }));
-      this.git.request(places, (ms, fn) => cx.timer.after(ms, fn));
-      if (this.git.takeChanged()) cx.notify();
+      const after = (ms, fn) => cx.timer.after(ms, fn);
+      this.git?.request(places, after);
+      // Only machines whose Core is connected are read, so a read never has to start one.
+      const platform = typeof app.window === 'function' ? app.window()?.platform ?? null : null;
+      this.os?.request([...ready], platform, after);
+      const gitChanged = this.git?.takeChanged() ?? false, osChanged = this.os?.takeChanged() ?? false;
+      if (gitChanged || osChanged) cx.notify();
     }
     focus(cx) { this.handle.focus(); cx.notify(); }
     async layoutAction(operation, cx) {
@@ -164,6 +172,8 @@ export function createRosterView(kit, app, options = {}) {
           // As in the stock list: icon, name, state when not connected, then +, the
           // connection dot and the fold chevron last.
           const dim = theme.dim ?? muted, newSpace = () => c.host.run('space.new', { machine: row.machine ?? '' });
+          // The OS icon when known (PRETTY_NAME in the tooltip), else the generic machine icon.
+          const os = this.os?.lookup(row.machine) ?? null;
           const extras = [];
           if (!row.ready) extras.push(div().id('machine-note:' + row.key).flex_none().child(row.loading ? 'loading' : 'not connected'));
           else extras.push(h().id('machine-add:' + row.key).flex_none().px(4).rounded(4).cursor_pointer()
@@ -173,8 +183,8 @@ export function createRosterView(kit, app, options = {}) {
           extras.push(div().id('machine-state:' + row.key).size(6).rounded(3).flex_none().bg(row.ready ? theme.ansi2 ?? theme.working ?? fg : dim));
           add(groupHeader(row.key, row.label + (row.collapsed ? ', folded' : ''), row.label,
             change({ type: 'fold', key: row.key, collapsed: !row.collapsed }),
-            { icon: row.machine ? 'server' : 'monitor', collapsed: row.collapsed, extras,
-              tooltip: row.machine ? row.label + ' · ' + (row.ready ? 'connected' : row.loading ? 'loading' : 'not connected') : row.label }));
+            { icon: os?.icon ?? (row.machine ? 'server' : 'monitor'), collapsed: row.collapsed, extras,
+              tooltip: [row.label, os?.tooltip, row.machine ? (row.ready ? 'connected' : row.loading ? 'loading' : 'not connected') : null].filter(Boolean).join(' · ') }));
           if (!row.collapsed && row.count === 0 && row.ready) add(click('spaces:new:' + (row.machine ?? 'local'), 'New space on ' + row.label, newSpace)
             .h(28).flex_none().px(8).gap(7).rounded(7).text_size(12).text_color(dim).cursor_pointer()
             .hover(el => el.bg(theme.hover ?? theme.raised).text_color(fg)).child(icon('plus', 12)).child('New space there'));
