@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+// Behavior tests below predate default-collapsed Unassigned/Unknown groups; they opt out.
+export const expanded = { collapseUnassigned: false };
 export const run = '11111111-1111-4111-8111-111111111111';
 export const terminal = (address, status = 'working', extra = {}) => ({ address, state: 'live', status, created_ms: 100,
   pid: 100, argv: ['codex-auto'], keep: false, parent: null, labels: {}, ...extra });

@@ -14,7 +14,11 @@ export function rowContext(instance) {
     : 'Unknown (' + (context.parentResolution ?? 'unresolved') + ')');
   const route = row.core.alias ? 'Route ' + row.core.alias : 'Local route';
   const machine = row.core.hostLabel ? row.core.hostLabel + ' · ' + route : route + ' (host unknown)';
+  // Compact row facts: only what is known. Unknown project/context stay in Details.
   return { project, parent, machineSummary: row.core.hostLabel ? row.core.hostLabel + ' · ' + route : route,
+    machineShort: row.core.hostLabel ?? (row.core.alias || 'This computer'),
+    knownProject: row.project.id ? project : null,
+    knownContext: row.executionContext.id ? row.executionContext.label : null,
     machine: machine + (row.core.verified ? '' : ' · identity unverified'),
     context: row.executionContext.label || 'Context unknown' };
 }

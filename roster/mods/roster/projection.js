@@ -60,7 +60,9 @@ function counts(rows) {
 
 // Input is the actual R2 result over R1 metadata rows. No acquisition, commands,
 // ambient storage, inferred assignments or rewritten native fields live here.
-export function projectRoster(reduced, inputState = {}, { scopes = [], navigation = {} } = {}) {
+// collapseUnassigned: Unassigned project groups and the Status Unknown group start
+// folded (a count stays on the header); an explicit fold in state always wins.
+export function projectRoster(reduced, inputState = {}, { scopes = [], navigation = {}, collapseUnassigned = false } = {}) {
   const state = viewState(inputState), rows = sortRows(reduced.rows), instances = [];
   const filtered = rows.filter(r => !filterReasons(r, state).length);
   const placements = new Map(rows.map(r => [rowIdentity(r), placement(r, scopes)]));
@@ -100,7 +102,7 @@ export function projectRoster(reduced, inputState = {}, { scopes = [], navigatio
       const members = filtered.filter(r => status(r) === label && !r.roster.actionable);
       if (!members.length) continue;
       const path = ['status', label];
-      if (header(path, label, 0, label === 'Done', { counts: counts(members) })) for (const row of members) terminal(row, path, 1, row.roster.state === 'child-needs-you');
+      if (header(path, label, 0, label === 'Done' || (collapseUnassigned && label === 'Unknown'), { counts: counts(members) })) for (const row of members) terminal(row, path, 1, row.roster.state === 'child-needs-you');
     }
   } else {
     const groups = [...new Map(filtered.map(r => [placements.get(rowIdentity(r)).key, placements.get(rowIdentity(r))])).values()]
@@ -122,7 +124,7 @@ export function projectRoster(reduced, inputState = {}, { scopes = [], navigatio
         if (seen.has(id)) for (const cyclic of path.slice(path.indexOf(id))) parentOf.delete(cyclic);
       }
       const path = ['projects', group.key];
-      if (!header(path, group.label, 0, false, { projectId: group.projectId, counts: counts(members) })) continue;
+      if (!header(path, group.label, 0, collapseUnassigned && group.projectId === null && group.label !== 'Infrastructure', { projectId: group.projectId, counts: counts(members) })) continue;
       // Iterative event stack prevents recursive overflow on deep actual ancestry.
       const stack = [{ type: 'siblings', siblings: members.filter(r => !parentOf.has(rowIdentity(r))), path, depth: 1 }];
       while (stack.length) {

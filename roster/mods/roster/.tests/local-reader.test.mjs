@@ -2,13 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Controller } from '../controller.js';
 import { publishedLocalPath } from '../local-reader.js';
-import { fakeHost, fixture, prove } from './sidebar-fixtures.mjs';
+import { fakeHost, fixture, prove, expanded } from './sidebar-fixtures.mjs';
 function admitted() {
   const world = fixture(), f = fakeHost([world.producer, ...world.children]), calls = [];
   const evidence = prove(f.host, { admissions: [{ address: 't1', coreId: 'core-a', verified: true, continuity: true, generation: 2,
     producer: JSON.stringify(world.producer), source: 'independent-process-and-connection' }] });
   f.host.readTextFile = async (path, options) => { assert.equal(path, '/sample/delegations.json'); assert.deepEqual(options, { on: null }); calls.push(path); return JSON.stringify(world.doc); };
-  const c = new Controller(f.host); c.render(); return { ...f, ...world, c, calls, evidence };
+  const c = new Controller(f.host, expanded); c.render(); return { ...f, ...world, c, calls, evidence };
 }
 test('published path permits only exact bounded local absolute paths', () => {
   for (const p of ['/sample/contract.json', 'C:/sample/contract.json']) assert.equal(publishedLocalPath(p), true);
@@ -22,7 +22,7 @@ test('missing identity/process/continuity/path admission causes zero reads', asy
   for (const mutate of [e => e.cores = [], e => e.admissions[0].continuity = false, e => e.admissions[0].producer = '{}', e => e.admissions[0].generation = 0]) {
     const { c, evidence, calls } = admitted(); mutate(evidence); c.render(); await c.refresh(); assert.equal(calls.length, 0);
   }
-  const f = fakeHost([fixture().producer]), c = new Controller(f.host); c.render(); await c.refresh(); assert.equal(c.reader.outstanding, 0);
+  const f = fakeHost([fixture().producer]), c = new Controller(f.host, expanded); c.render(); await c.refresh(); assert.equal(c.reader.outstanding, 0);
 });
 test('remote native file reader is never called even with verified readiness and admission', async () => {
   const { c, values, producer, evidence, calls } = admitted(); values.terminals[0].address = 'edge/t1';

@@ -17,7 +17,7 @@ export function createRosterView(kit, app, options = {}) {
       this.handle = cx.focus_handle();
       this.rowScroll = ScrollHandle.new();
       this.optionsScroll = ScrollHandle.new();
-      this.controller = new Controller(options.host ?? desktopHost(app));
+      this.controller = new Controller(options.host ?? desktopHost(app), { collapseUnassigned: options.collapseUnassigned ?? true });
       this.optIn = new LayoutOptIn(options.layoutHost ?? desktopLayoutHost(app));
       this.reader = null; this.readerControls = []; this.returnControl = null;
       this.controls = []; this.message = ''; this.selection = null; this.reading = false; this.toolsOpen = false;
@@ -204,16 +204,19 @@ export function createRosterView(kit, app, options = {}) {
         const status = waiting ? i.display.compact ? '◈ Waiting' : i.display.label : i.display.error ?? i.status;
         const provider = row.providerBadge?.accessibleName;
         const context = rowContext(i), label = detailLabel(i), explanation = actionReason(i);
-        const element = click(i.key, label, () => { if (!this.reader) this.controller.activate(projection, i.key); }, true)
-          .flex_1().min_w(0).h(64).py(2).tooltip(label);
+        // One compact line per agent: name, machine, known context, badges. Everything
+        // unknown or secondary (project, parent, route, reasons) lives in Info/Details.
+        const element = click(i.key, label, () => { if (!this.reader) this.controller.activate(projection, i.key); })
+          .flex_1().min_w(0).h(24).gap(4).tooltip(label);
         const selected = this.controls.at(-1);
         Object.assign(selected, { rowIndex: index, instance: i, detail: label,
           disabledReason: i.navigation.enabled ? null : explanation });
-        // Persistent neutral monogram: production has no verified private image source.
-        const monogram = h().w(18).h(18).flex_none().justify_center().rounded(4).bg(theme.raised)
-          .accessibility_label(context.project + ' project icon fallback').child(labelText(Array.from(context.project)[0] ?? '?', 11));
-        const title = h().h(18).flex_none().gap(4).min_w(0).child(monogram)
-          .child(labelText(row.displayLabel, 13).font_semibold().flex_1());
+        // Neutral monogram only for a known project: an "Unassigned" initial says nothing.
+        if (context.knownProject) element.child(h().w(16).h(16).flex_none().justify_center().rounded(4).bg(theme.raised)
+          .accessibility_label(context.knownProject + ' project icon fallback').child(labelText(Array.from(context.knownProject)[0] ?? '?', 10)));
+        element.child(labelText(row.displayLabel, 12).id('row-name:' + i.key).font_semibold().flex_1());
+        element.child(labelText(context.machineShort, 10, muted).id('row-machine:' + i.key).flex_none().max_w(84));
+        if (context.knownContext) element.child(labelText(context.knownContext, 10, muted).id('row-execution-context:' + i.key).flex_none().max_w(72));
         const stateColor = ({ Working: theme.working, 'Needs you': theme.blocked, 'Child needs you': theme.blocked,
           Done: theme.done, Idle: theme.idle })[status] ?? (waiting ? theme.accent : muted) ?? fg;
         const badge = (value, outline) => {
@@ -222,28 +225,20 @@ export function createRosterView(kit, app, options = {}) {
         };
         if (provider === 'GitHub' || provider === 'Azure DevOps') {
           const providerChip = badge(provider === 'GitHub' ? 'GH' : 'ADO').accessibility_label(provider + ' provider badge').tooltip(provider);
-          title.child(providerChip);
+          element.child(providerChip);
         }
-        // Project, parent and machine/context span beneath the badges independently.
-        title.child(badge(status, stateColor));
-        element.child(title)
-          .child(labelText('Project: ' + context.project, 10, muted).h(14).flex_none())
-          .child(labelText('Parent: ' + context.parent, 10, muted).h(14).flex_none())
-          .child(h().id('row-context:' + i.key).h(14).flex_none().min_w(0).gap(4)
-            .child(labelText(context.machineSummary, 10, muted).id('row-machine:' + i.key).w(0).flex_1())
-            .child(labelText(context.context, 10, muted).id('row-execution-context:' + i.key).w(0).flex_1()));
-        const line = h().h(64).flex_none().min_w(0).gap(2).pl(Math.min(i.depth, 3) * 8).child(element);
+        element.child(badge(status, stateColor));
+        const line = h().h(24).flex_none().min_w(0).gap(2).pl(Math.min(i.depth, 3) * 8).child(element);
         const info = button('info:' + i.key, 'Details for ' + row.displayLabel,
           cx => this.openDetails({ key: 'info:' + i.key, instance: i }, cx), { text: 'Info' }).px(0).w(30);
         Object.assign(this.controls.at(-1), { rowIndex: index, instance: i, detail: label, disabledReason: selected.disabledReason });
-        const siblings = v().w(30).flex_none().gap(2).child(info);
+        line.child(info);
         if (parents.has(row.associationKey)) {
           const collapsed = c.state.folds[i.key] ?? false;
-          siblings.child(button('fold:' + i.key, collapsed ? 'Show children' : 'Hide children',
-            change({ type: 'fold', key: i.key, collapsed: !collapsed }), { text: collapsed ? '▸' : '▾' }).flex_none());
+          line.child(button('fold:' + i.key, collapsed ? 'Show children' : 'Hide children',
+            change({ type: 'fold', key: i.key, collapsed: !collapsed }), { text: collapsed ? '▸' : '▾' }).px(0).w(18));
           Object.assign(this.controls.at(-1), { rowIndex: index, instance: i, detail: label, disabledReason: selected.disabledReason });
         }
-        line.child(siblings);
         body.child(line);
       }
       if (!projection.instances.length) body.child(labelText('No observed terminals', 12, muted).p(6));

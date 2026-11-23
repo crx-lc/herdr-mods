@@ -3,7 +3,7 @@ import { projectRoster, transition, viewState } from './projection.js';
 import { actionIntent } from './navigation.js';
 import { LocalReader } from './local-reader.js';
 export class Controller {
-  constructor(host) { this.host = host; this.feed = new Feed(); this.state = viewState(); this.cursor = null; this.reader = new LocalReader(host); }
+  constructor(host, { collapseUnassigned = true } = {}) { this.host = host; this.collapseUnassigned = collapseUnassigned; this.feed = new Feed(); this.state = viewState(); this.cursor = null; this.reader = new LocalReader(host); }
   observe(refresh = false) {
     const snapshot = capture(this.host);
     const evidence = this.host.evidence ? (snapshot, generation) => this.host.evidence(snapshot, generation) : emptyEvidence();
@@ -12,7 +12,7 @@ export class Controller {
   }
   render() {
     this.observe();
-    this.projection = projectRoster(this.feed.reduced, this.state, { navigation: this.feed.navigation, scopes: this.feed.evidence.scopes ?? [] });
+    this.projection = projectRoster(this.feed.reduced, this.state, { navigation: this.feed.navigation, scopes: this.feed.evidence.scopes ?? [], collapseUnassigned: this.collapseUnassigned });
     return this.projection;
   }
   change(event) { this.state = transition(this.state, event); }

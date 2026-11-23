@@ -4,11 +4,11 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { detailFields, detailPages, rowContext, detailLabel } from '../detail.js';
 import { createRosterView } from '../view.js';
-import { fakeHost, terminal, fixture, prove, route, settings, kit, context, appOf, flatten, textOf, layoutHostUnused } from './sidebar-fixtures.mjs';
+import { fakeHost, terminal, fixture, prove, route, settings, kit, context, appOf, flatten, textOf, layoutHostUnused, expanded } from './sidebar-fixtures.mjs';
 const byId = (tree, id) => flatten(tree).find(e => e.attributes.id?.[0] === id);
 function setup(f = fakeHost(), props = {}) {
   const app = appOf(f.host); app.props = () => props;
-  const Type = createRosterView(kit, app, { host: f.host, layoutHost: layoutHostUnused });
+  const Type = createRosterView(kit, app, { host: f.host, layoutHost: layoutHostUnused, ...expanded });
   const view = new Type(), c = context(); view.init({}, c.cx); view.render(c.cx);
   return { f, view, ...c };
 }
@@ -69,17 +69,17 @@ test('truthful project, verified parent, host vs route, context, provider, reaso
   assert.equal(fields.provider, 'Azure DevOps'); assert.match(detailLabel(i), /Verified parent/);
   assert.equal(s.f.calls.length, 0);
 });
-test('independent project and parent lines span below badges; Info is a sibling with exact owner and row index', () => {
+test('compact row keeps known project as a monogram only; parent/project read in Info, a sibling with exact owner and row index', () => {
   const f = fakeHost([terminal('t1', 'idle', { labels: { 'herdr.role': 'coordinator' } }),
     terminal('t2', 'blocked', { parent: 't1', labels: { 'herdr.project': 'sample', 'herdr.role': 'developer' } })]);
   prove(f.host, { settings }); const s = setup(f);
   for (const mode of ['projects', 'status']) {
     s.view.controller.change({ type: 'view', view: mode }); const tree = s.view.render(s.cx), i = item(s.view, 't2');
     const el = byId(tree, i.key), body = byId(tree, 'roster-rows');
-    assert.match(textOf(el.children[1]), /^Project: Sample project$/);
-    assert.match(textOf(el.children[2]), /^Parent: Coordinator$/);
-    assert.match(textOf(el.children[3]), /Local route.*Context unknown/);
-    assert.ok(el.children[1].attributes.h[0] === 14 && el.children[2].attributes.h[0] === 14);
+    assert.equal(el.attributes.h[0], 24);
+    assert.ok(flatten(el).some(e => e.attributes.accessibility_label?.[0] === 'Sample project project icon fallback'));
+    assert.doesNotMatch(textOf(el), /Project:|Parent:|Context unknown/);
+    assert.match(el.attributes.tooltip[0], /Project: Sample project.*Parent: Coordinator/);
     assert.equal(byId(el, 'info:' + i.key), undefined, 'Info must not bubble into terminal activation');
     const control = s.view.controls.find(c => c.key === 'info:' + i.key);
     assert.equal(control.instance.key, i.key);

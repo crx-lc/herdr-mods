@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRosterView } from '../view.js';
-import { fakeHost, terminal, fixture, prove, settings, kit, context, appOf, flatten, textOf, layoutHostUnused } from './sidebar-fixtures.mjs';
+import { fakeHost, terminal, fixture, prove, settings, kit, context, appOf, flatten, textOf, layoutHostUnused, expanded } from './sidebar-fixtures.mjs';
 
 const byId = (tree, id) => flatten(tree).find(e => e.attributes.id?.[0] === id);
 function viewOf(f, mode) {
-  const Type = createRosterView(kit, appOf(f.host), { host: f.host, layoutHost: layoutHostUnused });
+  const Type = createRosterView(kit, appOf(f.host), { host: f.host, layoutHost: layoutHostUnused, ...expanded });
   const view = new Type(), { cx } = context(); view.init({}, cx);
   view.controller.change({ type: 'view', view: mode });
   return { view, cx };
@@ -29,8 +29,11 @@ for (const mode of ['projects', 'status']) for (const state of ['working', 'bloc
     for (const child of children) {
       view.controller.cursor = child.key;
       const tree = view.render(cx);
-      for (const el of [byId(tree, child.key), byId(tree, 'roster-focus-tooltip')]) {
-        const drawn = textOf(el);
+      // The compact row draws only known facts; hover and the focus footer keep the full context.
+      const drawnRow = textOf(byId(tree, child.key));
+      assert.doesNotMatch(drawnRow, /Parent:|Project:|Context unknown|Unassigned/);
+      assert.match(drawnRow, /This computer/);
+      for (const drawn of [byId(tree, child.key).attributes.tooltip[0], textOf(byId(tree, 'roster-focus-tooltip'))]) {
         assert.match(drawn, /Parent: Coordinator/);
         assert.ok(drawn.includes(mapped ? 'Sample project' : 'Unassigned'));
         assert.match(drawn, /Local/);
@@ -49,10 +52,11 @@ for (const mode of ['projects', 'status']) {
     const row = view.controller.projection.instances.find(i => i.kind === 'terminal');
     assert.equal(row.context.parent, null);
     view.controller.cursor = row.key; const tree = view.render(cx);
-    for (const el of [byId(tree, row.key), byId(tree, 'roster-focus-tooltip')]) {
-      assert.match(textOf(el), /Unassigned/);
-      assert.match(textOf(el), /Context unknown/);
-      assert.doesNotMatch(textOf(el), /Parent: Coordinator|Sample project/);
+    assert.doesNotMatch(textOf(byId(tree, row.key)), /Unassigned|Context unknown|Parent:|Sample project/);
+    for (const drawn of [byId(tree, row.key).attributes.tooltip[0], textOf(byId(tree, 'roster-focus-tooltip'))]) {
+      assert.match(drawn, /Unassigned/);
+      assert.match(drawn, /Context unknown/);
+      assert.doesNotMatch(drawn, /Parent: Coordinator|Sample project/);
     }
     assert.equal(f.calls.length, 0);
   });

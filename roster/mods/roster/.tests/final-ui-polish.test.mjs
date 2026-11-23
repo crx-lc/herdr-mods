@@ -2,11 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { detailPages, detailFields } from '../detail.js';
 import { createRosterView } from '../view.js';
-import { fakeHost, terminal, kit, context, appOf, flatten, textOf, layoutHostUnused } from './sidebar-fixtures.mjs';
+import { fakeHost, terminal, kit, context, appOf, flatten, textOf, layoutHostUnused, expanded } from './sidebar-fixtures.mjs';
 const byId = (tree, id) => flatten(tree).find(e => e.attributes.id?.[0] === id);
 function setup() {
   const f = fakeHost([terminal('t1', 'blocked', { name: 'Sample' }), terminal('t2', 'blocked', { name: 'Sample' })]);
-  const Type = createRosterView(kit, appOf(f.host), { host: f.host, layoutHost: layoutHostUnused });
+  const Type = createRosterView(kit, appOf(f.host), { host: f.host, layoutHost: layoutHostUnused, ...expanded });
   const view = new Type(), c = context(); view.init({}, c.cx);
   const render = () => view.render(c.cx), key = k => view.key({ keystroke: k }, c.cx);
   const click = (tree, id) => byId(tree, id).attributes.on_click[0]({}, c.cx);
@@ -90,7 +90,7 @@ test('oversized combining, tag and ZWJ runs use bounded lossless fallback and te
     const source = value + 'FINAL'; coverage(source, pagesOf(source)); assert.ok(pagesOf(source).at(-1).text.endsWith('FINAL'));
   }
 });
-test('actual visible machine and context use independent equal columns; full diagnostic stays in Details/hover', () => {
+test('compact row shows a bounded machine name and no unknown context; full diagnostic stays in Details/hover', () => {
   const s = setup();
   for (const mode of ['projects', 'status']) for (const alias of ['', 'edge', 'route'.repeat(200)]) {
     s.view.controller.change({ type: 'view', view: mode });
@@ -99,15 +99,13 @@ test('actual visible machine and context use independent equal columns; full dia
       const p = original(); for (const i of p.instances) if (i.row) { i.row.core.alias = alias; i.row.executionContext.label = ''; } return p;
     };
     const tree = s.render(), i = s.view.controller.projection.instances.find(i => i.row);
-    const row = byId(tree, i.key), line = byId(row, 'row-context:' + i.key);
-    assert.equal(line.attributes.h[0], 14); assert.equal(row.attributes.h[0], 64);
-    const machine = byId(line, 'row-machine:' + i.key), execution = byId(line, 'row-execution-context:' + i.key);
-    assert.equal(textOf(machine), alias ? 'Route ' + alias : 'Local route'); assert.equal(textOf(execution), 'Context unknown');
-    for (const column of [machine, execution]) {
-      assert.deepEqual(column.attributes.w, [0]); assert.ok(column.attributes.flex_1); assert.deepEqual(column.attributes.min_w, [0]); assert.ok(column.attributes.truncate);
-    }
-    // Zero width bases plus equal flex weights bound each independently even for long routes.
-    for (const physical of [330, 300]) { const available = physical - 10 - 24 - 2 - 30 - 12 - 4; assert.ok(available / 2 >= 100); }
+    const row = byId(tree, i.key);
+    assert.equal(row.attributes.h[0], 24);
+    const machine = byId(row, 'row-machine:' + i.key);
+    assert.equal(textOf(machine), alias || 'This computer');
+    assert.deepEqual(machine.attributes.max_w, [84]); assert.deepEqual(machine.attributes.min_w, [0]); assert.ok(machine.attributes.truncate);
+    assert.equal(byId(row, 'row-execution-context:' + i.key), undefined, 'unknown context is not drawn');
+    assert.doesNotMatch(textOf(row), /Context unknown|Route|host unknown/);
     assert.match(row.attributes.tooltip[0], /host unknown.*identity unverified/);
     assert.match(detailFields(i).find(f => f.id === 'machine').value, /host unknown.*identity unverified/);
     assert.equal(detailFields(i).find(f => f.id === 'provider').value, 'Unknown');
