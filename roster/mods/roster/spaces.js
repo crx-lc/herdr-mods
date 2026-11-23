@@ -256,3 +256,29 @@ export class MachineOs {
   retry(machine) { const e = this.cache.get(machine ?? null); if (e?.status === 'unsure') e.at = -Infinity; }
   takeChanged() { const changed = this.changed; this.changed = false; return changed; }
 }
+
+// "Open folder as Space…": suggestions are folders Herdr already reports on that machine
+// (its panes' live folders) and checkouts Git verified there; nothing is guessed.
+export function folderSuggestions(machine, panes = [], verifiedTops = [], limit = 6) {
+  const m = machine ?? null, out = [];
+  const onMachine = id => typeof id === 'string' && (m ? id.startsWith(m + '/') : !id.includes('/'));
+  for (const folder of [...verifiedTops, ...(Array.isArray(panes) ? panes : []).filter(p => p && onMachine(p.pane) && validName(p.cwd)).map(p => p.cwd)])
+    if (validName(folder) && !out.includes(folder)) out.push(folder);
+  return out.slice(0, limit);
+}
+// The first Space on the same machine whose place Git verified as the same checkout.
+export function matchingSpace(machine, top, spaces = [], panes = [], lookup = () => null) {
+  if (!top) return null;
+  return (Array.isArray(spaces) ? spaces : []).find(s => s && (s.machine ?? null) === (machine ?? null)
+    && lookup(s.machine ?? null, spacePlace(s, panes))?.status === 'repo' && lookup(s.machine ?? null, spacePlace(s, panes)).top === top) ?? null;
+}
+// Verify one folder with the two read-only identity queries, raced against a deadline.
+export function verifyFolder(exec, machine, folder, after, deadlineMs = 12000) {
+  const options = { cwd: folder, on: machine ?? null, timeout: deadlineMs };
+  const both = Promise.all([exec('git', [...GIT_TOP], options), exec('git', [...GIT_COMMON], options)]).then(([t, c]) => gitIdentity(t, c));
+  return new Promise(resolve => {
+    let settled = false;
+    after(deadlineMs + 1000, () => { if (!settled) { settled = true; resolve({ status: 'unsure' }); } });
+    both.then(v => { if (!settled) { settled = true; resolve(v); } }, () => { if (!settled) { settled = true; resolve({ status: 'unsure' }); } });
+  });
+}

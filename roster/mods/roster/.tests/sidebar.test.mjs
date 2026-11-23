@@ -18,7 +18,7 @@ test('actual main entry defaults passive, captures exactly once, renders labels 
   const url = source => `data:text/javascript,${encodeURIComponent(source)}`;
   const source = (await readFile(new URL('../main.js', import.meta.url), 'utf8'))
     .replace("'gpui-kit'", JSON.stringify(url('export const View = globalThis.__rosterTestKit.View; export const div = globalThis.__rosterTestKit.div; export const h_flex = globalThis.__rosterTestKit.h_flex; export const v_flex = globalThis.__rosterTestKit.v_flex; export const svg = globalThis.__rosterTestKit.svg;')))
-    .replace("'gpui-base'", JSON.stringify(url('export const h_flex = globalThis.__rosterTestKit.h_flex; export const v_flex = globalThis.__rosterTestKit.v_flex; export const ScrollHandle = globalThis.__rosterTestKit.ScrollHandle;')))
+    .replace("'gpui-base'", JSON.stringify(url('export const h_flex = globalThis.__rosterTestKit.h_flex; export const v_flex = globalThis.__rosterTestKit.v_flex; export const ScrollHandle = globalThis.__rosterTestKit.ScrollHandle; export const InputState = globalThis.__rosterTestKit.InputState; export const Input = globalThis.__rosterTestKit.Input;')))
     .replace("'herdr'", JSON.stringify(url(Object.keys(app).map(k => `export const ${k} = globalThis.__rosterTestApp.${k};`).join('\n'))))
     .replace("'./view.js'", JSON.stringify(new URL('../view.js', import.meta.url).href));
   const Type = (await import(url(source))).default, view = new Type(), c = context(); view.init({}, c.cx);

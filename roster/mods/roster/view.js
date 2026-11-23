@@ -1,8 +1,8 @@
 import { Controller } from './controller.js';
 import { LayoutOptIn } from './layout.js';
 import { desktopHost, desktopLayoutHost } from './desktop.js';
-import { spaceRows, spaceFill, spacePlace, GitIdentities, MachineOs } from './spaces.js';
-import { actionReason, rowContext, detailLabel, hoverText, reasonText, agentFacts } from './detail.js';
+import { spaceRows, spaceFill, spacePlace, GitIdentities, MachineOs, folderSuggestions, matchingSpace, verifyFolder } from './spaces.js';
+import { actionReason, rowContext, detailLabel, hoverText, reasonText, agentFacts, homeRelative } from './detail.js';
 
 // Stock-style working spinner frames, drawn natively by frames().
 export const WORKING_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
@@ -14,7 +14,7 @@ export function timerDeadline(cx, promise) {
   });
 }
 export function createRosterView(kit, app, options = {}) {
-  const { View, div, h_flex, v_flex, ScrollHandle, svg } = kit;
+  const { View, div, h_flex, v_flex, ScrollHandle, svg, InputState, Input } = kit;
   // Roster's own icons, shipped in the mod folder; icon paths resolve against Herdr's root.
   const icon = (name, size) => svg('mods/roster/icons/' + name + '.svg').size(size).flex_none();
   return class Roster extends View {
@@ -30,6 +30,10 @@ export function createRosterView(kit, app, options = {}) {
       this.controls = []; this.message = ''; this.selection = null; this.reading = false; this.toolsOpen = false;
       // Where the cursor was when an event last placed it; Up/Down resume there if its row vanishes.
       this.cursorAt = null;
+      // "Open folder as Space…": a retained path field for remote machines, made once here.
+      this.newSpace = null;
+      this.pathInput = typeof InputState?.new === 'function' ? InputState.new({ placeholder: 'Folder on that machine' }) : null;
+      this.pathInput?.on?.('submit', (_e, cx) => { if (this.newSpace) this.checkFolder(this.pathInput.value(), cx); });
       if (!app.checking()) cx.spawn(async cx => {
         for (;;) { if (await app.nextCommand() === 'focus') this.focus(cx); }
       });
@@ -88,6 +92,41 @@ export function createRosterView(kit, app, options = {}) {
       const reader = this.reader;
       return reader && reader.state === JSON.stringify(this.controller.state) && reader.toolsOpen === this.toolsOpen ? reader : null;
     }
+    // "Open folder as Space…": nothing is created until a final, explicit choice. Cancel
+    // and Esc change nothing.
+    openNewSpace(machine, cx) {
+      this.closeDetails(cx, false);
+      this.newSpace = { machine: machine ?? null, folder: null, check: null, confirmUnverified: false };
+      this.pathInput?.set_value?.('');
+      cx.notify();
+    }
+    closeNewSpace(cx) { this.newSpace = null; cx.notify(); }
+    // This computer: Herdr's native folder picker.
+    async chooseLocalFolder(cx) {
+      const pick = options.pickFolder ?? app.pickFolder;
+      if (typeof pick !== 'function' || !this.newSpace) return;
+      const folder = await pick({ prompt: 'Open as Space' });
+      if (folder && this.newSpace) this.checkFolder(folder, cx); else cx.notify();
+    }
+    // Verify with the two read-only identity queries; a negative answer is "Not verified".
+    checkFolder(folder, cx) {
+      const ns = this.newSpace, target = typeof folder === 'string' ? folder.trim() : '';
+      if (!ns || !target) return;
+      Object.assign(ns, { folder: target, check: { status: 'checking' }, confirmUnverified: false });
+      cx.notify();
+      const exec = options.exec ?? app.exec;
+      if (typeof exec !== 'function') { ns.check = { status: 'unsure' }; return; }
+      cx.spawn(async cx => {
+        const result = await verifyFolder(exec, ns.machine, target, (ms, fn) => cx.timer.after(ms, fn));
+        if (this.newSpace === ns && ns.folder === target) { ns.check = result; cx.notify(); }
+      });
+    }
+    createSpace(cx) {
+      const ns = this.newSpace;
+      if (!ns?.folder) return;
+      this.controller.host.run('space.new', { machine: ns.machine ?? '', folder: ns.folder });
+      this.closeNewSpace(cx);
+    }
     // Agent details open as a compact modal over the list. The list stays mounted under
     // it, so its scroll position and expanded groups never change.
     openDetails(control, cx) {
@@ -118,6 +157,10 @@ export function createRosterView(kit, app, options = {}) {
     }
     key(event, cx) {
       const chord = event.keystroke;
+      if (this.newSpace) {
+        if (chord === 'escape') { cx.stop_propagation(); this.closeNewSpace(cx); }
+        return;
+      }
       // Details left over from a changed view are dropped here, in the event, not in render.
       if (this.reader && !this.activeReader()) { this.reader = null; this.readerControls = []; }
       if (this.reader) {
@@ -171,7 +214,7 @@ export function createRosterView(kit, app, options = {}) {
         if (row.kind === 'machine') {
           // As in the stock list: icon, name, state when not connected, then +, the
           // connection dot and the fold chevron last.
-          const dim = theme.dim ?? muted, newSpace = () => c.host.run('space.new', { machine: row.machine ?? '' });
+          const dim = theme.dim ?? muted, newSpace = cx => this.openNewSpace(row.machine, cx);
           // The OS icon when known (PRETTY_NAME in the tooltip), else the generic machine icon.
           const os = this.os?.lookup(row.machine) ?? null;
           const extras = [];
@@ -179,7 +222,7 @@ export function createRosterView(kit, app, options = {}) {
           else extras.push(h().id('machine-add:' + row.key).flex_none().px(4).rounded(4).cursor_pointer()
             .hover(el => el.bg(theme.hover ?? theme.raised).text_color(fg)).tooltip('New space on ' + (row.machine ?? 'this computer'))
             .accessibility_label('New space on ' + row.label)
-            .on_click((_e, cx) => { cx.stop_propagation(); if (!this.reader) newSpace(); }).child('+'));
+            .on_click((_e, cx) => { cx.stop_propagation(); if (!this.reader && !this.newSpace) newSpace(cx); }).child('+'));
           extras.push(div().id('machine-state:' + row.key).size(6).rounded(3).flex_none().bg(row.ready ? theme.ansi2 ?? theme.working ?? fg : dim));
           add(groupHeader(row.key, row.label + (row.collapsed ? ', folded' : ''), row.label,
             change({ type: 'fold', key: row.key, collapsed: !row.collapsed }),
@@ -222,6 +265,56 @@ export function createRosterView(kit, app, options = {}) {
         this.revealed = { id: activeId, at: activeAt };
         if (activeAt >= 0) this.rowScroll.scroll_to_item(activeAt);
       }
+    }
+    renderNewSpace(theme, { labelText, h, v, fg, muted }) {
+      const c = this.controller, ns = this.newSpace, snapshot = c.feed.snapshot ?? {};
+      this.readerControls = [];
+      const control = (key, label, text, activate, color = fg) => {
+        this.readerControls.push({ key, label, activate });
+        return h().id(key).h(22).flex_none().px(6).rounded(4).accessibility_label(label).tooltip(label).cursor_pointer()
+          .bg(theme.raised ?? theme.surface).hover(el => el.bg(theme.hover ?? theme.selected ?? theme.surface))
+          .on_click((_e, cx) => { cx.stop_propagation(); activate(cx); }).child(labelText(text, 12, color));
+      };
+      const machineLabel = ns.machine ?? 'This computer';
+      const shown = folder => ns.machine ? folder : homeRelative(folder, typeof app.home === 'function' ? app.home() : null, true);
+      const box = v().id('roster-new-space').absolute().top(0).left(0).right(0).p(8).gap(4).rounded(8)
+        .bg(theme.raised ?? theme.surface).border(1).border_color(theme.border ?? muted).accessibility_label('Open folder as Space')
+        .on_click((_e, cx) => cx.stop_propagation());
+      box.child(h().h(22).flex_none().gap(6).child(labelText('Open folder as Space', 12, fg).font_semibold().flex_1())
+        .child(control('new-space:cancel', 'Cancel (Esc): nothing is created', '×', cx => this.closeNewSpace(cx))));
+      box.child(labelText('Machine: ' + machineLabel, 12, fg).id('new-space:machine'));
+      if (!ns.machine) box.child(control('new-space:pick', 'Choose a folder on this computer', 'Choose folder…', cx => { this.chooseLocalFolder(cx); }));
+      else {
+        // A typed path on that machine, or one of the folders Herdr already reports there.
+        if (this.pathInput) box.child(h().flex_none().gap(4).child(Input.new(this.pathInput).id('new-space:path').h(24).flex_1().text_size(12))
+          .child(control('new-space:check', 'Check this folder on ' + machineLabel, 'Check', cx => this.checkFolder(this.pathInput.value(), cx))));
+        const tops = [...(this.git?.cache ?? new Map()).entries()].filter(([key, e]) => JSON.parse(key)[0] === ns.machine && e.status === 'repo').map(([, e]) => e.top);
+        const suggestions = folderSuggestions(ns.machine, snapshot.panes, tops);
+        if (suggestions.length) box.child(labelText('Folders on ' + machineLabel, 10, muted));
+        suggestions.forEach((folder, n) => box.child(control('new-space:suggest:' + n, 'Use ' + folder, folder, cx => { this.pathInput?.set_value?.(folder); this.checkFolder(folder, cx); }, muted)));
+      }
+      if (ns.folder) {
+        box.child(labelText('Folder: ' + shown(ns.folder), 12, fg).id('new-space:folder').whitespace_normal());
+        const check = ns.check ?? { status: 'checking' };
+        if (check.status === 'checking') box.child(labelText('Checking…', 11, muted).id('new-space:status'));
+        else if (check.status === 'repo') {
+          box.child(labelText('Verified checkout: ' + shown(check.top), 11, muted).id('new-space:status').whitespace_normal());
+          const existing = matchingSpace(ns.machine, check.top, snapshot.spaces, snapshot.panes, (m, f) => this.git?.lookup(m, f) ?? null);
+          if (existing) {
+            box.child(control('new-space:open-existing', 'Open the existing Space ' + existing.name, 'Open existing Space “' + existing.name + '”', cx => {
+              c.host.run('space.select', { id: existing.id }); this.closeNewSpace(cx); }));
+            box.child(control('new-space:duplicate', 'Create another Space for the same checkout', 'Create another Space here', cx => this.createSpace(cx), muted));
+          } else box.child(control('new-space:create', 'Create a Space on ' + machineLabel + ' in this folder', 'Create Space', cx => this.createSpace(cx)));
+        } else {
+          // Git said no or could not answer: that does not mean the folder is missing.
+          box.child(labelText('Not verified: Git did not confirm a checkout here; the folder may still exist.', 11, muted).id('new-space:status').whitespace_normal());
+          if (!ns.confirmUnverified) box.child(control('new-space:unverified', 'Create a Space in a folder that is not verified', 'Create in unverified folder…',
+            cx => { ns.confirmUnverified = true; cx.notify(); }, muted));
+          else box.child(labelText('Create a Space on ' + machineLabel + ' in ' + shown(ns.folder) + ' anyway?', 11, fg).id('new-space:confirm-text').whitespace_normal())
+            .child(control('new-space:confirm', 'Create the Space in the unverified folder', 'Create anyway', cx => this.createSpace(cx)));
+        }
+      }
+      return box;
     }
     renderModal(reader, projection, theme, { labelText, h, v, fg, muted }) {
       const c = this.controller;
@@ -284,7 +377,7 @@ export function createRosterView(kit, app, options = {}) {
         this.controls.push({ key, label, activate });
         return (column ? v() : h()).id(key).min_w(0).px(6).rounded(4).accessibility_label(label)
           .bg(c.cursor === key ? theme.selected ?? theme.raised : theme.surface)
-          .on_click((_e, cx) => { if (inList && this.reader) return; this.place(key); this.focus(cx); activate(cx); });
+          .on_click((_e, cx) => { if (inList && (this.reader || this.newSpace)) return; this.place(key); this.focus(cx); activate(cx); });
       };
       const button = (key, label, activate, { active = false, text = label } = {}) => {
         const element = click(key, label, activate).h(24).flex_none().tooltip(label);
@@ -319,7 +412,9 @@ export function createRosterView(kit, app, options = {}) {
         .child(button('mode:status', 'Status', change({ type: 'view', view: 'status' }), { active: viewMode === 'status' }))
         .child(div().flex_1().min_w(0));
       // The stock Spaces title's +: a new Space, Herdr choosing where, as space.new does.
-      if (viewMode === 'spaces') toolbar.child(button('spaces:new', 'New space', () => c.host.run('space.new'), { text: '+' })
+      // The toolbar + preselects the machine of the Space that is shown.
+      if (viewMode === 'spaces') toolbar.child(button('spaces:new', 'Open folder as Space', cx => this.openNewSpace(
+        (c.feed.snapshot?.spaces ?? []).find(sp => sp?.active)?.machine ?? null, cx), { text: '+' })
         .w(24).px(0).justify_center().cursor_pointer());
       const settingsOpen = this.toolsOpen;
       const filtered = c.state.coreIds !== null || c.state.contextIds !== null;
@@ -477,6 +572,7 @@ export function createRosterView(kit, app, options = {}) {
       // The modal lies over the list; the list underneath keeps its scroll and folds.
       const stack = v().id('roster-stack').relative().flex_1().min_h(0).child(body);
       if (reader) stack.child(this.renderModal(reader, projection, theme, { labelText, h, v, fg, muted }));
+      else if (this.newSpace) stack.child(this.renderNewSpace(theme, { labelText, h, v, fg, muted }));
       root.child(stack);
       if (this.message) root.child(labelText(this.message, 11, muted).id('roster-message').h(16).flex_none()
         .tooltip(this.message).accessibility_label(this.message));

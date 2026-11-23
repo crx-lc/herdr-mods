@@ -135,26 +135,28 @@ test('machine headers follow the stock order: icon, name, then +, the connection
   assert.equal(byId(tree, 'group-chevron:spaces:machine:local').attributes.svg[0], 'mods/roster/icons/chevron-down.svg');
 });
 
-test('a machine header + creates a Space on that machine without folding it; the toolbar + creates one where Herdr chooses', () => {
+test('a machine header + opens Open folder as Space for that machine without folding it; nothing is created', () => {
   const s = setup(); let tree = s.render();
-  for (const [key, machine] of [['local', ''], ['edge', 'edge']]) {
+  for (const [key, machine] of [['local', null], ['edge', 'edge']]) {
     const stops = s.stats.stop; byId(tree, 'machine-add:spaces:machine:' + key).attributes.on_click[0]({}, s.cx);
     assert.equal(s.stats.stop, stops + 1, 'the header does not also fold');
-    assert.deepEqual(s.f.calls.at(-1), ['space.new', { machine }]);
-    tree = s.render(); assert.ok(byId(tree, 'space:s1'), 'still open');
+    assert.equal(s.view.newSpace.machine, machine); assert.deepEqual(s.f.calls, [], 'no Space created on click');
+    tree = s.render(); assert.ok(byId(tree, 'space:s1'), 'still open'); assert.ok(byId(tree, 'roster-new-space'));
+    s.view.key({ keystroke: 'escape' }, s.cx); tree = s.render(); assert.equal(s.view.newSpace, null);
   }
-  byId(tree, 'spaces:new').attributes.on_click[0]({}, s.cx);
-  assert.deepEqual(s.f.calls.at(-1), ['space.new', undefined]);
-  assert.equal(byId(tree, 'spaces:new').attributes.accessibility_label[0], 'New space');
-  // The toolbar + belongs to Spaces only.
+  // The toolbar + preselects the machine of the shown Space, and belongs to Spaces only.
+  byId(tree, 'spaces:new').attributes.on_click[0]({}, s.cx); assert.equal(s.view.newSpace.machine, null, 'Alpha (this computer) is shown');
+  assert.equal(byId(tree, 'spaces:new').attributes.accessibility_label[0], 'Open folder as Space');
+  s.view.closeNewSpace(s.cx); tree = s.render();
   byId(tree, 'mode:projects').attributes.on_click[0]({}, s.cx); assert.equal(byId(s.render(), 'spaces:new'), undefined);
+  assert.deepEqual(s.f.calls, []);
 });
 
-test('a connected machine without Spaces offers "New space there", as the stock list does', () => {
+test('a connected machine without Spaces offers "New space there", which opens the same dialog', () => {
   const s = setup([sp('s1', 'Alpha', { active: true })]); const tree = s.render();
   const row = byId(tree, 'spaces:new:edge');
   assert.match(textOf(row), /New space there/); assert.equal(row.children[0].attributes.svg[0], 'mods/roster/icons/plus.svg');
-  row.attributes.on_click[0]({}, s.cx); assert.deepEqual(s.f.calls.at(-1), ['space.new', { machine: 'edge' }]);
+  row.attributes.on_click[0]({}, s.cx); assert.equal(s.view.newSpace.machine, 'edge'); assert.deepEqual(s.f.calls, []);
   assert.equal(byId(tree, 'spaces:new:zed'), undefined, 'not for a machine that is still loading');
 });
 

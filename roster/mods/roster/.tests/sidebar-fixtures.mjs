@@ -51,7 +51,11 @@ class GuardedView {
   }
 }
 // svg(path) records the icon path so tests can read it.
-export const kit = { View: GuardedView, svg: path => { const e = new Element(); e.attributes.svg = [path];
+// A retained text field like gpui-base InputState: value, set_value and event handlers.
+const InputState = { new: (options = {}) => ({ text: options.value ?? '', placeholder: options.placeholder, handlers: {},
+  value() { return this.text; }, set_value(next) { this.text = next; }, on(event, fn) { this.handlers[event] = fn; return true; }, focus() {} }) };
+const Input = { new: state => { const e = new Element(); e.attributes.input = [state]; return e; } };
+export const kit = { View: GuardedView, InputState, Input, svg: path => { const e = new Element(); e.attributes.svg = [path];
   // Chevrons read as text so header assertions stay legible.
   const glyph = { 'chevron-right': '▸', 'chevron-down': '▾' }[path.split('/').pop().replace('.svg', '')]; if (glyph) e.child(glyph); return e; }, ScrollHandle: { new: () => ({ requests: [], scroll_to_item(index) { this.requests.push(index); } }) }, div: () => new Element(), h_flex: () => new Element().flex().flex_row(), v_flex: () => new Element().flex().flex_col() };
 export function context() {
