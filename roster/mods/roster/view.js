@@ -22,6 +22,8 @@ export function createRosterView(kit, app, options = {}) {
       this.handle = cx.focus_handle();
       this.rowScroll = ScrollHandle.new();
       this.optionsScroll = ScrollHandle.new();
+      // The pinned Needs you list scrolls on its own, outside the tabs' list.
+      this.pinnedScroll = ScrollHandle.new();
       this.controller = new Controller(options.host ?? desktopHost(app), { collapseUnassigned: options.collapseUnassigned ?? true,
         // Spaces is the first tab and where the panel starts: daily navigation.
         initialView: options.initialView ?? 'spaces' });
@@ -79,6 +81,7 @@ export function createRosterView(kit, app, options = {}) {
     reveal(control) {
       if (control?.rowIndex != null) this.rowScroll.scroll_to_item(control.rowIndex);
       if (control?.optionIndex != null) this.optionsScroll.scroll_to_item(control.optionIndex);
+      if (control?.pinnedIndex != null) this.pinnedScroll.scroll_to_item(control.pinnedIndex);
     }
     // Render never changes state or asks for a redraw (GPUI throws on cx.notify() there).
     // Everything below that moves the cursor, scrolls or closes Details runs in an event.
@@ -435,17 +438,17 @@ export function createRosterView(kit, app, options = {}) {
         (c.feed.snapshot?.spaces ?? []).find(sp => sp?.active)?.machine ?? null, cx), { text: '+' })
         .w(24).px(0).justify_center().cursor_pointer());
       const settingsOpen = this.toolsOpen;
+      let tools = null;
       const filtered = c.state.coreIds !== null || c.state.contextIds !== null;
       toolbar.child(button('tools:toggle', (settingsOpen ? 'Hide' : 'Show') + ' filters and Agents slot controls' + (filtered ? ' (filters active)' : ''),
         cx => { this.closeDetails(cx, false); this.controls = []; this.toolsOpen = !this.toolsOpen; cx.notify(); }, { active: settingsOpen || filtered, text: filtered ? 'Options •' : 'Options' }));
-      root.child(toolbar);
       if (!this.reading && this.controller.feed.evidence.admissions?.length) {
         this.reading = true;
         cx.spawn(async cx => { try { if (await this.controller.refresh(p => timerDeadline(cx, p))) cx.notify(); } finally { this.reading = false; } });
       }
       const reader = this.activeReader();
       if (settingsOpen) {
-        const tools = v().id('roster-options').min_h(0).flex_none().gap(2).overflow_y_scrollbar().track_scroll(this.optionsScroll);
+        tools = v().id('roster-options').min_h(0).flex_none().gap(2).overflow_y_scrollbar().track_scroll(this.optionsScroll);
         let optionIndex = 0;
         const option = (...args) => {
           tools.child(button(...args));
@@ -473,22 +476,40 @@ export function createRosterView(kit, app, options = {}) {
           cx.spawn(async cx => this.layoutAction(() => this.optIn.undo(props.rosterToken, p => timerDeadline(cx, p)), cx));
         });
         tools.h(Math.min(52, optionIndex * 24 + Math.max(0, optionIndex - 1) * 2));
-        root.child(tools);
       }
       listPhase = true;
       const body = v().id('roster-rows').flex_1().min_h(0).gap(3).overflow_y_scrollbar().track_scroll(this.rowScroll);
+      // Needs you, pinned above the tabs and outside their list: the same section in every
+      // view, drawn only while something is pending. Its rows scroll on their own past three.
+      const PINNED = { row: 44, gap: 3, shown: 3 };
+      const pinnedCount = projection.instances.filter(i => i.pinned && i.kind === 'terminal').length;
+      const shown = Math.min(pinnedCount, PINNED.shown);
+      const pinnedRows = v().id('roster-needs-rows').flex_none().gap(PINNED.gap).overflow_y_scrollbar().track_scroll(this.pinnedScroll)
+        .h(shown * PINNED.row + Math.max(0, shown - 1) * PINNED.gap);
+      const pinned = v().id('roster-needs-you').flex_none().gap(2).pb(4).border_b(1).border_color(theme.border ?? theme.raised ?? muted);
+      // Each instance is one direct child of its list; these count them for scrolling.
+      let bodyAt = 0, pinnedAt = 0;
+      const place = (i, element) => {
+        if (i.pinned) { pinnedRows.child(element); pinnedAt++; } else { body.child(element); bodyAt++; }
+      };
+      const slot = i => i.pinned ? { pinnedIndex: pinnedAt, pinned: true } : { rowIndex: bodyAt };
       let section = null;
-      for (const [index, i] of projection.instances.entries()) {
+      for (const i of projection.instances) {
+        if (i.kind === 'section' && i.pinned) {
+          section = i;
+          pinned.child(groupHeader(i.key, 'Needs you, ' + i.counts.needsYou, 'Needs you', () => {},
+            { icon: 'bell', foldable: false, count: i.counts.needsYou, tooltip: 'Needs you: pending in any Space, on any machine' }).cursor_default());
+          this.controls.at(-1).pinned = true;
+          continue;
+        }
         if (i.kind === 'section') {
           section = i;
           const count = i.label === 'Working' ? i.counts?.working : i.label === 'Needs you' ? i.counts?.needsYou : i.counts?.identities ?? i.count;
           const title = i.label;
-          // Needs you never folds: no chevron, but its slot keeps the count aligned.
-          const attentionKey = i.key === JSON.stringify([viewMode, 'attention']), foldable = !attentionKey;
+          const foldable = true;
           // The leading icon says what kind of group it is. Working's is the one live
           // indicator: a native spinner, decoration rather than a control.
-          const lead = attentionKey ? 'bell'
-            : viewMode === 'status' ? (i.label === 'Working' ? leadBox().id('roster-working-indicator').text_size(12)
+          const lead = viewMode === 'status' ? (i.label === 'Working' ? leadBox().id('roster-working-indicator').text_size(12)
               .text_color(theme.working ?? theme.accent ?? muted).frames(WORKING_FRAMES, 80) : STATUS_ICONS[i.label] ?? 'help-circle')
             : i.space ? spaceInitial(i.space) : i.label === 'Done' ? 'check-circle' : i.label === 'Unidentified' ? 'terminal'
             : i.label === 'Infrastructure' ? 'server' : i.repository ? 'branch' : 'folder';
@@ -499,8 +520,8 @@ export function createRosterView(kit, app, options = {}) {
           const header = groupHeader(i.key, title + (count != null ? ', ' + count : '') + (where ? ', ' + where : '') + (foldable ? (i.collapsed ? ', folded' : ', open') : ''), title,
             change({ type: 'fold', key: i.key, collapsed: !i.collapsed }), { icon: lead, collapsed: i.collapsed, foldable, extras, depth: i.depth, count,
               tooltip: where ? i.label + ': the Herdr Space on ' + (i.space.machine ?? 'this computer') + ' that shows these terminals (project not verified)' : undefined });
-          body.child(header);
-          this.controls.at(-1).rowIndex = index;
+          Object.assign(this.controls.at(-1), slot(i));
+          place(i, header);
           continue;
         }
         const row = i.row, waiting = row.roster.state === 'waiting';
@@ -525,8 +546,8 @@ export function createRosterView(kit, app, options = {}) {
         // Like the stock list: a hover tint, and the row of the terminal that has focus is marked.
         element.hover(el => el.bg(theme.hover ?? theme.raised));
         if (c.cursor !== i.key && c.feed.snapshot?.focused?.terminal === row.address) element.bg(theme.raised);
-        const selected = this.controls.at(-1);
-        Object.assign(selected, { rowIndex: index, instance: i, detail: label, hover,
+        const selected = this.controls.at(-1), at = slot(i);
+        Object.assign(selected, { ...at, instance: i, detail: label, hover,
           disabledReason: i.navigation.enabled ? null : explanation });
         // Neutral monogram only for a known project: an "Unassigned" initial says nothing.
         if (context.knownProject) element.child(h().w(16).h(16).flex_none().justify_center().rounded(4).bg(theme.raised)
@@ -553,6 +574,8 @@ export function createRosterView(kit, app, options = {}) {
         if (statusView && waiting) element.child(badge('◈ Waiting', theme.accent ?? muted).id('row-waiting:' + i.key)
           .accessibility_label('Waiting for delegate').tooltip('Waiting for delegate'));
         else if (echo) element.child(labelText('in Needs you', 10, muted).id('row-echo:' + i.key).flex_none());
+        // The pinned header already says Needs you: its rows carry no repeated chip.
+        else if (i.pinned) { /* no chip */ }
         else if (!(statusView && !i.display.error && section?.label === i.status)) element.child(badge(status, stateColor));
         const line = h().id('line:' + i.key).h(24).flex_none().min_w(0).gap(2).pl(Math.min(i.depth, 3) * 8).child(element)
           .on_hover((on, cx) => { if (on) this.hoverKey = i.key; else if (this.hoverKey === i.key) this.hoverKey = null; cx.notify(); });
@@ -561,22 +584,24 @@ export function createRosterView(kit, app, options = {}) {
         const info = click('info:' + i.key, 'Agent details for ' + row.displayLabel, cx => this.openDetails({ key: 'info:' + i.key, instance: i }, cx))
           .w(18).h(24).flex_none().px(0).justify_center().tooltip('Agent details')
           .child(labelText(infoShown ? 'ⓘ' : '', 12, muted).id('info-glyph:' + i.key));
-        Object.assign(this.controls.at(-1), { rowIndex: index, instance: i, detail: label, hover, disabledReason: selected.disabledReason });
+        Object.assign(this.controls.at(-1), { ...at, instance: i, detail: label, hover, disabledReason: selected.disabledReason });
         line.child(info);
         if (parents.has(row.associationKey)) {
           const collapsed = c.state.folds[i.key] ?? false;
           line.child(button('fold:' + i.key, collapsed ? 'Show children' : 'Hide children',
             change({ type: 'fold', key: i.key, collapsed: !collapsed }), { text: collapsed ? '▸' : '▾' }).px(0).w(18));
-          Object.assign(this.controls.at(-1), { rowIndex: index, instance: i, detail: label, hover, disabledReason: selected.disabledReason });
+          Object.assign(this.controls.at(-1), { ...at, instance: i, detail: label, hover, disabledReason: selected.disabledReason });
         }
-        if (!i.alert) { body.child(line); continue; }
+        if (!i.alert) { place(i, line); continue; }
+        // The first line is the verified agent, Space and machine. The second carries only
+        // what the session reported (project, work item, reason) and names what it did not.
         const a = i.alert;
-        const summary = (a.context ?? 'Project unknown') + ' · ' + [a.issue, a.reason ?? 'needs you'].filter(Boolean).join(' ');
-        const details = [summary, a.recipient ? 'Reply goes to ' + a.recipient.label + ' (' + a.recipient.address + ')' : null,
+        const summary = [a.project, a.issue, a.reason].filter(Boolean).join(' · ');
+        const details = [summary || null, a.recipient ? 'Reply goes to ' + a.recipient.label + ' (' + a.recipient.address + ')' : null,
           ...a.missing.map(m => 'Missing ' + m.field + ': ' + m.detail)].filter(Boolean).join('\n');
         const alertLine = h().id('alert:' + i.key).h(20).flex_none().min_w(0).gap(6).pl(Math.min(i.depth, 3) * 8 + 6)
-          .tooltip(details).accessibility_label(details)
-          .child(labelText(summary, 11, fg).id('alert-summary:' + i.key).flex_1());
+          .tooltip(details).accessibility_label(details);
+        if (summary) alertLine.child(labelText(summary, 11, fg).id('alert-summary:' + i.key).flex_1());
         if (a.recipient) {
           // Only a verified recipient gets an action, and it is checked again at click time.
           alertLine.child(button('recipient:' + i.key, 'Open ' + a.recipient.title + ': ' + a.recipient.label, cx => {
@@ -585,14 +610,26 @@ export function createRosterView(kit, app, options = {}) {
             else { this.message = reasonText(plan.reason); this.openMessage = true; }
             cx?.notify?.();
           }, { text: 'Open ' + a.recipient.title }).h(20));
-          Object.assign(this.controls.at(-1), { rowIndex: index, instance: i, detail: label, hover: details });
-        } else alertLine.child(labelText('Not reported: ' + a.missing.map(m => m.field).join(', '), 10, muted).id('alert-missing:' + i.key).flex_none());
-        body.child(v().id('alert-block:' + i.key).flex_none().child(line).child(alertLine));
+          Object.assign(this.controls.at(-1), { ...at, instance: i, detail: label, hover: details });
+        }
+        // What was not reported, when no recipient button takes the place.
+        if (a.missing.length && !a.recipient) {
+          const missing = labelText('Not reported: ' + a.missing.map(m => m.field).join(', '), 10, muted).id('alert-missing:' + i.key);
+          alertLine.child(summary ? missing.flex_none().max_w(170) : missing.flex_1());
+        }
+        place(i, v().id('alert-block:' + i.key).h(PINNED.row).flex_none().child(line).child(alertLine));
       }
       if (viewMode === 'spaces') this.renderSpaces(body, theme, { click, change, labelText, h, fg, muted, groupHeader });
-      else if (!projection.instances.length) body.child(labelText('No observed terminals', 12, muted).p(6));
+      else if (!projection.instances.some(i => !i.pinned)) body.child(labelText(pinnedCount ? 'Nothing else to list' : 'No observed terminals', 12, muted).p(6));
       // The modal lies over the list; the list underneath keeps its scroll and folds.
       const stack = v().id('roster-stack').relative().flex_1().min_h(0).child(body);
+      // Top to bottom: Needs you (only while pending), the tabs, Options, then the list.
+      if (pinnedCount) root.child(pinned.child(pinnedRows));
+      root.child(toolbar);
+      if (tools) root.child(tools);
+      // Keyboard order follows that: the pinned controls come before the tabs.
+      const pinnedControls = this.controls.filter(control => control.pinned);
+      if (pinnedControls.length) this.controls = [...pinnedControls, ...this.controls.filter(control => !control.pinned)];
       if (reader) stack.child(this.renderModal(reader, projection, theme, { labelText, h, v, fg, muted }));
       else if (this.newSpace) stack.child(this.renderNewSpace(theme, { labelText, h, v, fg, muted }));
       root.child(stack);

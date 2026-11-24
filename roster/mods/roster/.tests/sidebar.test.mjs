@@ -24,7 +24,9 @@ test('actual main entry defaults passive, captures exactly once, renders labels 
   const Type = (await import(url(source))).default, view = new Type(), c = context(); view.init({}, c.cx);
   let tree = view.render(c.cx); checkCounts(f.counts); assert.equal(c.stats.focus, 0); assert.equal(f.calls.length, 0);
   // The panel starts on Spaces, the first tab; the agent views are one click away.
-  assert.equal(view.controller.state.view, 'spaces'); assert.equal(rows(view.controller.projection).length, 0);
+  assert.equal(view.controller.state.view, 'spaces');
+  // Spaces lists no agents; only the pinned Needs you rows, drawn above the tabs.
+  assert.ok(rows(view.controller.projection).every(i => i.pinned)); assert.doesNotMatch(textOf(flatten(tree).find(e => e.attributes.id?.[0] === 'roster-rows')), /Planner #12/);
   view.controller.change({ type: 'view', view: 'projects' }); tree = view.render(c.cx);
   assert.match(textOf(tree), /Planner #12/); assert.match(textOf(tree), /\bGH\b/); assert.doesNotMatch(textOf(tree), /Context unknown/);
   // Production default: Needs you stays open; the Other group starts folded with its count.

@@ -87,11 +87,13 @@ test('names, tabs and folders never assign role, project or issue', () => {
 test('missing metadata: the alert says what is known and exactly what is not; no recipient action', () => {
   const s = setup(factory()); const tree = s.render();
   const alert = find(s.view, 'edge/t4k', true);
-  assert.equal(textOf(byId(tree, 'alert-summary:' + alert.key)), 'Sample Mods · needs you');
-  assert.equal(textOf(byId(tree, 'alert-missing:' + alert.key)), 'Not reported: issue, reason, recipient');
+  // Nothing reported: no summary, and a Space is never shown as the project.
+  assert.equal(byId(tree, 'alert-summary:' + alert.key), undefined);
+  assert.equal(textOf(byId(tree, 'row-machine:' + alert.key)), 'Sample Mods · edge');
+  assert.equal(textOf(byId(tree, 'alert-missing:' + alert.key)), 'Not reported: project, issue, reason, recipient');
   assert.equal(byId(tree, 'recipient:' + alert.key), undefined);
   const details = byId(tree, 'alert:' + alert.key).attributes.tooltip[0];
-  for (const text of ['Missing issue: no herdr.issue on this terminal', 'Missing reason: no status message reported by this terminal',
+  for (const text of ['Missing project: no verified project for this terminal', 'Missing issue: no herdr.issue on this terminal', 'Missing reason: no status message reported by this terminal',
     'Missing recipient: no herdr.delivery label on this terminal']) assert.ok(details.includes(text), text);
   // The Watcher itself still opens its exact remote pane.
   byId(tree, alert.key).attributes.on_click[0]({}, s.cx);
@@ -101,7 +103,7 @@ test('missing metadata: the alert says what is known and exactly what is not; no
 test('verified recipient: the alert reads like a sentence and Open Planner goes to its exact pane', () => {
   const s = setup(factory({ watcher: { labels: { 'herdr.delivery': DELIVERY }, extra: { report: { msg: 'awaiting a decision' } } } }));
   let tree = s.render(); const alert = find(s.view, 'edge/t4k', true);
-  assert.equal(textOf(byId(tree, 'alert-summary:' + alert.key)), 'Sample Mods · #21 awaiting a decision');
+  assert.equal(textOf(byId(tree, 'alert-summary:' + alert.key)), '#21 · awaiting a decision');
   const open = byId(tree, 'recipient:' + alert.key);
   assert.equal(textOf(open).trim(), 'Open Planner'); assert.match(open.attributes.accessibility_label[0], /Planner #21/);
   assert.match(byId(tree, 'alert:' + alert.key).attributes.tooltip[0], /Reply goes to Planner #21 \(edge\/t4h\)/);
@@ -132,8 +134,8 @@ test('one alert, one prominent row: the group copy is a muted echo', () => {
   const prominent = find(s.view, 'edge/t4k', true), echo = find(s.view, 'edge/t4k', false);
   assert.ok(echo.echo); assert.equal(prominent.echo, undefined);
   assert.equal(textOf(byId(tree, 'row-echo:' + echo.key)), 'in Needs you');
-  assert.match(textOf(byId(tree, prominent.key)), /Needs you/);
   const chips = el => flatten(el).filter(e => e.attributes.max_w?.[0] === 104).map(textOf);
-  assert.deepEqual(chips(byId(tree, prominent.key)), ['Needs you']); assert.deepEqual(chips(byId(tree, echo.key)), [], 'no second chip');
-  assert.equal((textOf(byId(tree, 'roster-rows')).match(/\bNeeds you\b/g) ?? []).length, 3, 'header, prominent chip, echo note');
+  assert.deepEqual(chips(byId(tree, prominent.key)), [], 'the pinned header says it'); assert.deepEqual(chips(byId(tree, echo.key)), [], 'no second chip');
+  assert.ok(byId(byId(tree, 'roster-needs-you'), prominent.key), 'the alert is pinned');
+  assert.equal((textOf(byId(tree, 'roster-rows')).match(/\bNeeds you\b/g) ?? []).length, 1, 'only the echo note is in the list');
 });

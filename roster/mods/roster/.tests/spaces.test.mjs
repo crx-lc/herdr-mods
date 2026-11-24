@@ -59,7 +59,8 @@ test('Spaces is the first tab and the start view; it lists Spaces, not agents', 
   const rows = byId(tree, 'roster-rows');
   assert.match(textOf(rows), /This computer.*Alpha.*beta.*Delta.*edge.*Gamma.*Zeta.*zed.*Epsilon/);
   assert.doesNotMatch(textOf(rows), /Needs you|t1|Working/);
-  assert.equal(s.view.controller.projection.instances.length, 0);
+  // The only agent instances in Spaces are the pinned Needs you section, outside this list.
+  assert.ok(s.view.controller.projection.instances.every(i => i.pinned));
   assert.equal(s.f.calls.length, 0);
 });
 
@@ -102,7 +103,8 @@ test('Spaces follows Herdr live: a new active Space or a removed one redraws wit
 test('switching to Projects shows agents again, with Needs you', () => {
   const s = setup(); let tree = s.render();
   byId(tree, 'mode:projects').attributes.on_click[0]({}, s.cx); tree = s.render();
-  assert.match(textOf(byId(tree, 'roster-rows')), /Needs you/);
+  assert.doesNotMatch(textOf(byId(tree, 'roster-rows')), /Needs you 1/, 'Needs you is no longer a group in the list');
+  assert.match(textOf(byId(tree, 'roster-needs-you')), /Needs you 1/);
   assert.equal(s.f.calls.length, 0);
 });
 

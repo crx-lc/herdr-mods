@@ -57,7 +57,9 @@ test('compact row keeps known project as a monogram only; parent/project read in
     assert.equal(byId(el, 'info:' + i.key), undefined, 'Info must not bubble into terminal activation');
     const control = s.view.controls.find(c => c.key === 'info:' + i.key);
     assert.equal(control.instance.key, i.key);
-    assert.ok(byId(body.children[control.rowIndex], control.key));
+    // A pending row is pinned above the tabs: its index is in the pinned list, not the tabs' list.
+    if (control.pinned) assert.ok(byId(byId(tree, 'roster-needs-rows').children[control.pinnedIndex], control.key));
+    else assert.ok(byId(body.children[control.rowIndex], control.key));
     click(s, tree, control.key); assert.equal(s.view.reader.sourceKey, i.key);
     assert.equal(textOf(byId(s.view.render(s.cx), 'detail:project')), 'Project Sample project');
     assert.equal(f.calls.length, 0); key(s, 'escape'); s.view.render(s.cx);

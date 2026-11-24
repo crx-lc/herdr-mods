@@ -82,23 +82,25 @@ function placement(row, scopes, repositories = [], spaces = {}) {
 }
 const token = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(value) ? value : null;
 const ROLE_TITLES = { coordinator: 'Coordinator', planner: 'Planner', developer: 'Developer', reviewer: 'Reviewer', watcher: 'Watcher', supervisor: 'Supervisor' };
-// What an alert can prove. The recipient is verified only when the alerting terminal names
+// What an alert can prove. The project only when the terminal has a verified project (a
+// Space is where it is shown, not its project). The recipient is verified only when the alerting terminal names
 // a delivery (herdr.delivery) and exactly one other live terminal on the same machine
 // carries the same delivery. The issue comes from the alert itself or that recipient; the
 // reason only from the terminal's own reported message. Names, folders and tabs never count.
 export function alertFacts(row, rows, spaces = {}, navigation = {}) {
-  const context = row.project.id ? row.project.displayName : (Object.hasOwn(spaces, row.address) ? spaces[row.address].name : null);
+  const project = row.project.id ? row.project.displayName : null;
   const delivery = token(row.labels?.['herdr.delivery']);
   const peers = delivery ? rows.filter(r => r !== row && current(r) && r.core.alias === row.core.alias && r.labels?.['herdr.delivery'] === delivery) : [];
   const recipientRow = peers.length === 1 ? peers[0] : null;
   const item = row.workItem ?? recipientRow?.workItem ?? null;
   const reason = typeof row.reportMessage === 'string' && row.reportMessage.trim() ? row.reportMessage.trim() : null;
   const missing = [];
+  if (!project) missing.push({ field: 'project', detail: 'no verified project for this terminal' });
   if (!item) missing.push({ field: 'issue', detail: recipientRow ? 'no herdr.issue on this terminal or its recipient' : 'no herdr.issue on this terminal' });
   if (!reason) missing.push({ field: 'reason', detail: 'no status message reported by this terminal' });
   if (!recipientRow) missing.push({ field: 'recipient', detail: !delivery ? 'no herdr.delivery label on this terminal'
     : peers.length ? 'more than one live terminal on this machine shares its herdr.delivery' : 'no other live terminal on this machine shares its herdr.delivery' });
-  return { context, issue: item ? (item.kind === 'pr' ? 'PR #' : '#') + item.numberOrId : null, reason, missing,
+  return { project, issue: item ? (item.kind === 'pr' ? 'PR #' : '#') + item.numberOrId : null, reason, missing,
     recipient: recipientRow ? { identity: rowIdentity(recipientRow), role: recipientRow.role, title: ROLE_TITLES[recipientRow.role] ?? 'agent',
       label: recipientRow.displayLabel, address: recipientRow.address, navigation: navigationTarget(recipientRow, rows, navigation) } : null };
 }
@@ -130,7 +132,8 @@ export function projectRoster(reduced, inputState = {}, { scopes = [], repositor
   function terminal(row, path, depth, contextOnly = false, extra = {}) {
     const identity = rowIdentity(row), outsideFilters = filterReasons(row, state);
     const parent = row.parent.resolution === 'verified' ? byAssociation.get(row.parent.associationKey) : null;
-    const key = tuple(state.view, ...path, identity);
+    // Pinned rows keep one key in every view, so a selection survives a tab switch.
+    const key = extra.pinned ? tuple(...path, identity) : tuple(state.view, ...path, identity);
     instances.push({ kind: 'terminal', key, identity, row, depth, contextOnly, outsideFilters,
       placement: placements.get(identity), status: status(row),
       identityDiagnostic: rows.filter(r => r.terminalKey === row.terminalKey && r.lifecycle !== 'finished').length > 1 ? 'ambiguous-incarnation' : row.associationKey ? null : 'unverified-incarnation',
@@ -146,12 +149,13 @@ export function projectRoster(reduced, inputState = {}, { scopes = [], repositor
       display: { ...row.roster.display, error: row.rawStatus === 'error' && !row.statusConflict ? 'Error' : null }, ...extra });
     return key;
   }
-  // Global actionable targets are independent of both filters and every fold.
-  // Spaces is navigation through Herdr's own Spaces, not another agent grouping.
-  const attention = state.view === 'spaces' ? [] : rows.filter(r => r.roster.actionable);
+  // Needs you is pinned above the tabs: the same section, rows and keys in every view
+  // (Spaces too), each pending session once, local or remote, independent of every fold.
+  // Filters still apply to acting on a row, as everywhere else.
+  const attention = distinct(rows.filter(r => r.roster.actionable));
   if (attention.length) {
-    instances.push({ kind: 'section', key: tuple(state.view, 'attention'), label: 'Needs you', depth: 0, collapsed: false, counts: counts(attention) });
-    for (const row of attention) terminal(row, ['attention'], 1, false, { alert: alertFacts(row, rows, spaces, navigation) });
+    instances.push({ kind: 'section', key: tuple('attention'), label: 'Needs you', depth: 0, collapsed: false, pinned: true, counts: counts(attention) });
+    for (const row of attention) terminal(row, ['attention'], 1, false, { pinned: true, alert: alertFacts(row, rows, spaces, navigation) });
   }
   if (state.view === 'spaces') {
     // No agent rows here.
