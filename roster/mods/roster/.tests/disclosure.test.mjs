@@ -226,3 +226,24 @@ test('invalid checked input clears a previous proof and disables its old final a
   s.view.checkFolder('bad\npath', s.cx); assert.equal(ns.folder, null); assert.equal(ns.check, null);
   stale({}, s.cx); assert.deepEqual(s.f.calls, []);
 });
+
+test('keyboard traversal reveals each Space/header/+ and inline folder control through its exact direct list child', () => {
+  const s = setup('spaces'); let tree = s.render();
+  s.click(tree, 'machine-add:' + machineKey('edge')); tree = s.render();
+  // Leave native input editing so Tab/arrow traversal belongs to Roster.
+  s.view.inputFocused = false;
+  const body = byId(tree, 'roster-rows');
+  const expected = s.view.controls.filter(c => c.rowIndex != null);
+  assert.ok(expected.some(c => c.key === 'new-space:path'));
+  assert.ok(expected.some(c => c.key === 'space:s1'));
+  for (const control of expected) {
+    const before = s.view.controls[s.view.controls.indexOf(control) - 1];
+    s.view.place(before?.key ?? 'mode:status'); s.key('tab');
+    assert.equal(s.view.controller.cursor, control.key);
+    assert.equal(s.view.rowScroll.requests.at(-1), control.rowIndex);
+    assert.ok(byId(body.children[control.rowIndex], control.key), control.key);
+    if (control.panelIndex != null) assert.equal(s.view.panelScroll.requests.at(-1), control.panelIndex);
+    s.view.inputFocused = false;
+  }
+  assert.deepEqual(s.f.calls, []);
+});

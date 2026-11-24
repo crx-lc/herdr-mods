@@ -311,12 +311,16 @@ export function createRosterView(kit, app, options = {}) {
       // The list scrolls by its direct children; count them to find the active row's place.
       let drawn = 0, activeAt = -1, activeId = null;
       const add = element => { body.child(element); drawn++; };
-      if (this.activeNewSpace() && !rows.some(row => row.kind === 'machine' && row.machine === this.newSpace.machine))
+      if (this.activeNewSpace() && !rows.some(row => row.kind === 'machine' && row.machine === this.newSpace.machine)) {
+        const before = this.controls.length;
         add(this.renderNewSpace(theme, { labelText, h, v: () => v_flex(), fg, muted }));
+        for (const control of this.controls.slice(before)) control.rowIndex = drawn - 1;
+      }
       for (const row of rows) {
         if (row.kind === 'machine') {
           // As in the stock list: icon, name, state when not connected, then +, the
           // connection dot and the fold chevron last.
+          const before = this.controls.length;
           const trigger = 'machine-add:' + row.key;
           const dim = theme.dim ?? muted, newSpace = cx => this.openNewSpace(row.machine, cx, trigger);
           // The OS icon when known (PRETTY_NAME in the tooltip), else the generic machine icon.
@@ -336,10 +340,11 @@ export function createRosterView(kit, app, options = {}) {
           this.controls.splice(row.ready ? this.controls.length - 1 : this.controls.length, 0, headerControl);
           const block = v_flex().id('machine-block:' + row.key).flex_none().min_w(0).child(header);
           if (this.activeNewSpace() && this.newSpace.machine === row.machine) block.child(this.renderNewSpace(theme, { labelText, h, v: () => v_flex(), fg, muted }));
+          for (const control of this.controls.slice(before)) control.rowIndex = drawn;
           add(block);
-          if (!row.collapsed && row.count === 0 && row.ready) add(click('spaces:new:' + machineKey(row.machine), 'New space on ' + row.label, cx => this.openNewSpace(row.machine, cx, 'spaces:new:' + machineKey(row.machine)))
+          if (!row.collapsed && row.count === 0 && row.ready) { add(click('spaces:new:' + machineKey(row.machine), 'New space on ' + row.label, cx => this.openNewSpace(row.machine, cx, 'spaces:new:' + machineKey(row.machine)))
             .h(28).flex_none().px(8).gap(7).rounded(7).text_size(12).text_color(dim).cursor_pointer()
-            .hover(el => el.bg(theme.hover ?? theme.raised).text_color(fg)).child(icon('plus', 12)).child('New space there'));
+            .hover(el => el.bg(theme.hover ?? theme.raised).text_color(fg)).child(icon('plus', 12)).child('New space there')); this.controls.at(-1).rowIndex = drawn - 1; }
           continue;
         }
         const element = click(row.key, 'Space ' + row.name + (row.machine ? ' on ' + row.machine : '') + (row.tree ? ', worktree' : '') + (row.active ? ', shown' : ''),
@@ -363,6 +368,7 @@ export function createRosterView(kit, app, options = {}) {
           if (tail.behind) marks.child(div().id('space-behind:' + row.id).text_color(theme.ansi1 ?? theme.blocked ?? fg).child('↓' + tail.behind));
           element.child(marks);
         }
+        this.controls.at(-1).rowIndex = drawn;
         if (row.active) { activeAt = drawn; activeId = row.id; }
         add(element);
       }
@@ -403,7 +409,7 @@ export function createRosterView(kit, app, options = {}) {
       if (!ns.machine) append(control('new-space:pick', 'Choose a folder on this computer', 'Choose folder…', cx => { this.chooseLocalFolder(cx); }));
       else {
         // A typed path on that machine, or one of the folders Herdr already reports there.
-        if (this.pathInput) { const input = { key: 'new-space:path', label: 'Folder on ' + machineLabel, input: true, activate: () => this.pathInput.focus?.() }; this.readerControls.push(input); this.controls.push(input); }
+        if (this.pathInput) { const input = { key: 'new-space:path', label: 'Folder on ' + machineLabel, input: true, panelIndex, activate: () => this.pathInput.focus?.() }; this.readerControls.push(input); this.controls.push(input); }
         if (this.pathInput) append(h().flex_none().gap(4).child(Input.new(this.pathInput).id('new-space:path').h(24).min_w(0).flex_1().text_size(12))
           .child(control('new-space:check', 'Check this folder on ' + machineLabel, 'Check', cx => this.checkFolder(this.pathInput.value(), cx))));
         const tops = [...(this.git?.cache ?? new Map()).entries()].filter(([key, e]) => JSON.parse(key)[0] === ns.machine && e.status === 'repo').map(([, e]) => e.top);
