@@ -208,9 +208,11 @@ source, external asset, dependency or Better Sidebar code/assets is bundled.
 
 **Remote reads follow the owner's D8 rule** ([crx-lc/herdr-agents#141](https://github.com/crx-lc/herdr-agents/issues/141)):
 Roster reads another machine only while Herdr reports it ready, checks readiness again
-from a fresh `machines()` immediately before each dispatch and again on the answer,
+from a fresh `machines()` immediately before each remote call (each individual Git
+command and each os-release read, one at a time) and again on the answer,
 skips stopped, disconnected or unknown machines, drops queued work for a machine that
-stops being ready, and shows a failed or late answer as unknown. Nothing is retried
+stops being ready, sends no further command once readiness is lost, and shows a failed
+or late answer as **Unknown**. Nothing is retried
 through a reconnect or another path; a later read waits for the normal schedule while
 the machine is ready. **Limitation:** this narrows the window, it does not close it. A
 Core can stop between the check and the call, and a read that reaches a stopped Core may

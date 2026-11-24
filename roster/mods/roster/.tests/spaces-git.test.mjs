@@ -30,16 +30,17 @@ function prober({ atOnce = 2, answer, ready = () => true } = {}) {
 test('probes run exactly the two read-only queries in the folder on its machine, cached and capped', async () => {
   const p = prober({ answer: (args, o) => args.includes('--show-toplevel') ? ok(o.cwd + '\n') : ok('/r/main/.git\n') });
   p.ids.request([{ machine: null, folder: '/r/main' }, { machine: 'edge', folder: '/r/main' }, { machine: null, folder: '/r/main' }, { machine: null, folder: null }], p.after);
-  await p.settle(); await p.settle();
-  assert.deepEqual(p.calls.map(c => [c[0], c[1], c[2].cwd, c[2].on]), [
-    ['git', [...GIT_TOP], '/r/main', null], ['git', [...GIT_COMMON], '/r/main', null],
-    ['git', [...GIT_TOP], '/r/main', 'edge'], ['git', [...GIT_COMMON], '/r/main', 'edge']]);
+  for (let n = 0; n < 4; n++) await p.settle();
+  // Each place asks its two commands one after the other (D8 is checked before each).
+  const per = on => p.calls.filter(c => c[2].on === on).map(c => [c[0], c[1], c[2].cwd]);
+  assert.equal(p.calls.length, 4);
+  for (const on of [null, 'edge']) assert.deepEqual(per(on), [['git', [...GIT_TOP], '/r/main'], ['git', [...GIT_COMMON], '/r/main']]);
   assert.deepEqual(GIT_TOP, ['rev-parse', '--show-toplevel']); assert.deepEqual(GIT_COMMON, ['rev-parse', '--path-format=absolute', '--git-common-dir']);
   assert.ok(p.calls.every(c => c[2].timeout > 0));
   assert.equal(p.ids.lookup(null, '/r/main').status, 'repo'); assert.equal(p.ids.lookup('edge', '/r/main').linked, false);
   assert.equal(p.ids.takeChanged(), true); assert.equal(p.ids.takeChanged(), false);
   // Identity is cached; the next request reads the checkout's state once, then nothing until stateMs.
-  p.ids.request([{ machine: null, folder: '/r/main' }], p.after); await p.settle(); await p.settle();
+  p.ids.request([{ machine: null, folder: '/r/main' }], p.after); for (let n = 0; n < 4; n++) await p.settle();
   assert.deepEqual(p.calls.slice(4).map(c => [c[1], c[2].cwd, c[2].on]), [[[...GIT_STATUS], '/r/main', null], [[...GIT_COUNTS], '/r/main', null], [[...GIT_BRANCH], '/r/main', null]]);
   p.ids.request([{ machine: null, folder: '/r/main' }], p.after); await p.settle();
   assert.equal(p.calls.length, 7);
@@ -48,26 +49,26 @@ test('probes run exactly the two read-only queries in the folder on its machine,
 test('a hung probe times out to unsure on the host timer; at most N run at once; unsure retries, none does not', async () => {
   const p = prober({ atOnce: 2 });
   p.ids.request(['/a', '/b', '/c'].map(folder => ({ machine: null, folder })), p.after);
-  assert.equal(p.calls.length, 4, 'two places at once, two queries each');
+  assert.equal(p.calls.length, 2, 'two places at once, one command each at a time');
   assert.equal(p.ids.lookup(null, '/c').status, 'probing', 'flat while probing');
   p.timers[0].fn(); await p.settle(); await p.settle();
   assert.equal(p.ids.lookup(null, '/a').status, 'unsure');
-  assert.equal(p.calls.length, 6, 'the next place starts when one ends');
-  // /b: Git says no repo.
-  p.pending.filter(x => x.options.cwd === '/b').forEach(x => x.resolve({ code: 128, stdout: '', stderr: 'fatal: not a git repository' }));
-  await p.settle(); await p.settle();
+  assert.equal(p.calls.length, 3, 'the next place starts when one ends');
+  // /b: Git says no repo (each command answers as it is asked).
+  for (let n = 0; n < 4; n++) { p.pending.filter(x => x.options.cwd === '/b' && !x.done).forEach(x => { x.done = true; x.resolve({ code: 128, stdout: '', stderr: 'fatal: not a git repository' }); }); await p.settle(); await p.settle(); }
   assert.equal(p.ids.lookup(null, '/b').status, 'none');
+  const sent = p.calls.length;
   p.ids.request([{ machine: null, folder: '/a' }, { machine: null, folder: '/b' }], p.after);
-  assert.equal(p.calls.length, 6, 'nothing retried before retryMs');
+  assert.equal(p.calls.length, sent, 'nothing retried before retryMs');
   p.tick(1500); p.ids.request([{ machine: null, folder: '/a' }, { machine: null, folder: '/b' }], p.after);
-  assert.equal(p.calls.filter(c => c[2].cwd === '/a').length, 4, 'unsure asked again'); assert.equal(p.calls.filter(c => c[2].cwd === '/b').length, 2, 'none is remembered');
+  assert.equal(p.calls.filter(c => c[2].cwd === '/a').length, 2, 'unsure asked again'); assert.equal(p.calls.filter(c => c[2].cwd === '/b').length, 2, 'none is remembered');
   // A rejected exec (machine unreachable) is unsure too.
   const q = prober({ answer: () => null }); q.ids.request([{ machine: 'edge', folder: '/x' }], q.after);
   q.pending[0].reject(Error('unreachable')); await q.settle(); await q.settle();
   assert.equal(q.ids.lookup('edge', '/x').status, 'unsure');
   // D8: no retry through a reconnect; the unsure answer is asked again only on the schedule.
-  q.ids.request([{ machine: 'edge', folder: '/x' }], q.after); assert.equal(q.calls.length, 2, 'not before retryMs');
-  q.tick(1500); q.ids.request([{ machine: 'edge', folder: '/x' }], q.after); assert.equal(q.calls.length, 4, 'asked again after retryMs');
+  q.ids.request([{ machine: 'edge', folder: '/x' }], q.after); assert.equal(q.calls.length, 1, 'a failed command sends no other; not before retryMs');
+  q.tick(1500); q.ids.request([{ machine: 'edge', folder: '/x' }], q.after); assert.equal(q.calls.length, 2, 'asked again after retryMs');
 });
 
 const sp = (id, name, extra = {}) => ({ id, name, machine: null, active: false, branch: null, tabs: [{ id: 'tab-' + id }], ...extra });

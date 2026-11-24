@@ -30,10 +30,10 @@ test('D8 Git: not ready means no call; readiness is re-checked at dispatch; queu
   // Readiness lost before dispatch: the queued job is never sent.
   const b = prober();
   b.ids.request([{ machine: 'edge', folder: '/x' }, { machine: 'edge', folder: '/y' }], b.after);
-  assert.equal(b.calls.length, 2, 'the first job only (two queries), one at once');
+  assert.equal(b.calls.length, 1, 'the first job only, its first command');
   b.state.ready = false;
   for (const p of b.pending) p.resolve(ok('/x\n')); await flush();
-  assert.equal(b.calls.length, 2, 'the queued job is not dispatched after readiness is lost');
+  assert.equal(b.calls.length, 1, 'neither its next command nor the queued job is sent after readiness is lost');
   assert.equal(b.ids.lookup('edge', '/x').status, 'unsure', 'answers that arrive after readiness was lost are discarded');
   assert.equal(b.ids.lookup('edge', '/y').status, 'unsure');
   // Disconnect cancels queued work even before the running job settles.
@@ -41,8 +41,39 @@ test('D8 Git: not ready means no call; readiness is re-checked at dispatch; queu
   c.ids.request([{ machine: 'edge', folder: '/x' }, { machine: 'edge', folder: '/y' }, { machine: 'edge', folder: '/z' }], c.after);
   c.ids.cancel('edge'); c.state.ready = true;
   for (const p of c.pending) p.resolve(ok('/x\n')); await flush();
+  for (const p of c.pending) p.resolve(ok('/x/.git\n')); await flush();
   assert.equal(c.calls.length, 2, 'cancelled jobs never dispatch, even if the machine is ready again');
   assert.equal(c.ids.queue.length, 0);
+});
+
+test('D8 Git: a Core that becomes unavailable between two Git calls of the same refresh gets no further call', async () => {
+  // Identity: two commands; readiness drops after the first answers.
+  const p = prober();
+  p.ids.request([{ machine: 'edge', folder: '/x' }], p.after);
+  assert.equal(p.calls.length, 1);
+  p.state.ready = false; p.pending[0].resolve(ok('/x\n')); await flush();
+  assert.equal(p.calls.length, 1, 'the second command is not sent');
+  assert.equal(p.ids.lookup('edge', '/x').status, 'unsure', 'shown as unknown');
+  // State refresh: three commands; readiness drops after the second.
+  const s = prober();
+  s.ids.request([{ machine: 'edge', folder: '/x' }], s.after);
+  s.pending[0].resolve(ok('/x\n')); await flush(); s.pending[1].resolve(ok('/x/.git\n')); await flush();
+  assert.equal(s.ids.lookup('edge', '/x').status, 'repo');
+  s.ids.request([{ machine: 'edge', folder: '/x' }], s.after); await flush();
+  assert.equal(s.calls.length, 3, 'the state refresh starts with git status');
+  s.pending[2].resolve(ok(' M a\n')); await flush();
+  assert.equal(s.calls.length, 4, 'then the ahead/behind count');
+  s.state.ready = false; s.pending[3].resolve(ok('1\t0\n')); await flush();
+  assert.equal(s.calls.length, 4, 'the branch query is not sent');
+  const entry = s.ids.lookup('edge', '/x');
+  assert.deepEqual([entry.dirty, entry.ahead, entry.behind, entry.branch], [null, null, null, null], 'indicators unknown, not partial');
+  // Lost while the last command is out: its answer is discarded.
+  const l = prober();
+  l.ids.request([{ machine: 'edge', folder: '/x' }], l.after);
+  l.pending[0].resolve(ok('/x\n')); await flush();
+  assert.equal(l.calls.length, 2);
+  l.state.ready = false; l.pending[1].resolve(ok('/x/.git\n')); await flush();
+  assert.equal(l.ids.lookup('edge', '/x').status, 'unsure', 'a late answer is not used');
 });
 
 test('D8 Git: a failed read is unknown after exactly one call, and coming back does not retry it', async () => {
@@ -98,6 +129,7 @@ test('D8 folder check: a remote machine that is not ready, or stops being ready,
   let ready = true;
   const flipping = (cmd, args, options) => { calls.push(options.on); ready = false; return Promise.resolve(ok('/srv/repo\n')); };
   assert.deepEqual(await verifyFolder(flipping, 'edge', '/srv/repo', after, 50, () => ready), { status: 'unsure' });
+  assert.deepEqual(calls, ['edge'], 'lost between the two commands: the second is not sent');
   assert.equal((await verifyFolder(exec, null, '/home/sample/work', after, 50, () => false)).status, 'repo', 'this computer needs no remote readiness');
   assert.equal(readyNow(() => { throw Error('x'); }, 'edge'), false, 'a throw is not ready');
   assert.equal(readyNow(undefined, 'edge'), false, 'no readiness check: not ready');
@@ -117,13 +149,13 @@ test('D8 view: a machine that stops being ready has its queued Git work cancelle
   v.init({}, c.cx); v.render(c.cx);
   const cancelled = []; const cancel = v.git.cancel.bind(v.git); v.git.cancel = m => { cancelled.push(m); cancel(m); };
   every.forEach(fn => fn(c.cx)); await flush();
-  assert.equal(execs.length, 2, 'asked while ready');
+  assert.equal(execs.length, 1, 'asked while ready (one command at a time)');
   f.values.machines = [{ name: null, layout: 'ready' }, { name: 'edge', layout: 'loading' }];
   every.forEach(fn => fn(c.cx)); await flush();
   assert.deepEqual(cancelled, ['edge']);
   f.values.machines = [{ name: null, layout: 'ready' }, { name: 'edge', layout: 'ready' }];
   every.forEach(fn => fn(c.cx)); await flush();
-  assert.equal(execs.length, 2, 'no retry through the reconnect');
+  assert.equal(execs.length, 1, 'no retry through the reconnect');
 });
 
 // ---- The folder dialog has its own keyboard order and activation ----
