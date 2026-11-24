@@ -4,8 +4,9 @@
 // once per New York day plus every 3 hours (one request at a time across copies, backing off after
 // failures) and kept in localStorage, so reloads and restarts show the clock at once, even offline.
 import { View, div } from "gpui-kit";
-import { h_flex } from "gpui-base";
+import { h_flex, v_flex } from "gpui-base";
 import { checking, exec, theme } from "herdr";
+import { contentPolicy, measuredSize } from "./responsive.js";
 import { MARKET_INFO_URL, clockText, formatCountdown, nextTickMs } from "./marketclock.js";
 import { REQUEST_TIMEOUT_MS, ScheduleFeed, USER_AGENT, curlArgs, readCurl } from "./marketfeed.js";
 
@@ -35,6 +36,7 @@ const MARKET = new ScheduleFeed({
 
 export class MarketClock extends View {
   init(props, cx) {
+    this.size = null;
     this.band = Boolean(props?.band);
     MARKET.restore();
     if (checking()) return;
@@ -67,7 +69,20 @@ export class MarketClock extends View {
         .child(div().text_color(color).child(state.available ? text.phase : "schedule unavailable"))
         .when(Boolean(short), (el) => el.child(div().text_color(t.dim).child(short)));
     }
-    return h_flex().id("quotr-clock").w_full().min_w(0).items_center().gap(6).text_size(11.5).whitespace_nowrap().tooltip(tip)
+    const compact = contentPolicy(this.size).compact;
+    const root = (compact ? v_flex() : h_flex()).id("quotr-clock").w_full().min_w(0)
+      .on_size_change((size, cx) => {
+        const next = measuredSize(size, this.size);
+        if (next !== this.size) { this.size = next; cx.notify(); }
+      }).gap(4).text_size(11.5).tooltip(`${text.day} · ${tip}`);
+    if (compact) return root
+      .child(h_flex().min_w(0).flex_wrap().gap(5)
+        .child(div().font_semibold().child(text.left))
+        .child(div().text_color(color).child(text.phase)))
+      .when(Boolean(text.right), (el) => el.child(h_flex().min_w(0).flex_wrap().gap(4)
+        .child(div().text_color(t.muted).child(text.event))
+        .child(div().text_color(t.foreground).child(text.countdown))));
+    return root.items_center().gap(6).text_size(11.5).whitespace_nowrap().tooltip(tip)
       // "NY Tue Nov 17 14:16": New York's own date, which can differ from the local one.
       .child(h_flex().flex_none().gap(4).items_center()
         .child(div().font_semibold().text_color(t.foreground).child("NY"))

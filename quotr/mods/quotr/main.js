@@ -9,9 +9,10 @@ import { nextCommand, openOverlay, props, setShared, shared, theme, checking } f
 import { Watchlist, INTERVAL_MS } from "./watchlist.js";
 import { formatBandPrice, formatChange, formatPrice, formatStaleDate, isCryptoPair } from "./quotes.js";
 import { createTickMemory, primeTicks, takeTicks } from "./ticks.js";
+import { contentPolicy, measuredSize, textChunks } from "./responsive.js";
 import { MarketClock } from "./clockview.js";
 import {
-  STORE, RENAMED_KEYS, HEADERS, BAND_HEIGHT, LOGO, brand, stamp, loadSnapshot, saveSnapshot, LOGOS,
+  STORE, RENAMED_KEYS, HEADERS, LOGO, brand, stamp, loadSnapshot, saveSnapshot, LOGOS,
 } from "./context.js";
 import { ChartParts } from "./charts.js";
 import { LogoParts } from "./logoview.js";
@@ -161,10 +162,14 @@ export default class Quotr extends View {
     if (this.detail) return this.detailView(t);
     // Herdr re-renders every copy when shared state changes: adopt another copy's edit now.
     this.watch.sync();
-    const root = (this.size && this.size.height < BAND_HEIGHT ? h_flex() : v_flex())
+    const policy = contentPolicy(this.size);
+    const root = (policy.band ? h_flex() : v_flex())
       .id("quotr").size_full().bg(t.chrome).text_color(t.foreground).text_size(12.5)
-      .on_size_change((size, cx) => { this.size = size; cx.notify(); });
-    return this.size && this.size.height < BAND_HEIGHT ? this.band(root, t) : this.panel(root, t);
+      .on_size_change((size, cx) => {
+        const next = measuredSize(size, this.size);
+        if (next !== this.size) { this.size = next; cx.notify(); }
+      });
+    return policy.band ? this.band(root, t) : this.panel(root, t);
   }
 
   // One line: Quotr, then as many quotes as fit.
@@ -211,7 +216,14 @@ export default class Quotr extends View {
       .on_click((_e, cx) => onClick(cx)).child(label);
   }
 
+  // Split text only at explicit wrap opportunities; primary information never truncates.
+  primary(text, id, policy) {
+    return h_flex().id(id).min_w(0).flex_wrap()
+      .children(textChunks(text, policy.chunk).map((part) => div().child(part)));
+  }
+
   panel(root, t) {
+    const policy = contentPolicy(this.size);
     const w = this.watch;
     const { paused, symbols } = w.preferences;
     const now = Date.now();
@@ -220,7 +232,7 @@ export default class Quotr extends View {
     const rateLimited = w.message.includes("rate limited");
 
     const header = v_flex().flex_none().px(12).pt(12).gap(6)
-      .child(h_flex().items_center().gap(7)
+      .child(h_flex().min_w(0).items_center().gap(7).flex_wrap()
         .child(image(LOGO).flex_none().w(18).h(18).rounded(5))
         .child(div().flex_none().text_size(13.5).font_semibold().text_color(brand()).child("Quotr"))
         .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.dim)
@@ -232,7 +244,7 @@ export default class Quotr extends View {
         .child(this.button(t, "quotr-pause", paused ? "Resume" : "Pause", (cx) => this.act(cx, () => this.togglePause()))))
       // The New York market clock, between the title and the refresh status.
       .child(this.clockPanel)
-      .child(h_flex().items_center().gap(6)
+      .child(h_flex().min_w(0).items_center().gap(6).flex_wrap()
         .child(div().flex_none().w(6).h(6).rounded_full().bg(statusColor)
           .when(w.loading, (el) => el.loop("opacity", { from: 0.35, to: 1, period: 1200 })))
         .child(div().text_size(11.5).text_color(statusColor).child(status)));
@@ -259,25 +271,25 @@ export default class Quotr extends View {
         quote.delaySeconds ? `Delay ${Math.ceil(quote.delaySeconds / 60)}m` : "",
         old ? `Updated ${stamp(quote.fetchedAt, now)}` : ""].filter(Boolean).join(" · ") : "";
       const color = quote ? this.changeColor(t, quote.changePercent) : t.dim;
-      return h_flex().pl(12).pr(10).gap(6).items_center().hover((s) => s.bg(t.hover))
+      return h_flex().min_w(0).pl(12).pr(10).gap(6).items_center().hover((s) => s.bg(t.hover))
         // The row opens the ticker's day; × sits beside it, not inside it.
         .child(v_flex().id(`quotr-row-${symbol}`).flex_1().min_w(0).py(7).gap(3)
           .when(Boolean(quote) && !reordering, (el) => el.cursor_pointer())
           // In reorder mode a click on the row does nothing, so a missed arrow never opens a dialog.
           .on_click(() => { if (!this.reordering) this.openDetail(symbol); })
-          .child(h_flex().gap(10).items_center()
+          .child((policy.compact ? v_flex().items_start() : h_flex().items_center()).min_w(0).gap(policy.compact ? 4 : 10)
             // The asset's logo (or its initial) beside the ticker; no extra height.
-            .child(h_flex().flex_1().min_w(0).gap(8).items_center()
-              .child(this.assetIcon(symbol, 31.5, t))
+            .child(h_flex().when(!policy.compact, (el) => el.flex_1()).when(policy.compact, (el) => el.w_full()).min_w(0).gap(8).items_center()
+              .when(!policy.compact, (el) => el.child(this.assetIcon(symbol, 31.5, t)))
               .child(v_flex().flex_1().min_w(0).gap(1)
-                .child(div().font_semibold().truncate().child(symbol))
+                .child(this.primary(symbol, `quotr-symbol-${symbol}`, policy).font_semibold())
                 .when(Boolean(meta), (el) => el.child(div().text_size(11).text_color(t.dim).truncate().child(meta)))))
             .when(reordering, (el) => el.child(this.moveButtons(symbol, index, symbols.length, t)))
-            .when(Boolean(quote) && !reordering, (el) => el.child(this.chart(quote, color, t, { width: 56, height: 22 })))
-            .child(v_flex().flex_none().w(108).gap(1)
+            .when(Boolean(quote) && !reordering && !policy.compact, (el) => el.child(this.chart(quote, color, t, { width: 56, height: 22 })))
+            .child((policy.compact ? h_flex().w_full().flex_wrap().gap(8) : v_flex().flex_none().w(108).gap(1)).min_w(0)
               // The last value stays during a refresh; a small pulsing dot marks the update in flight.
               // "Waiting…" only when there has never been a quote for this row.
-              .child(h_flex().justify_end().items_center().gap(5)
+              .child(h_flex().min_w(0).flex_wrap().justify_end().items_center().gap(5)
                 .when(updating && Boolean(quote), (el) => el.child(div().flex_none().w(5).h(5).rounded_full().bg(t.working)
                   .loop("opacity", { from: 0.25, to: 0.9, period: 1200 })))
                 // ▲/▼ since the previous quote (until the next one), and a tint
@@ -285,17 +297,17 @@ export default class Quotr extends View {
                 .when(Boolean(quote) && (flash?.dir === "up" || flash?.dir === "down"), (el) => el.child(
                   div().flex_none().text_size(9).text_color(flash.dir === "up" ? t.ansi2 : t.ansi1)
                     .child(flash.dir === "up" ? "▲" : "▼")))
-                .child(div().relative().px(3).rounded(4)
+                .child(div().relative().min_w(0).px(3).rounded(4)
                   .when(Boolean(quote) && (flash?.dir === "up" || flash?.dir === "down"), (el) => el.child(
                     // A new id per tick mounts a fresh tint at full strength; the next redraw targets 0
                     // and the transition fades it natively.
                     div().id(`quotr-flash-${symbol}-${flash.id}`).absolute().top(0).left(0).size_full().rounded(4)
                       .bg(flash.dir === "up" ? t.ansi2 : t.ansi1).opacity(flash.on ? 0.32 : 0)
                       .transition("opacity", { duration: 1600, easing: "ease-out" })))
-                  .child(div().relative().text_right().text_color(quote && !failed ? t.foreground : t.dim)
-                    .child(quote ? formatPrice(quote) : failed ? "Unavailable" : paused ? "Not fetched" : "Waiting…"))))
-              .child(div().text_right().text_size(11).text_color(color)
-                .child(quote ? formatChange(quote.changePercent) : "—"))))
+                  .child(this.primary(quote ? formatPrice(quote) : failed ? "Unavailable" : paused ? "Not fetched" : "Waiting…",
+                    `quotr-price-${symbol}`, policy).relative().justify_end().text_color(quote && !failed ? t.foreground : t.dim))))
+              .child(this.primary(quote ? formatChange(quote.changePercent) : "—", `quotr-change-${symbol}`, policy)
+                .justify_end().text_size(11).text_color(color))))
           .when(Boolean(failed), (el) => el.child(div().text_size(11).text_color(t.blocked)
             .child(`${quote ? `Stale · last updated ${stamp(quote.fetchedAt, now)} · ` : ""}${failed}`))))
         .child(div().id(`quotr-remove-${symbol}`).flex_none().w(14).text_right().text_color(t.dim).cursor_pointer()
@@ -303,7 +315,9 @@ export default class Quotr extends View {
           .child("×"));
     });
 
-    const list = v_flex().id("quotr-list").flex_1().min_h(0).pt(8).overflow_y_scrollbar()
+    const list = v_flex().id("quotr-list").min_w(0).pt(8)
+      .when(policy.short, (el) => el.flex_none())
+      .when(!policy.short, (el) => el.flex_1().min_h(0).overflow_y_scrollbar())
       .when(!symbols.length, (el) => el.child(div().px(12).py(6).text_color(t.dim)
         .child("Your watchlist is empty. Add a ticker above.")))
       .children(rows);
@@ -317,7 +331,11 @@ export default class Quotr extends View {
           : "Yahoo Finance · Regular-session quotes · Exchange delays vary"))
       .children(this.logoCredits(symbols, t));
 
-    return root.child(header).child(field).child(list).child(footer);
+    const content = v_flex().id("quotr-content").w_full().min_w(0).max_w(policy.maxWidth)
+      .when(!policy.short, (el) => el.h_full())
+      .when(policy.short, (el) => el.flex_none())
+      .child(header).child(field).child(list).child(footer);
+    return root.min_w(0).when(policy.short, (el) => el.overflow_y_scrollbar()).child(content);
   }
 }
 

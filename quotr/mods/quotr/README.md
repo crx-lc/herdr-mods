@@ -107,6 +107,73 @@ or copy this folder to `~/.config/herdr-app/mods/quotr/`. Then
   in the mod's excluded .cache/ directory. Installing the source does not replace that saved state.
 - **Keys:** `quotr.refresh` and `quotr.pause` can be bound in Herdr's `keys.json`.
 
+## Panel sizing (provisional)
+
+These are **provisional recommendations**, pending Windows narrow/default/wide previews,
+installed-API inspection, splitter, small-window and existing-layout reload tests. The historical
+preview above is unchanged and does not validate these proposals. Sizes are logical pixels at app
+zoom 1; app zoom and OS scale change physical screenshot pixels. Record both during validation.
+
+| Proposal | Logical px | Content budget and rationale |
+|---|---:|---|
+| Usable minimum | 280 | Row: 22 padding + 6 gap + 14 remove = 42; 238 remain for stacked symbol and values. Header/clock have 256 after 24 padding. |
+| Suggested default | 340 | 298 for row content, 316 for header/clock. Large price and signed percentage can share a line; wrapping keeps exceptional values intact. Costs 60 more terminal pixels than 280. |
+| Maximum useful content width | 440 | Wide row: 42 outer + 20 gaps + 56 chart + 108 values + 39.5 logo/gap = 265.5, leaving 174.5 for symbol/name. Costs 100 more terminal pixels than 340. |
+
+These budgets specify component allocation, **not measured native glyph bounds or a no-overflow
+pass**. Below 380, logos and sparklines give way and the symbol sits above price/percentage. The
+clock drops its inline date (kept in its tooltip) and stacks the next event and countdown, retaining
+New York time and the market phase or schedule-unavailable label. Metadata may truncate; primary
+symbol, price and percentage instead have explicit wrap opportunities, including long symbols.
+The Add field, source/session explanations, refresh/pause, removal, reorder and detail actions stay.
+No financial formatting, quote source, session definition or watchlist defaults change.
+
+Below 280, the same stacked layout uses shorter text chunks and wrapping controls. It has no
+content minimum width that forces the host wider. This emergency fallback trades height for width;
+arbitrarily tiny panes cannot promise readable controls. Under 360px height the whole panel scrolls
+vertically, including controls and attribution, rather than squeezing the watchlist to zero. The
+historical one-line band remains for blocks at least 600px wide and under 72px high; it still clips
+after the quotes that fit. At the three proposed widths even a short block keeps the scrolling panel.
+Above 440 the content stays at a soft 440px cap, aligned to the starting edge. **This does not bound
+the host pane or recover terminal space**; the user must move the splitter to reclaim it.
+
+Host controls audited against the saved official manual/source at Herdr app commit
+[`317e673f`](https://github.com/herdrdev/herdr-app/tree/317e673f1f1568b876cbaa0b41dabeb9153ecbea):
+
+- `mod.json` `place`/`size` requests **first-time layout docking**, documented under
+  [Mods](https://github.com/herdrdev/herdr-app/blob/317e673f1f1568b876cbaa0b41dabeb9153ecbea/defaults/AGENTS.md#mods-modsname).
+  This candidate requests 340 only there. Once seen, the layout decides. The saved source skips automatic docking on shipped layouts; it is only a request for an eligible
+  new placement in a personal layout. This is not a guaranteed
+  initial width for `pane.split`, and it never reapplies a default to an existing user layout.
+- `pane.resize {direction, pane?, px?}` moves a tab pane border by a delta like a drag; it is not
+  an absolute width setter or a min/max policy. No per-mod tab-split drag bounds are established
+  by this audit. Quotr makes no resize calls and adds no unsupported manifest keys.
+- Layout nodes document `size: {px}` / `{weight}`, `min`, `max`, and row/column `resizable`;
+  `layout.resize {id, px | weight}` targets that tree. These are layout-block controls, not
+  proof of tab-pane bounds or an invitation to edit an owner's layout.
+- The manual describes layout clicks in `layouts/.state/` surviving restarts, and mod panes
+  saved with their tabs in the Core document. Installed persistence/restoration remains untested.
+  Quotr never writes layout state or stores measured widths: load, reload and resize leave host
+  layout ownership with Herdr and the user.
+- Root `on_size_change` supplies logical `{width,height}` after layout. Equal rounded sizes and
+  invalid/zero measurements do nothing; absent measurements start compact. Only event callbacks
+  notify, and the measured root always fills its host, independently of the content cap.
+- `openOverlay`'s 440px detail-dialog width sizes an overlay only. It establishes no pane bound.
+
+**Installed Windows API audit: unverified.** The saved manual/types/source are historical evidence,
+not the installed binary. Hard tab-pane bounds would require host support that has not been
+established; the in-scope alternative is responsive content with the limitations above.
+
+Before accepting numbers, use a disposable Windows App home/Core with neutral fixture data, never
+the working home: record executable/version/types/source head, zoom/scale and root dimensions;
+capture 280/340/440 in dark/light with an adjacent terminal; inspect intermediate and below-minimum
+widths, long symbols, large/low prices, both signs, unknown/stale/error states, clock states and all
+actions. Drag both directions, shrink the window, then reload/restart an existing resized fixture
+layout and verify its width/order/watchlist stay intact. Also check detail dialogs, logo attribution,
+reorder and the wide short band. These checks and App check/typecheck have **NOT RUN** for this
+candidate on this Linux host. Node render recordings and any external drawings are **MODELED NOT
+GPUI**, never Windows acceptance evidence.
+
 ## Data sources and limits
 
 - **Quotes:** Yahoo Finance's chart endpoint (unofficial, may be rate-limited or unavailable in some

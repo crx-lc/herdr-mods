@@ -6,15 +6,15 @@ A stock and crypto watchlist docked beside your agents. Every ticker shows its l
 
 ## What you see
 
-A panel 300px wide in the theme's `chrome` background with `foreground` text at 12.5px. The brand blue is `#6AB0FF` on dark themes and `#1066C6` on light ones (`settings().dark`). Top to bottom:
+A panel with a provisional 340 logical-pixel first-dock request (existing layout sizes win), content capped softly at 440px in the theme's `chrome` background with `foreground` text at 12.5px. The brand blue is `#6AB0FF` on dark themes and `#1066C6` on light ones (`settings().dark`). Top to bottom:
 
 - **Header**, 12px padding: the logo (`icon.svg`, 18px, radius 5), `Quotr` (13.5px semibold, brand blue), `11 tickers` (11px `dim`, truncates), then small outlined buttons on the right: **Reorder** (with two or more tickers; reads **Done** while reordering), **Refresh** and **Pause** (22px high, 8px horizontal padding, radius 5, `border` outline, 11px `muted`; hover fills `hover`). Pause reads **Resume** while paused.
-- **Market clock**, one 11.5px line: `NY` and the time semibold, New York's weekday and date between them in `muted` (`NY Tue Nov 17 14:20`); the session word (`Open` in `done`; `Pre-market` or `After-hours` in `working`; `Closed`, `Weekend`, `Holiday` or `Regular closed` in `dim`); right-aligned, the next event in `muted` and its countdown in `foreground` (`Closes 16:00 · 1h 39m`, `Opens Mon 09:30 · 2d 16h`, `Early close 13:00 · 1h 00m`). Without a usable schedule: the date and time, then `Loading schedule…` or `Market schedule unavailable`, and no countdown. When narrow, the event text truncates first; the countdown stays.
+- **Market clock**, one 11.5px line: `NY` and the time semibold, New York's weekday and date between them in `muted` (`NY Tue Nov 17 14:20`); the session word (`Open` in `done`; `Pre-market` or `After-hours` in `working`; `Closed`, `Weekend`, `Holiday` or `Regular closed` in `dim`); right-aligned, the next event in `muted` and its countdown in `foreground` (`Closes 16:00 · 1h 39m`, `Opens Mon 09:30 · 2d 16h`, `Early close 13:00 · 1h 00m`). Without a usable schedule: the date and time, then `Loading schedule…` or `Market schedule unavailable`, and no countdown. Below 380 logical pixels, the clock drops the inline date (retained in its tooltip), stacks time/phase and event/countdown with wrapping, and never guesses a countdown for a missing schedule.
 - **Status line**: a 6px dot and 11.5px text in one color: `Auto-refresh every 60s` (`done`), `Refreshing quotes…` (`working`, the dot pulsing 0.35 to 1 over 1.2s), `Auto-refresh paused` (`blocked`).
 - **Add field**, 10px below: a 30px input, radius 6, `background` fill, `input` border (brand blue while focused), placeholder `Add a ticker: AAPL, 0700.HK, BTC/USDT`. Under it, one short line when there is something to say: an error (`ansi1`), the last edit's notice (`dim`), or a Yahoo rate-limit note (`blocked`).
-- **Watchlist**, the rest of the height, scrolling. One row per ticker in saved order, 12px left padding, 7px vertical, `hover` background on hover:
+- **Watchlist**, below 380px stacked without logo/sparkline: full symbol above wrapping price/percentage, with metadata secondary. At wider sizes the row below applies; primary text wraps in chunks instead of truncating. The rest of the height, scrolling. One row per ticker in saved order, 12px left padding, 7px vertical, `hover` background on hover:
   - a 31.5px logo tile (round for crypto, radius 7 for stocks): the cached logo over a monogram (the first letter in a `raised` tile), which shows alone when there is no logo. A logo with transparency sits on a white backdrop (a bare vector glyph inset, a raster icon full size);
-  - the ticker (semibold, truncates) over the instrument name in 11px `dim`, with `As of Oct 31`, `Delay 15m` and `Updated 13:05` joined by ` · ` when they apply;
+  - the ticker (semibold, wraps) over the instrument name in 11px `dim`, with `As of Oct 31`, `Delay 15m` and `Updated 13:05` joined by ` · ` when they apply;
   - a 56×22 sparkline: today's 5-minute line for a stock, the last 24 hours for a pair, 1.25px in the change color, the previous close as a dashed `border` rule. In reorder mode, four 14px arrows instead (`⇈ ↑ ↓ ⇊`), dimmed where they can't move;
   - right-aligned in a 108px column: the price with its currency and under it the signed change (`ansi2` gains, `ansi1` losses, `dim` unknown). A 5px `working` dot pulses left of the price while that row refreshes. After a quote that moved, a 9px `▲` or `▼` stays until the next quote and a tint behind the price (32% opacity) fades over 1.6s;
   - a `dim` `×` that removes the ticker;
@@ -32,7 +32,7 @@ A panel 300px wide in the theme's `chrome` background with `foreground` text at 
 - `As of 15:04 · Delay 15m · Yahoo Finance · regular session` in 11px `dim`.
 - the logo line: `Logo by AllInvestView ↗` (brand blue) and, when more than one source can show the ticker, a small outlined **Change** button.
 
-**Band**: under 72px tall (docked top or bottom), one row: the 14px logo and `Quotr`, the clock shortened (`NY 14:20 Open closes 1h 39m`), `Paused` if paused, then each ticker as a 13px monogram, `AAPL 230.10 +1.23%`, 14px apart, clipped at the right edge.
+**Band**: at least 600px wide and under 72px tall (docked top or bottom), one row: the 14px logo and `Quotr`, the clock shortened (`NY 14:20 Open closes 1h 39m`), `Paused` if paused, then each ticker as a 13px monogram, `AAPL 230.10 +1.23%`, 14px apart, clipped at the right edge.
 
 ## How it behaves
 
@@ -53,9 +53,10 @@ A panel 300px wide in the theme's `chrome` background with `foreground` text at 
 
 ## Built from
 
-- **One mod**, `mods/quotr/`, no layout. `mod.json`: `{ "place": "right", "size": 300, "title": "Quotr" }`. As a pane: `pane.split {direction: "right", mod: "quotr"}`.
+- **One mod**, `mods/quotr/`, no layout. `mod.json`: `{ "place": "right", "size": 340, "title": "Quotr" }`. As a pane: `pane.split {direction: "right", mod: "quotr"}`.
 - `main.js`, with `charts.js`, `logoview.js` and `dialog.js` (methods joined to the one view class) and `context.js` (what they share on Herdr's side: storage keys, the logo cache's host, the history store, the link opener): the view (`gpui-kit` `View`, `div`, `image`, `PathBuilder`, `Background`, `window.paint_path`; `gpui-base` `h_flex`, `v_flex`, `InputState`, `Input`), panel or band by `on_size_change`. The dialog is the same mod: `openOverlay({ mod: "quotr", kind: "dialog", width: 440, props: { detail } })`.
 - Modules with no Herdr imports, so `node --test` runs them, with Herdr's APIs passed in:
+  - `responsive.js`: pure sizing/measurement policy and primary text chunks, no host or storage calls.
   - `quotes.js`, `watchlist.js`: Pulse's symbol rules, decoding, formatting and refresh loop, extended with per-point times, bounded concurrency, `move`, `restore` and per-row in-flight state.
   - `history.js` (1W / 1M / 1Y series and period stats), `readout.js` (nearest point, time-zone text), `extended.js` (pre-market and after-hours from Yahoo, session bands), `ticks.js` (which prices moved).
   - `logosource.js`: logo source adapters `{ id, name, attribution, lookup(symbol), imageUrl?(symbol, host) }`, tried in order. AllInvestView: its search API maps a symbol to a company domain, the image is `cdn.tickerlogos.com/<domain>`; a pair searches `BASE-USD`. Elbstream: `api.elbstream.com/logos/crypto/<BASE>` or `/symbol/<SYMBOL>`. Indices and FX/futures: no request. AllInvestView is the default for every ticker; Elbstream shows only for a ticker switched to it with Change. Small correction tables fix known mismatches.
@@ -76,6 +77,10 @@ A panel 300px wide in the theme's `chrome` background with `foreground` text at 
 
 ## Watch out
 
+- Widths **280 / 340 / 440 logical px are provisional**, pending Windows previews before settlement: usable minimum / suggested setup or first-dock default / maximum useful content. At 280/340 the row has 238/298px after 42px outer allocation; header/clock 256/316px after padding. Wide 440 leaves 174.5px for identity after outer 42, gaps 20, chart 56, values 108 and logo/gap 39.5. These are design budgets, not native font measurements.
+- Root bounds are measured with `on_size_change`, deduplicated at rounded logical pixels; invalid/zero values retain the previous valid size, unknown starts compact. No render-phase notification, host resize or layout persistence writes. The soft 440 content cap cannot reclaim terminal space. Below 280 shorter chunks wrap; there is no forced content minimum and no readability guarantee at arbitrarily tiny widths. Under 360px height the whole panel scrolls.
+- The saved official manual/source at App `317e673f1f1568b876cbaa0b41dabeb9153ecbea` documents first-time `mod.json` docking, layout-node `size/min/max/resizable`, `layout.resize`, delta `pane.resize`, logical root sizes and persisted layout clicks/tab panes. This is **not installed API proof** and establishes no per-mod tab-split bounds. See the mod README for the control audit, scale explanation and Windows checklist. Do not resize existing layouts on load or conflate overlay width with pane size.
+
 - The mod reaches the network (Yahoo Finance, Binance, Nasdaq, AllInvestView and its CDN, Elbstream), runs `curl` and a URL opener, and writes logo files inside its own `.cache/` folder.
 - Check each source's terms before relying on it. Both logo sources ask for a visible attribution link wherever their logos show; keep the footer and dialog links, and store logos unmodified.
 - Yahoo's chart endpoint and Nasdaq's market-info are unofficial. Check Nasdaq's answer strictly and never show a countdown from a schedule that is missing, old or used up. The next day's open is taken as 09:30 ET.
@@ -92,6 +97,8 @@ A panel 300px wide in the theme's `chrome` background with `foreground` text at 
 
 ## Done when
 
+- Pending for this candidate: actual Windows 280/340/440 dark/light previews, installed API audit, splitter both ways, small window, user-resized disposable layout reload/restart, primary text/actions/clock/error states and adjacent terminal cost. Record logical bounds plus physical scale; settle widths only after those checks. No working-home install or saved-layout edits are authorized. Modeled drawings and Node recordings are not GPUI evidence.
+
 - `herdr-app check mods/quotr` passes and `npm test` in the repository passes.
 - A fresh install shows `AAPL`, `NVDA`, `^GSPC` and `BTC/USDT` with prices, sparklines and logos within a few seconds.
 - The clock line shows New York's date and time and, within seconds, the session and a countdown; with the network off it shows the time and `Market schedule unavailable`.
@@ -99,4 +106,4 @@ A panel 300px wide in the theme's `chrome` background with `foreground` text at 
 - **Change** in a dialog switches the logo's source and the panel's footer counts follow.
 - Reorder moves a row and the order survives a restart; so do the watchlist, the paused state and logo choices.
 - Clicking an attribution link opens the browser on Windows, macOS and Linux.
-- Resizing the block below 72px shows the one-line band.
+- Resizing a block at least 600px wide below 72px shows the historical band. At narrower sizes a short panel scrolls vertically with controls and footer reachable.
