@@ -154,7 +154,7 @@ test('unassigned, unbound and ambiguous metadata never guessed from titles or ro
   const r = reducedOf([raw('t1', 'idle', { name: 'Supervisor Developer', labels: {} }), raw('t2', 'idle', { labels: { 'herdr.project': 'missing' } }),
     raw('t3', 'idle', { labels: { 'herdr.project': {} } })]);
   const p = project(r);
-  assert.ok(p.instances.filter(i => i.kind === 'section').every(i => i.label.startsWith('Unassigned')));
+  assert.ok(p.instances.filter(i => i.kind === 'section').every(i => i.label === 'Other'));
   assert.ok(terminals(p).every(i => i.row.role === 'unknown'));
   assert.equal(terminals(p).length, 3);
 });

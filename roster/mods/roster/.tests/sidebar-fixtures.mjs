@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+// Behavior tests below predate default-collapsed Unassigned/Unknown groups; they opt out.
+export const expanded = { collapseUnassigned: false, initialView: 'projects' };
 export const run = '11111111-1111-4111-8111-111111111111';
 export const terminal = (address, status = 'working', extra = {}) => ({ address, state: 'live', status, created_ms: 100,
   pid: 100, argv: ['codex-auto'], keep: false, parent: null, labels: {}, ...extra });
@@ -35,13 +37,32 @@ export class Element {
   constructor() { this.children = []; this.attributes = {}; }
   child(v) { this.children.push(v); return this; }
 }
-for (const name of ['flex', 'flex_col', 'flex_row', 'gap', 'p', 'pl', 'w', 'h', 'id', 'text_size', 'bg', 'text_color', 'size_full', 'flex_1', 'overflow_y_scrollbar', 'track_focus', 'on_key_down', 'on_click', 'accessibility_label', 'tooltip', 'items_center', 'min_w', 'min_h', 'max_h', 'max_w', 'px', 'rounded', 'flex_none', 'truncate', 'font_semibold', 'justify_center', 'track_scroll', 'border', 'border_color', 'py', 'w_full', 'whitespace_normal', 'line_height']) {
+for (const name of ['flex', 'flex_col', 'flex_row', 'gap', 'p', 'pl', 'w', 'h', 'id', 'text_size', 'bg', 'text_color', 'size_full', 'flex_1', 'overflow_y_scrollbar', 'track_focus', 'on_key_down', 'on_click', 'accessibility_label', 'tooltip', 'items_center', 'min_w', 'min_h', 'max_h', 'max_w', 'px', 'rounded', 'flex_none', 'truncate', 'font_semibold', 'justify_center', 'track_scroll', 'cursor_pointer', 'cursor_default', 'frames', 'hover', 'font_bold', 'size', 'on_hover', 'absolute', 'relative', 'top', 'left', 'right', 'items_start', 'border', 'border_color', 'py', 'w_full', 'whitespace_normal', 'line_height', 'pb', 'border_b', 'spin', 'loop', 'opacity', 'mt']) {
   Element.prototype[name] = function (...args) { this.attributes[name] = args; return this; };
 }
-export const kit = { View: class {}, ScrollHandle: { new: () => ({ requests: [], scroll_to_item(index) { this.requests.push(index); } }) }, div: () => new Element(), h_flex: () => new Element().flex().flex_row(), v_flex: () => new Element().flex().flex_col() };
+// Like GPUI: cx.notify() during render throws ("not allowed during the `render` phase").
+class GuardedView {
+  constructor() {
+    const render = this.render;
+    if (typeof render === 'function') this.render = function (cx, ...rest) {
+      const outer = cx.phase; cx.phase = 'render';
+      try { return render.call(this, cx, ...rest); } finally { cx.phase = outer; }
+    };
+  }
+}
+// svg(path) records the icon path so tests can read it.
+// A retained text field like gpui-base InputState: value, set_value and event handlers.
+const InputState = { new: (options = {}) => ({ text: options.value ?? '', placeholder: options.placeholder, handlers: {},
+  value() { return this.text; }, set_value(next) { this.text = next; }, on(event, fn) { this.handlers[event] = fn; return true; }, focus() {} }) };
+const Input = { new: state => { const e = new Element(); e.attributes.input = [state]; return e; } };
+export const kit = { View: GuardedView, InputState, Input, image: path => { const e = new Element(); e.attributes.image = [path]; return e; }, svg: path => { const e = new Element(); e.attributes.svg = [path];
+  // Chevrons read as text so header assertions stay legible.
+  const glyph = { 'chevron-right': '▸', 'chevron-down': '▾' }[path.split('/').pop().replace('.svg', '')]; if (glyph) e.child(glyph); return e; }, ScrollHandle: { new: () => ({ requests: [], scroll_to_item(index) { this.requests.push(index); } }) }, div: () => new Element(), h_flex: () => new Element().flex().flex_row(), v_flex: () => new Element().flex().flex_col() };
 export function context() {
   const stats = { focus: 0, notify: 0, stop: 0 }, timers = [], tasks = [];
-  const cx = { focus_handle: () => ({ focus: () => stats.focus++ }), notify: () => stats.notify++, stop_propagation: () => stats.stop++,
+  const cx = { focus_handle: () => ({ focus: () => stats.focus++ }), notify: () => {
+    if (cx.phase === 'render') throw Error('cx.notify() is not allowed during the `render` phase; request a re-render from an event handler instead');
+    stats.notify++; }, stop_propagation: () => stats.stop++,
     timer: { after: (ms, callback) => { assert.equal(ms, 2000); timers.push(callback); } }, spawn: fn => { tasks.push(Promise.resolve().then(() => fn(cx))); } };
   return { cx, stats, timers, tasks };
 }

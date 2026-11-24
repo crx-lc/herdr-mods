@@ -1,4 +1,4 @@
-import { normalizeApp, addressParts } from './normalize.js';
+import { normalizeApp, addressParts, stamp } from './normalize.js';
 import { resolveIdentities } from './identity.js';
 import { enrichMetadata } from './metadata.js';
 import { reduceRoster } from './attention.js';
@@ -10,7 +10,7 @@ export function capture(host) {
   return copy({ terminals: host.terminals(), machines: host.machines(), panes: host.panes(),
     spaces: host.spaces(), agents: host.agents(), focused: host.focused() });
 }
-export const emptyEvidence = () => ({ cores: [], documents: [], routes: [], scopes: [], correlations: [], admissions: [] });
+export const emptyEvidence = () => ({ cores: [], documents: [], routes: [], scopes: [], repositories: [], correlations: [], admissions: [] });
 // Select acquisition facts, excluding UI focus, selection, scrolling and agent display.
 const pick = (record, keys) => record == null ? record : Object.fromEntries(keys.map(k => [k, record[k]]));
 const terminalFacts = t => pick(t, ['address', 'state', 'created_ms', 'finished_ms', 'pid', 'argv', 'keep', 'parent', 'name', 'labels']);
@@ -40,9 +40,63 @@ function validPanes(panes) {
   return panes.every(p => p && validId(p.pane) && validId(p.tab)
     && (p.terminal === null || !!addressParts(p.terminal)) && !ids.has(p.pane) && !!ids.add(p.pane));
 }
+// Native navigation targets, local or remote, from one synchronous snapshot only, as
+// the stock sidebar navigates: pane.focus {pane} for a terminal shown in a pane, and
+// terminal.peek {terminal} for a live terminal with none. A terminal qualifies when its
+// machine's layout is ready, exactly one live terminal has its exact address, and at
+// most one pane shows it, carrying that machine's id prefix, in a tab of a Space on that
+// machine. Names, folders, titles and aliases alone are never used.
+export function nativeTargets(snapshot, generation) {
+  const none = unavailable => ({ generation, unavailable, byAddress: {} });
+  if (!validPanes(snapshot.panes)) return none('pane-model-invalid');
+  const machineOf = new Map();
+  for (const space of snapshot.spaces) {
+    const machine = space?.machine ?? null;
+    if (machine !== null && (typeof machine !== 'string' || !validId(machine) || machine.includes('/'))) continue;
+    for (const tab of space?.tabs ?? []) if (validId(tab?.id))
+      machineOf.set(tab.id, machineOf.has(tab.id) && machineOf.get(tab.id) !== machine ? undefined : machine);
+  }
+  const prefixed = (id, alias) => alias ? id.startsWith(alias + '/') && !id.slice(alias.length + 1).includes('/') : !id.includes('/');
+  const byAddress = {};
+  for (const terminal of snapshot.terminals) {
+    const address = terminal?.address, parts = addressParts(address);
+    if (!parts || Object.hasOwn(byAddress, address)) continue;
+    const alias = parts.alias || null;
+    const machines = snapshot.machines.filter(m => (m?.name ?? null) === alias);
+    const panes = snapshot.panes.filter(p => p.terminal === address);
+    const same = snapshot.terminals.filter(t => t?.address === address);
+    const reason = machines.length !== 1 || machines[0].layout !== 'ready' ? 'machine-not-ready'
+      : same.length !== 1 ? 'ambiguous-terminal' : terminal.state !== 'live' ? 'not-current-live'
+      : panes.length > 1 ? 'multiple-panes'
+      : panes.length === 1 && (!prefixed(panes[0].pane, alias) || !prefixed(panes[0].tab, alias) || machineOf.get(panes[0].tab) !== alias)
+        ? 'pane-tab-unverified' : null;
+    byAddress[address] = reason ? { reason } : panes.length
+      ? { presentation: 'pane', pane: panes[0].pane, tab: panes[0].tab, incarnation: stamp(terminal.created_ms), generation }
+      : { presentation: 'pane-less', pane: null, tab: null, incarnation: stamp(terminal.created_ms), generation };
+  }
+  return { generation, unavailable: null, byAddress };
+}
+// The Herdr Space that shows each terminal, from one snapshot: exactly one pane shows the
+// address, its tab belongs to exactly one Space, and that Space is on the terminal's own
+// machine. A Space is where a terminal is shown, not proof of project or repository.
+export function spacesByAddress(snapshot) {
+  const out = {};
+  const spaces = (snapshot.spaces ?? []).filter(s => s && validId(s.id));
+  for (const terminal of snapshot.terminals ?? []) {
+    const address = terminal?.address, parts = addressParts(address);
+    if (!parts || Object.hasOwn(out, address)) continue;
+    const panes = (snapshot.panes ?? []).filter(p => p?.terminal === address);
+    if (panes.length !== 1) continue;
+    const owners = spaces.filter(s => (s.tabs ?? []).some(t => t?.id === panes[0].tab));
+    if (owners.length !== 1 || (owners[0].machine ?? null) !== (parts.alias || null)) continue;
+    const space = owners[0];
+    out[address] = { id: space.id, name: validId(space.name) ? space.name : space.id, machine: space.machine ?? null, order: spaces.indexOf(space) };
+  }
+  return out;
+}
 export class Feed {
   constructor() { this.generation = 0; this.fingerprint = null; this.history = []; this.documents = []; }
-  update(snapshot, now, evidence = emptyEvidence(), { refresh = false } = {}) {
+  update(snapshot, now, evidence = emptyEvidence(), { refresh = false, nativeNavigation = false } = {}) {
     const snapshotFingerprint = JSON.stringify(snapshotFacts(snapshot));
     const snapshotChanged = refresh || snapshotFingerprint !== this.snapshotFingerprint;
     if (snapshotChanged) { this.generation++; this.documents = []; }
@@ -91,7 +145,9 @@ export class Feed {
       return r.presentation === 'pane' ? panes.length === 1
         : r.presentation === 'pane-less' && panes.length === 0;
     });
-    this.navigation = { generation: this.generation, routes };
+    this.spaces = spacesByAddress(snapshot);
+    this.navigation = { generation: this.generation, routes,
+      ...(nativeNavigation ? { native: nativeTargets(snapshot, this.generation) } : {}) };
     return this;
   }
   accept(documents, generation, fingerprint) {

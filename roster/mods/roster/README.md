@@ -127,8 +127,8 @@ behind independently supplied Core, process and continuity admission for the exa
 producer observation and generation. Production has no such admission, so it reads
 zero files. The boundary rejects relative, URL, network/UNC, control-containing
 and over-4096-character paths. Only local `readTextFile(path,{on:null})` is allowed.
-**Remote native text reads remain prohibited**, even with ready machines: at the
-source pin they invoke startup-capable `hc exec`. There are no runtime hc commands,
+The delegation reader never reads another machine. Other remote reads follow D8 (see
+Modules, data sources and limits). There are no runtime hc commands,
 schema/discovery calls, ambient Core probes or directory scanning.
 
 A read has a two-second UI deadline via `cx.timer.after`, at most 16 candidates,
@@ -205,6 +205,37 @@ Source references: [App manual/types and implementation at 317e673](https://gith
 and [herdr-agents delegations v1 at 55c71df](https://github.com/crx-lc/herdr-agents/tree/55c71df91dbd60cf07358bbcaebba5586870fd44/contracts/delegations).
 These pins are source evidence, not installed Desktop version proof. No network
 source, external asset, dependency or Better Sidebar code/assets is bundled.
+
+**Remote reads follow the owner's D8 rule** ([crx-lc/herdr-agents#141](https://github.com/crx-lc/herdr-agents/issues/141)):
+Roster reads another machine only while Herdr reports it ready, checks readiness again
+from a fresh `machines()` immediately before each remote call (each individual Git
+command and each os-release read, one at a time) and again on the answer,
+skips stopped, disconnected or unknown machines, drops queued work for a machine that
+stops being ready (whichever tab is shown, including a machine that drops out of
+`machines()`), sends no further command once readiness is lost, a command fails or
+returns a malformed or unexpected result, or the job's deadline passes, and shows the
+whole answer as **Unknown**, never partial. Git's own "not a git repository", a detached
+HEAD and a branch with no upstream are known answers. Nothing is retried
+through a reconnect or another path; a later read waits for the normal schedule while
+the machine is ready. **Limitation:** this narrows the window, it does not close it. A
+Core can stop between the check and the call, and a read that reaches a stopped Core may
+start it; until the host offers an attach-only read
+([herdrdev/herdr-app#1441](https://github.com/herdrdev/herdr-app/issues/1441)) this is
+**not a no-wake guarantee**. The rule covers the Spaces probes: `/etc/os-release` through
+`readTextFile(path, { on })` and the read-only `git` queries through `exec`, including
+the folder check in "Open folder as Space…". The delegation reader below stays local-only.
+
+Terminal row icons: each row's one leading icon comes from Herdr's own program table
+(the `program` Herdr reports for the terminal), never from a tab title, name or role.
+Agent and program icons (Claude Code, Codex, Antigravity, the Watcher's and Supervisor's
+entries, other shells) are Herdr's shipped files in `icons/` of Herdr's home, drawn by
+reference and not bundled here; their notices are Herdr's (`icons/LICENSES.md`). Roster
+ships two original glyphs, `icons/bash.svg` and `icons/powershell.svg`: a generic prompt
+in each shell's customary color, not either project's logo. An unknown program gets the
+neutral `icons/terminal.svg`. Motion is limited to the Working header icon and one short
+pulse of the Needs you bell; Herdr does not report a system reduced-motion preference, so
+Options > Motion turns both off (kept in this mod's `localStorage`), as does a
+`reduce_motion` flag if Herdr's settings ever carry one.
 
 Run `npm test` in the repository. For optional offline published contract parity,
 set `ROSTER_DELEGATION_FIXTURES` to the separately downloaded pinned evidence

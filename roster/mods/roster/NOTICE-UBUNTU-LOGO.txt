@@ -1,0 +1,12 @@
+icons/os-ubuntu.svg — Ubuntu Circle of Friends
+
+Source: https://assets.ubuntu.com/v1/82818827-CoF_white.svg, linked from
+Canonical's brand assets at https://design.ubuntu.com/brand
+
+Ubuntu and the Circle of Friends logo are registered trademarks of Canonical Ltd.
+The shapes are unchanged; only the white fill was replaced by the current text
+color so Herdr draws the icon in a single theme color.
+
+Roster uses the mark only to show that a machine reports running Ubuntu
+(/etc/os-release). It is not endorsed by or affiliated with Canonical Ltd. The
+Ubuntu trademark policy is at https://ubuntu.com/legal/trademarks.

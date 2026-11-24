@@ -4,11 +4,11 @@ const source = process.env.ROSTER_CORRECTIONS_SOURCE ?? new URL('../', import.me
 const { Controller } = await import(`${source}/controller.js`);
 const { createRosterView } = await import(`${source}/view.js`);
 // Expectations and fixtures are independent of fingerprint/selection implementation helpers.
-import { fakeHost, terminal, fixture, prove, route, settings, kit, appOf, context, flatten, textOf, layoutHostUnused } from './sidebar-fixtures.mjs';
+import { fakeHost, terminal, fixture, prove, route, settings, kit, appOf, context, flatten, textOf, layoutHostUnused, expanded } from './sidebar-fixtures.mjs';
 const rows = p => p.instances.filter(i => i.kind === 'terminal');
 const find = (p, address) => rows(p).find(i => i.row.address === address);
 function viewOf(f, production = false) {
-  const Type = createRosterView(kit, appOf(f.host), { ...(production ? {} : { host: f.host }), layoutHost: layoutHostUnused });
+  const Type = createRosterView(kit, appOf(f.host), { ...(production ? {} : { host: f.host }), layoutHost: layoutHostUnused, ...expanded });
   const view = new Type(), { cx } = context(); view.init({}, cx); return { view, cx };
 }
 function admitted() {
@@ -22,7 +22,7 @@ function admitted() {
       producer: JSON.stringify(snapshot.terminals[0]), source: 'independent-current-proof' }] });
   f.values.panes = [{ pane: 'pane-a', terminal: 't1', tab: 'tab-a' }];
   f.host.readTextFile = async () => { reads++; return JSON.stringify(world.doc); };
-  return { ...f, world, base, c: new Controller(f.host), reads: () => reads, advance: ms => now += ms };
+  return { ...f, world, base, c: new Controller(f.host, expanded), reads: () => reads, advance: ms => now += ms };
 }
 
 test('F1 production snapshot scope stays bounded through 3000 terminal turns', () => {
@@ -43,7 +43,7 @@ test('F1 production snapshot scope stays bounded through 3000 terminal turns', (
 
 test('F6 address reuse removes superseded incarnation and keeps distinct aliases/cores', () => {
   const f = fakeHost([terminal('t1'), terminal('edge/t1')]); prove(f.host);
-  const c = new Controller(f.host); c.render(); f.values.terminals[0] = terminal('t1', 'working', { created_ms: 200 }); c.render();
+  const c = new Controller(f.host, expanded); c.render(); f.values.terminals[0] = terminal('t1', 'working', { created_ms: 200 }); c.render();
   assert.equal(c.feed.reduced.rows.length, 2); assert.equal(c.projection.counts.all.identities, 2);
   assert.deepEqual(c.feed.reduced.rows.filter(r => r.address === 't1').map(r => r.incarnation), [200]);
   assert.equal(c.feed.reduced.rows.find(r => r.address === 'edge/t1').core.id, 'core-b');
@@ -52,7 +52,7 @@ test('F6 address reuse removes superseded incarnation and keeps distinct aliases
 test('F3 authoritative PaneInfo.pane permits exact focus; strict fake rejects impossible id', () => {
   const f = fakeHost(); f.values.panes = [{ pane: 'pane-a', terminal: 't1', tab: 'tab-a' }];
   prove(f.host, { routes: [route('core-a', 't1', 't1', 'pane')] });
-  const c = new Controller(f.host), p = c.render(); assert.equal(find(p, 't1').navigation.enabled, true);
+  const c = new Controller(f.host, expanded), p = c.render(); assert.equal(find(p, 't1').navigation.enabled, true);
   assert.equal(c.activate(p, find(p, 't1').key).enabled, true);
   assert.deepEqual(f.calls, [['pane.focus', { terminal: 't1' }]]);
   f.values.panes = [{ id: 'impossible', terminal: 't1', tab: 'tab-a' }]; assert.throws(() => c.render(), /PaneInfo/);
@@ -65,14 +65,14 @@ test('F3 malformed, absent or duplicate pane fields fail closed for pane and pan
   for (const panes of models) for (const presentation of ['pane', 'pane-less']) {
     const f = fakeHost(); f.host.panes = () => structuredClone(panes); // Deliberately malformed transport input.
     prove(f.host, { routes: [route('core-a', 't1', 't1', presentation)] });
-    const c = new Controller(f.host), p = c.render(); assert.equal(c.activate(p, find(p, 't1').key).enabled, false); assert.equal(f.calls.length, 0);
+    const c = new Controller(f.host, expanded), p = c.render(); assert.equal(c.activate(p, find(p, 't1').key).enabled, false); assert.equal(f.calls.length, 0);
   }
 });
 
 test('F4 provider stamps its supplied generation: routes stabilise through render and activation', () => {
   const f = fakeHost(), base = prove(f.host);
   f.host.evidence = (_snapshot, generation) => ({ ...structuredClone(base), routes: [route('core-a', 't1', 't1', 'pane-less', generation)] });
-  const c = new Controller(f.host);
+  const c = new Controller(f.host, expanded);
   for (let i = 0; i < 5; i++) {
     const p = c.render(); assert.equal(c.feed.generation, 1); assert.equal(find(p, 't1').navigation.enabled, true);
     assert.equal(c.activate(p, find(p, 't1').key).enabled, true);
@@ -183,10 +183,15 @@ test('F5 Enter preserves mode/filter/fold position, Down advances and tooltip/a1
   assert.equal(f.calls.length, 0);
 });
 
-test('F5 disappeared selected control falls back deterministically without implicit terminal action', () => {
-  const f = fakeHost(), { view, cx } = viewOf(f); view.render(cx);
-  const key = find(view.controller.projection, 't1').key; view.controller.cursor = key;
-  const index = view.controls.findIndex(c => c.key === key); f.values.terminals = []; view.render(cx);
+test('F5 disappeared selected control: render leaves the cursor, Enter is inert, Down resumes beside it', () => {
+  const f = fakeHost([terminal('t1'), terminal('t2'), terminal('t3')]), { view, cx } = viewOf(f); view.render(cx);
+  const key = find(view.controller.projection, 't2').key;
+  view.place(key); const index = view.controls.findIndex(c => c.key === key);
+  f.values.terminals = [terminal('t1'), terminal('t3')]; const tree = view.render(cx);
+  assert.equal(view.controller.cursor, key, 'render does not move the cursor');
+  assert.equal(flatten(tree).some(e => e.attributes.id?.[0] === 'roster-focus-tooltip'), false, 'nothing is selected');
+  view.key({ keystroke: 'enter' }, cx); assert.equal(f.calls.length, 0, 'Enter never activates a neighbour');
+  view.key({ keystroke: 'down' }, cx);
   assert.equal(view.controller.cursor, view.controls[Math.min(index, view.controls.length - 1)].key);
   assert.equal(f.calls.length, 0);
 });

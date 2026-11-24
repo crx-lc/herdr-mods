@@ -8,9 +8,12 @@ import { spawnSync } from 'node:child_process';
 // Deliberate shipping allowlist: additions require review here, not a broad extension glob.
 export const SHIPPING = Object.freeze([
   'MODULES.md', 'README.md', 'attention.js', 'controller.js', 'delegations.js',
+  'icons/bash.svg', 'icons/bell-dot.svg', 'icons/bell.svg', 'icons/branch.svg', 'icons/check-circle.svg', 'icons/chevron-down.svg', 'icons/clock.svg', 'icons/folder.svg',
+  'icons/help-circle.svg', 'icons/offline.svg', 'icons/pause-circle.svg', 'icons/terminal.svg', 'icons/working.svg', 'icons/chevron-right.svg', 'icons/monitor.svg', 'icons/os-debian.svg', 'icons/os-linux.svg', 'icons/os-ubuntu.svg', 'icons/os-windows.svg',
+  'icons/pencil.svg', 'icons/plus.svg', 'icons/powershell.svg', 'icons/server.svg', 'LICENSE-DEBIAN-LOGO.txt', 'NOTICE-UBUNTU-LOGO.txt',
   'desktop.js', 'detail.js', 'feed.js', 'icons.js', 'identity.js', 'layout.js', 'local-reader.js',
-  'main.js', 'metadata.js', 'mod.json', 'navigation-rows.js', 'navigation.js',
-  'normalize.js', 'projection.js', 'settings.js', 'view.js',
+  'main.js', 'metadata.js', 'mod.json', 'motion.js', 'navigation-rows.js', 'navigation.js',
+  'normalize.js', 'projection.js', 'runtime.js', 'settings.js', 'spaces.js', 'view.js',
 ].sort());
 const omitted = new Set(['.tests', '.cache', '.backups', 'gpui-kit.d.ts', 'herdr.d.ts', 'jsconfig.json']);
 const native = new Set(['herdr', 'gpui-kit', 'gpui-base']);
@@ -59,13 +62,19 @@ export function inventory(root) {
   if (manifest.place !== 'none' || manifest.focusable !== true) throw Error('unexpected Roster manifest');
   const modules = files.filter(f => f.endsWith('.js'));
   const sources = modules.map(f => fs.readFileSync(path.join(root, f), 'utf8'));
-  // Conservative source policy: current package has only eager imports and no image assets.
-  // icons.js has an audited local svg(bytes) validator, not a renderer.
+  // Conservative source policy: only eager imports. icons.js has an audited local svg(bytes)
+  // validator, not a renderer. view.js may draw icons only through its four exact helpers:
+  // Roster's shipped icons (tinted or full color) and Herdr's shipped program icons
+  // (icons/<name>.svg in Herdr's home); every other svg( or image( reference fails.
+  const ICON_HELPERS = ["svg('mods/roster/icons/' + name + '.svg')", "image('mods/roster/icons/' + name + '.svg')",
+    "svg('icons/' + name + '.svg')", "image('icons/' + name + '.svg')"];
+  const withoutHelpers = source => ICON_HELPERS.reduce((s, helper) => s.split(helper).join(''), source);
   // Comments can cause refusals; do not evaluate code to discover references.
   for (let i = 0; i < sources.length; i++) {
     if (/\bimport\s*(?:(?:\/\*[\s\S]*?\*\/|\/\/[^\n]*\n)\s*)*\(/.test(sources[i])
-      || /\b(?:require|image)\s*(?:(?:\/\*[\s\S]*?\*\/|\/\/[^\n]*\n)\s*)*\(/.test(sources[i])
-      || (modules[i] !== 'icons.js' && /\bsvg\s*\(/.test(sources[i])))
+      || /\brequire\s*(?:(?:\/\*[\s\S]*?\*\/|\/\/[^\n]*\n)\s*)*\(/.test(sources[i])
+      || /\bimage\s*(?:(?:\/\*[\s\S]*?\*\/|\/\/[^\n]*\n)\s*)*\(/.test(modules[i] === 'view.js' ? withoutHelpers(sources[i]) : sources[i])
+      || (modules[i] !== 'icons.js' && /\bsvg\s*\(/.test(modules[i] === 'view.js' ? withoutHelpers(sources[i]) : sources[i])))
       throw Error(`unsupported dynamic import or asset reference: ${modules[i]}`);
   }
   // V8 parses actual static dependencies (including re-exports and escaped specifiers).

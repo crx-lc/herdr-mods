@@ -6,42 +6,59 @@ import { Feed } from '../feed.js';
 import { desktopHost } from '../desktop.js';
 import { createRosterView, timerDeadline } from '../view.js';
 import { reduceRoster } from '../attention.js';
-import { fakeHost, terminal, fixture, prove, cores, settings, route, association, context, kit, appOf, flatten, textOf, layoutHostUnused } from './sidebar-fixtures.mjs';
+import { fakeHost, terminal, fixture, prove, cores, settings, route, association, context, kit, appOf, flatten, textOf, layoutHostUnused, expanded } from './sidebar-fixtures.mjs';
 const rows = p => p.instances.filter(i => i.kind === 'terminal');
 const find = (p, address) => rows(p).find(i => i.row.address === address);
 const checkCounts = counts => assert.deepEqual(counts, { terminals: 1, machines: 1, panes: 1, spaces: 1, agents: 1, focused: 1 });
-function viewOf(f, options = {}) { const app = appOf(f.host), Type = createRosterView(kit, app, { host: f.host, layoutHost: layoutHostUnused, ...options }); const view = new Type(), c = context(); view.init({}, c.cx); return { view, ...c, app }; }
+function viewOf(f, options = {}) { const app = appOf(f.host), Type = createRosterView(kit, app, { host: f.host, layoutHost: layoutHostUnused, ...expanded, ...options }); const view = new Type(), c = context(); view.init({}, c.cx); return { view, ...c, app }; }
 
 test('actual main entry defaults passive, captures exactly once, renders labels and never reads or acts', async () => {
   const f = fakeHost([terminal('t1', 'blocked', { labels: { 'herdr.issue': 'sample/repo#12', 'herdr.role': 'planner', 'herdr.project': 'sample' } }), terminal('edge/t1')]);
   const app = appOf(f.host); globalThis.__rosterTestKit = kit; globalThis.__rosterTestApp = app; globalThis.localStorage = { getItem: () => { throw Error('unexpected state'); }, setItem: () => { throw Error('unexpected state'); } };
   const url = source => `data:text/javascript,${encodeURIComponent(source)}`;
   const source = (await readFile(new URL('../main.js', import.meta.url), 'utf8'))
-    .replace("'gpui-kit'", JSON.stringify(url('export const View = globalThis.__rosterTestKit.View; export const div = globalThis.__rosterTestKit.div; export const h_flex = globalThis.__rosterTestKit.h_flex; export const v_flex = globalThis.__rosterTestKit.v_flex;')))
-    .replace("'gpui-base'", JSON.stringify(url('export const h_flex = globalThis.__rosterTestKit.h_flex; export const v_flex = globalThis.__rosterTestKit.v_flex; export const ScrollHandle = globalThis.__rosterTestKit.ScrollHandle;')))
+    .replace("'gpui-kit'", JSON.stringify(url('export const View = globalThis.__rosterTestKit.View; export const div = globalThis.__rosterTestKit.div; export const h_flex = globalThis.__rosterTestKit.h_flex; export const v_flex = globalThis.__rosterTestKit.v_flex; export const svg = globalThis.__rosterTestKit.svg;')))
+    .replace("'gpui-base'", JSON.stringify(url('export const h_flex = globalThis.__rosterTestKit.h_flex; export const v_flex = globalThis.__rosterTestKit.v_flex; export const ScrollHandle = globalThis.__rosterTestKit.ScrollHandle; export const InputState = globalThis.__rosterTestKit.InputState; export const Input = globalThis.__rosterTestKit.Input;')))
     .replace("'herdr'", JSON.stringify(url(Object.keys(app).map(k => `export const ${k} = globalThis.__rosterTestApp.${k};`).join('\n'))))
     .replace("'./view.js'", JSON.stringify(new URL('../view.js', import.meta.url).href));
   const Type = (await import(url(source))).default, view = new Type(), c = context(); view.init({}, c.cx);
-  const tree = view.render(c.cx); checkCounts(f.counts); assert.equal(c.stats.focus, 0); assert.equal(f.calls.length, 0);
-  assert.match(textOf(tree), /Planner #12/); assert.match(textOf(tree), /\bGH\b/); assert.match(textOf(tree), /Context unknown/);
-  assert.ok(flatten(tree).some(e => e.attributes.tooltip?.[0].includes('unverified'))); assert.doesNotMatch(textOf(tree), /Open unavailable:/); assert.ok(rows(view.controller.projection).every(i => !i.navigation.enabled));
+  let tree = view.render(c.cx); checkCounts(f.counts); assert.equal(c.stats.focus, 0); assert.equal(f.calls.length, 0);
+  // The panel starts on Spaces, the first tab; the agent views are one click away.
+  assert.equal(view.controller.state.view, 'spaces');
+  // Spaces lists no agents; only the pinned Needs you rows, drawn above the tabs.
+  assert.ok(rows(view.controller.projection).every(i => i.pinned)); assert.doesNotMatch(textOf(flatten(tree).find(e => e.attributes.id?.[0] === 'roster-rows')), /Planner #12/);
+  view.controller.change({ type: 'view', view: 'projects' }); tree = view.render(c.cx);
+  assert.match(textOf(tree), /Planner #12/); assert.match(textOf(flatten(tree).find(e => /^alert-summary:/.test(e.attributes.id?.[0] ?? ''))), /#12/, 'the pinned row reports its issue on the alert line'); assert.doesNotMatch(textOf(tree), /Context unknown/);
+  // Production default: Needs you stays open; the Other group starts folded with its count.
+  assert.ok(view.controller.projection.instances.filter(i => i.kind === 'section' && i.label === 'Other').every(i => i.collapsed));
+  // Needs you never folds, so it has no chevron; Other starts folded.
+  assert.match(textOf(tree), /Needs you 1 .*Planner.* Other 2 ▸$/); assert.doesNotMatch(textOf(tree), /Needs you 1 [▸▾]/);
+  assert.equal(rows(view.controller.projection).length, 1, 'only the Needs you copy is drawn');
+  assert.ok(flatten(tree).some(e => e.attributes.accessibility_label?.[0].includes('Context unknown')));
+  // Stock desktop navigates natively: a live terminal with no pane would peek, exactly that address.
+  // Rendering offers it; nothing runs until a click.
+  assert.deepEqual(rows(view.controller.projection).map(i => [i.navigation.target?.action, i.navigation.target?.address]), [['peek', 't1']]);
+  assert.doesNotMatch(textOf(tree), /Open unavailable:/);
   assert.ok(view.controller.feed.reduced.rows.every(r => !r.core.verified && r.project.id === null));
   assert.ok(flatten(tree).some(e => e.attributes.accessibility_label?.[0].includes('GitHub')));
-  assert.ok(flatten(tree).some(e => e.attributes.w?.[0] === 18 && e.attributes.h?.[0] === 18));
+  assert.equal(flatten(tree).some(e => /project icon fallback/.test(e.attributes.accessibility_label?.[0] ?? '')), false);
   delete globalThis.__rosterTestKit; delete globalThis.__rosterTestApp;
 });
 
 test('default adapter ignores purported host identity provider and preserves separate aliases', () => {
   const f = fakeHost([terminal('t1'), terminal('edge/t1')]); prove(f.host, { documents: [{ text: '{"producer":{"core":"core-a"}}' }] });
-  const c = new Controller(desktopHost(appOf(f.host), p => p)), p = c.render();
-  assert.equal(rows(p).length, 2); assert.ok(c.feed.reduced.rows.every(r => !r.core.verified)); assert.equal(p.order.length, 0);
+  const c = new Controller(desktopHost(appOf(f.host), p => p), expanded), p = c.render();
+  assert.equal(rows(p).length, 2); assert.ok(c.feed.reduced.rows.every(r => !r.core.verified));
+  // Separate aliases stay separate native targets: each peeks its own exact address.
+  assert.deepEqual(p.order.map(o => [o.target.action, o.target.address]).sort(), [['peek', 'edge/t1'], ['peek', 't1']]);
+  assert.equal(f.calls.length, 0);
 });
 
 for (const [address, core, presentation] of [['t1', 'core-a', 'pane'], ['edge/t1', 'core-b', 'pane'], ['t1', 'core-a', 'pane-less'], ['edge/t1', 'core-b', 'pane-less']]) {
   test(`actual actionIntent dispatches exact ${address} ${presentation} only on activation`, () => {
     const f = fakeHost([terminal(address)]); if (presentation === 'pane') f.values.panes = [{ pane: 'pane-sample', terminal: address, tab: 'tab-a' }];
     prove(f.host, { routes: [route(core, 't1', address, presentation)] });
-    const c = new Controller(f.host), p = c.render(); checkCounts(f.counts); assert.equal(f.calls.length, 0);
+    const c = new Controller(f.host, expanded), p = c.render(); checkCounts(f.counts); assert.equal(f.calls.length, 0);
     assert.equal(c.activate(p, find(p, address).key).enabled, true);
     assert.deepEqual(f.calls, [[presentation === 'pane' ? 'pane.focus' : 'terminal.peek', { terminal: address }]]);
     assert.ok(Object.values(f.counts).every(n => n === 2));
@@ -51,25 +68,25 @@ for (const [address, core, presentation] of [['t1', 'core-a', 'pane'], ['edge/t1
 test('model completeness, duplicate pane, unsupported presentation, route generation and offline readiness fail closed', () => {
   for (const mutation of [e => e.panesComplete = false, e => e.routes[0].generation = 0, e => e.routes[0].presentation = 'guess', e => e.routes.push(e.routes[0])]) {
     const f = fakeHost(); const e = prove(f.host, { routes: [route('core-a', 't1', 't1')] }); mutation(e);
-    const c = new Controller(f.host), p = c.render(); assert.equal(c.activate(p, find(p, 't1').key).enabled, false); assert.equal(f.calls.length, 0);
+    const c = new Controller(f.host, expanded), p = c.render(); assert.equal(c.activate(p, find(p, 't1').key).enabled, false); assert.equal(f.calls.length, 0);
   }
   for (const panes of [[{ pane: 'a', terminal: 't1' }], [{ pane: 'a', terminal: 't1' }, { pane: 'b', terminal: 't1' }]]) {
     const f = fakeHost(); f.values.panes = panes; prove(f.host, { routes: [route('core-a', 't1', 't1')] });
-    const c = new Controller(f.host), p = c.render(); assert.equal(find(p, 't1').navigation.enabled, false);
+    const c = new Controller(f.host, expanded), p = c.render(); assert.equal(find(p, 't1').navigation.enabled, false);
   }
 });
 
 test('stale callbacks, changed view, vanished target and observed disconnect reject activation', () => {
   for (const change of [f => f.values.terminals.splice(0), f => f.values.machines[0].layout = 'unavailable', f => f.values.panes.push({ pane: 'new', terminal: 't1' })]) {
-    const f = fakeHost(); prove(f.host, { routes: [route('core-a', 't1', 't1')] }); const c = new Controller(f.host), p = c.render();
+    const f = fakeHost(); prove(f.host, { routes: [route('core-a', 't1', 't1')] }); const c = new Controller(f.host, expanded), p = c.render();
     change(f); assert.equal(c.activate(p, find(p, 't1').key).enabled, false); assert.equal(f.calls.length, 0);
   }
-  const f = fakeHost(); prove(f.host, { routes: [route('core-a', 't1', 't1')] }); const c = new Controller(f.host), p = c.render(); c.change({ type: 'view', view: 'status' });
+  const f = fakeHost(); prove(f.host, { routes: [route('core-a', 't1', 't1')] }); const c = new Controller(f.host, expanded), p = c.render(); c.change({ type: 'view', view: 'status' });
   assert.equal(c.activate(p, find(p, 't1').key).enabled, false); assert.equal(f.calls.length, 0);
 });
 
 test('vanished observations are omitted without fabricated finished history', () => {
-  const f = fakeHost(), c = new Controller(f.host); c.render(); f.values.terminals = []; c.render();
+  const f = fakeHost(), c = new Controller(f.host, expanded); c.render(); f.values.terminals = []; c.render();
   assert.deepEqual(c.feed.reduced.rows, []);
 });
 
@@ -83,16 +100,19 @@ test('actual view renders static compact waiting, full hover AND keyboard focus 
   const { f } = waitingWorld(), { view, cx } = viewOf(f); let tree = view.render(cx), p = view.controller.projection;
   const parent = find(p, 't1'); assert.equal(parent.display.compact, true); assert.equal(p.counts.all.working, 3);
   const element = flatten(tree).find(e => e.attributes.id?.[0] === parent.key);
-  assert.match(element.attributes.tooltip[0], /Waiting on 3 agents/); assert.match(element.attributes.tooltip[0], /Project: Sample project/); assert.match(element.attributes.tooltip[0], /Context unknown/); assert.match(element.attributes.accessibility_label[0], /Waiting on 3 agents/);
+  assert.match(element.attributes.accessibility_label[0], /Waiting on 3 agents/); assert.match(element.attributes.accessibility_label[0], /Project: Sample project/); assert.match(element.attributes.accessibility_label[0], /Context unknown/); assert.match(element.attributes.accessibility_label[0], /Waiting on 3 agents/);
   assert.match(textOf(element), /◈/); view.controller.cursor = parent.key; tree = view.render(cx);
   assert.match(textOf(flatten(tree).find(e => e.attributes.id?.[0] === 'roster-focus-tooltip')), /Waiting on 3 agents/);
   view.controller.change({ type: 'fold', key: parent.key, collapsed: true }); tree = view.render(cx); assert.match(textOf(tree), /Waiting on 3 agents/);
-  view.controller.change({ type: 'view', view: 'status' }); tree = view.render(cx); assert.match(textOf(tree), /Working · 3/); assert.match(textOf(tree), /Waiting on 3 agents/);
+  view.controller.change({ type: 'view', view: 'status' }); tree = view.render(cx); assert.match(textOf(tree), /Working 3/);
+  // Status rows have new keys: the old cursor selects nothing, and the full phrase is on the row itself.
+  const statusParent = find(view.controller.projection, 't1'), statusRow = flatten(tree).find(e => e.attributes.id?.[0] === statusParent.key);
+  assert.match(statusRow.attributes.accessibility_label[0], /Waiting on 3 agents/); assert.match(statusRow.attributes.tooltip[0].replace(/\n/g, ' '), /Waiting on 3 agents/);
   assert.equal(f.calls.length, 0);
 });
 
 test('R2 partial waiting is assessed, omitted and rerun; high water survives failure/reconnect', () => {
-  const { f, world } = waitingWorld(true), c = new Controller(f.host); c.render();
+  const { f, world } = waitingWorld(true), c = new Controller(f.host, expanded); c.render();
   assert.equal(find(c.projection, 't1').row.roster.state, 'idle'); assert.equal(c.feed.history[0].revision, 1);
   const direct = reduceRoster(c.feed.reduced.rows, { terminals: f.values.terminals, machines: f.values.machines, documents: [{ producer: world.producer, text: JSON.stringify(world.doc), generation: 1 }], generation: 1 });
   assert.equal(direct.rows.find(r => r.address === 't1').roster.delegation.knowledge, 'partial'); assert.equal(direct.rows.find(r => r.address === 't1').roster.state, 'waiting');
@@ -114,7 +134,7 @@ test('mode/fold/filter controls and keyboard arrows cause zero terminal actions,
 });
 
 test('global Needs you survives filters/folds and contextual parent stays contextual', () => {
-  const { f, world } = waitingWorld(); f.values.terminals[1].status = 'blocked'; const c = new Controller(f.host); let p = c.render();
+  const { f, world } = waitingWorld(); f.values.terminals[1].status = 'blocked'; const c = new Controller(f.host, expanded); let p = c.render();
   assert.equal(find(p, 't1').contextOnly, true); assert.equal(p.counts.all.needsYou, 1);
   c.change({ type: 'filters', coreIds: [] }); p = c.render(); assert.equal(rows(p).length, 1); assert.equal(rows(p)[0].row.address, world.children[0].address);
   assert.equal(rows(p)[0].navigation.enabled, false); assert.equal(f.calls.length, 0);
@@ -131,7 +151,8 @@ test('hidden children retain an accessible unfold control and use full waiting l
 test('configured private icons always fall back when production containment guarantees are unavailable', () => {
   const { f } = waitingWorld(); const e = f.host.evidence(); const cfg = JSON.parse(settings); cfg.icons = [{ projectId: 'sample', asset: 'sample.svg' }];
   e.settings = JSON.stringify(cfg); f.host.evidence = () => structuredClone(e); const { view, cx } = viewOf(f); const tree = view.render(cx);
-  assert.match(textOf(tree), /Sample project/); assert.ok(flatten(tree).some(e => e.attributes.accessibility_label?.[0] === 'Sample project project icon fallback'));
+  // Project branding stays apart from terminal icons: the project is named in text, no project icon.
+  assert.match(textOf(tree), /Sample project/); assert.equal(flatten(tree).some(e => /project icon/.test(e.attributes.accessibility_label?.[0] ?? '')), false);
   assert.equal(flatten(tree).some(e => e.attributes.image), false);
 });
 
@@ -139,14 +160,18 @@ test('single reviewer and unknown purpose use exact full detail; ended and last 
   for (const [role, expected] of [['reviewer', 'Waiting for Reviewer'], ['unknown', 'Waiting on 1 agent']]) {
     const { f, world } = waitingWorld(); world.doc.assignments = [world.doc.assignments[0]]; world.doc.assignments[0].role = role;
     prove(f.host, { settings, documents: [{ producer: world.producer, text: JSON.stringify(world.doc), generation: 1 }] });
-    const { view, cx } = viewOf(f); view.controller.change({ type: 'view', view: 'status' }); const tree = view.render(cx); assert.match(textOf(tree), new RegExp(expected));
+    const { view, cx } = viewOf(f); view.controller.change({ type: 'view', view: 'status' }); const tree = view.render(cx);
+    // Status draws the compact marker; the exact phrase is in the hover and the accessibility label.
+    const parent = find(view.controller.projection, 't1'), row = flatten(tree).find(e => e.attributes.id?.[0] === parent.key);
+    assert.match(textOf(row), /◈ Waiting/); assert.match(row.attributes.tooltip[0].replace(/\n/g, ' '), new RegExp(expected));
+    assert.match(row.attributes.accessibility_label[0], new RegExp(expected));
   }
   for (const kind of ['done', 'ended']) {
     const { f, world } = waitingWorld();
     if (kind === 'done') f.values.terminals.slice(1).forEach(t => t.status = 'done');
     else world.doc.assignments.forEach(a => { a.state = 'ended'; a.ended = { reason: 'completed', revision: 1 }; });
     prove(f.host, { settings, documents: [{ producer: world.producer, text: JSON.stringify(world.doc), generation: 1 }] });
-    const c = new Controller(f.host); c.render(); assert.equal(find(c.projection, 't1').row.roster.state, 'idle');
+    const c = new Controller(f.host, expanded); c.render(); assert.equal(find(c.projection, 't1').row.roster.state, 'idle');
   }
 });
 
@@ -178,7 +203,7 @@ test('actual view native opt-in and restarted undo share private data across cha
   app.readTextFile = async (path, options) => { assert.deepEqual(options, { on: null }); assert.match(path, /^\/sample\/app\/(layouts|data\/roster)\//); return files.get(path) ?? null; };
   app.writeTextFile = async (path, text, expected) => { assert.equal(files.get(path) ?? null, expected); writes.push(path); files.set(path, text); };
   app.run = (command, args) => { assert.equal(command, 'layout.switch'); currentName = args.name; props = app.layout().children[0].content.props; };
-  const Type = createRosterView(kit, app, { host: f.host }); let view = new Type(); view.init({}, c.cx); let tree = view.render(c.cx);
+  const Type = createRosterView(kit, app, { host: f.host, ...expanded }); let view = new Type(); view.init({}, c.cx); let tree = view.render(c.cx);
   assert.equal(writes.length, 0); flatten(tree).find(e => e.attributes.id?.[0] === 'tools:toggle').attributes.on_click[0]({}, c.cx); tree = view.render(c.cx); flatten(tree).find(e => e.attributes.id?.[0] === 'layout:select').attributes.on_click[0]({}, c.cx);
   tree = view.render(c.cx); flatten(tree).find(e => e.attributes.id?.[0] === 'layout:enable:agents').attributes.on_click[0]({}, c.cx);
   await c.tasks.at(-1); assert.match(currentName, /^roster-/); assert.equal(app.layout().children[0].content.mod, 'roster');
@@ -204,20 +229,21 @@ test('compact sidebar keeps a single default toolbar and puts row badges on the 
     const top = byId(tree, 'roster-toolbar');
     assert.equal(top.attributes.h[0], 26);
     assert.ok(top.attributes.flex_row);
-    assert.deepEqual(top.children.flatMap(e => e.attributes.id ?? []), ['mode:projects', 'mode:status', 'tools:toggle']);
+    assert.deepEqual(top.children.flatMap(e => e.attributes.id ?? []), ['mode:spaces', 'mode:projects', 'mode:status', 'tools:toggle']);
     assert.equal(byId(tree, 'roster-options'), undefined);
     const rows = byId(tree, 'roster-rows');
     assert.ok(rows.attributes.flex_1);
     assert.ok(rows.attributes.overflow_y_scrollbar);
     const first = byId(tree, find(view.controller.projection, 't1').key);
     const second = byId(tree, find(view.controller.projection, 't2').key);
-    assert.ok(first.children[0].attributes.flex_row);
-    assert.equal(first.attributes.h[0], 64);
-    assert.ok(flatten(first).some(e => e.attributes.accessibility_label?.[0] === 'GitHub provider badge'));
-    assert.ok(flatten(first).some(e => e.attributes.accessibility_label?.[0] === 'Unassigned project icon fallback'));
-    assert.equal(flatten(second).some(e => e.attributes.accessibility_label?.[0].includes('provider badge')), false);
+    assert.ok(first.attributes.flex_row);
+    assert.equal(first.attributes.h[0], 24);
+    assert.ok(flatten(first).some(e => /GitHub issue #/.test(e.attributes.accessibility_label?.[0] ?? '')), 'provider named on the work item, no chip');
+    assert.equal(flatten(first).some(e => /project icon fallback/.test(e.attributes.accessibility_label?.[0] ?? '')), false);
+    assert.equal(flatten(second).some(e => /GitHub|Azure DevOps/.test(e.attributes.accessibility_label?.[0] ?? '')), false);
     assert.doesNotMatch(textOf(rows), /Open unavailable|Waiting/);
-    assert.match(first.attributes.tooltip[0], /Open unavailable: terminal identity is unverified/);
+    assert.equal(first.attributes.tooltip[0].replace(/\n/g, ' '), 'Developer #12 · Working Open unavailable: terminal identity is unverified');
+    assert.match(first.attributes.accessibility_label[0], /Open unavailable: terminal identity is unverified/);
     if (mode === 'projects') {
       byId(tree, 'mode:status').attributes.on_click[0]({}, cx);
       tree = view.render(cx);
@@ -247,7 +273,8 @@ test('350px vertical budget retains multiple rows with Options, selection and a 
     view.controller.change({ type: 'view', view: mode }); view.toolsOpen = open;
     view.message = 'Sample layout result'; view.controller.cursor = 'mode:projects';
     const tree = view.render(cx), body = flatten(tree).find(e => e.attributes.id?.[0] === 'roster-rows');
-    const fixedHeight = tree.children.filter(e => e !== body).reduce((sum, e) => sum + (e.attributes.h?.[0] ?? e.attributes.max_h?.[0] ?? 350), 0);
+    const stack = flatten(tree).find(e => e.attributes.id?.[0] === 'roster-stack'); assert.ok(stack.children.includes(body));
+    const fixedHeight = tree.children.filter(e => e !== stack).reduce((sum, e) => sum + (e.attributes.h?.[0] ?? e.attributes.max_h?.[0] ?? 350), 0);
     const available = 350 - 2 * tree.attributes.p[0] - (tree.children.length - 1) * tree.attributes.gap[0] - fixedHeight;
     // Two 64px rows plus a 24px group and intervening gaps, also at zoom 1.1.
     assert.ok(available - (350 - 350 / 1.1) >= 2 * 64 + 24 + 2 * 3, `only ${available}px left in ${mode}, options=${open}`);
@@ -297,7 +324,7 @@ test('unknown filters and literal null IDs stay distinct; a vanished selection a
   assert.equal(f.calls.length, 0);
 });
 
-test('both providers are inline, named separately from project fallback; unknown providers are absent', () => {
+test('both providers are named on the work item, never as a chip; unknown providers are absent', () => {
   const f = fakeHost([
     terminal('t1', 'working', { labels: { 'herdr.issue': 'sample/repo#12' } }),
     terminal('t2', 'working', { labels: { 'herdr.issue': 'https://dev.azure.com/sample/project/_workitems/edit/42' } }),
@@ -308,13 +335,16 @@ test('both providers are inline, named separately from project fallback; unknown
     view.controller.change({ type: 'view', view: mode }); const tree = view.render(cx);
     for (const [address, provider] of [['t1', 'GitHub'], ['t2', 'Azure DevOps'], ['t3', null]]) {
       const item = find(view.controller.projection, address), element = flatten(tree).find(e => e.attributes.id?.[0] === item.key);
-      const badges = flatten(element.children[0]).filter(e => e.attributes.accessibility_label?.[0].includes('provider badge'));
-      assert.deepEqual(badges.map(e => e.attributes.accessibility_label[0]), provider ? [provider + ' provider badge'] : []);
-      assert.ok(flatten(element).some(e => e.attributes.accessibility_label?.[0] === 'Unassigned project icon fallback'));
-      assert.match(textOf(element), /Local route.*Context unknown/);
+      const named = flatten(element).filter(e => /^(GitHub|Azure DevOps) issue #/.test(e.attributes.accessibility_label?.[0] ?? ''));
+      assert.deepEqual(named.map(e => e.attributes.accessibility_label[0].split(' issue')[0]), provider ? [provider] : []);
+      assert.doesNotMatch(textOf(element), /\b(GH|ADO)\b/);
+      assert.equal(flatten(element).some(e => /project icon fallback/.test(e.attributes.accessibility_label?.[0] ?? '')), false);
+      // Local: no machine in the tail.
+      assert.doesNotMatch(textOf(element), /This computer|Context unknown|Unassigned/);
       if (!provider) assert.match(textOf(element), /Sample unlabeled process/);
-      const chip = element.children[0].children.at(-1);
-      assert.ok(chip.attributes.max_w[0] <= 104, 'long state text must leave room for row identity');
+      // Any status chip is bounded (Status drops a chip its header already names).
+      for (const chip of element.children.filter(e => e.attributes.rounded && e.attributes.border)) assert.ok(chip.attributes.max_w[0] <= 104, 'long state text must leave room for row identity');
+      assert.equal(element.children.at(-1).attributes.id[0], 'row-open:' + item.key, 'the chevron slot is last');
     }
   }
 });

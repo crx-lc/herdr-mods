@@ -8,7 +8,7 @@ import { inventory, SHIPPING, parseRequests } from './roster-package.mjs';
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'roster-package-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  for (const file of [...SHIPPING].reverse()) fs.writeFileSync(path.join(root, file), file.endsWith('.js') ? 'export const sample = 1;' : 'neutral sample');
+  for (const file of [...SHIPPING].reverse()) fs.mkdirSync(path.dirname(path.join(root, file)), { recursive: true }), fs.writeFileSync(path.join(root, file), file.endsWith('.js') ? 'export const sample = 1;' : 'neutral sample');
   fs.writeFileSync(path.join(root, 'mod.json'), JSON.stringify({ place: 'none', focusable: true }));
   return root;
 }
@@ -18,7 +18,7 @@ test('inventory is deterministic, excludes development/runtime files, and does n
   const root = fixture(t);
   for (const file of ['.tests/sample.test.mjs', '.cache/private.json', '.backups/old.js', 'gpui-kit.d.ts', 'herdr.d.ts', 'jsconfig.json']) write(root, file);
   const before = fs.readFileSync(path.join(root, 'main.js'));
-  assert.equal(SHIPPING.length, 21);
+  assert.equal(SHIPPING.length, 49);
   assert.deepEqual(inventory(root), SHIPPING);
   assert.deepEqual(inventory(root), SHIPPING);
   assert.deepEqual(fs.readFileSync(path.join(root, 'main.js')), before);
@@ -99,4 +99,22 @@ test('parser subprocess failures, silence, timeouts and malformed responses cann
   }), [[]]);
   assert.ok(observed.timeout > 0 && observed.timeout <= 10000);
   assert.ok(observed.maxBuffer > 0 && observed.maxBuffer <= 4 * 1024 * 1024);
+});
+
+test('view.js may draw icons only through its four exact helpers; any other svg or image reference fails', t => {
+  const helper = "const icon = (name, size) => svg('mods/roster/icons/' + name + '.svg').size(size);\n"
+    + "const picture = (name, size) => image('mods/roster/icons/' + name + '.svg');\n"
+    + "const herdrGlyph = (name, size) => svg('icons/' + name + '.svg');\n"
+    + "const herdrPicture = (name, size) => image('icons/' + name + '.svg');\nexport const sample = 1;";
+  const root = fixture(t); write(root, 'view.js', helper);
+  assert.deepEqual(inventory(root), SHIPPING);
+  for (const [file, text] of [['view.js', helper + "\nsvg('mods/other/x.svg');"], ['view.js', "svg('mods/roster/icons/monitor.svg');"],
+    ['view.js', helper + "\nimage('mods/roster/icons/plus.svg');"], ['detail.js', helper],
+    ['view.js', helper + "\nimage('icons/' + path + '.svg');"], ['view.js', helper + "\nimage(program.icon);"],
+    ['view.js', helper + "\nsvg('../icons/' + name + '.svg');"], ['spaces.js', "image('icons/' + name + '.svg');"]]) {
+    const bad = fixture(t); write(bad, file, text);
+    assert.throws(() => inventory(bad), /unsupported dynamic import or asset reference/, file + ': ' + text.slice(-40));
+  }
+  const stray = fixture(t); write(stray, 'icons/extra.svg');
+  assert.throws(() => inventory(stray), /nonshipping file: icons\/extra\.svg/);
 });

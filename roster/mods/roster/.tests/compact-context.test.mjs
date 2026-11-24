@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRosterView } from '../view.js';
-import { fakeHost, terminal, fixture, prove, settings, kit, context, appOf, flatten, textOf, layoutHostUnused } from './sidebar-fixtures.mjs';
+import { fakeHost, terminal, fixture, prove, settings, kit, context, appOf, flatten, textOf, layoutHostUnused, expanded } from './sidebar-fixtures.mjs';
 
 const byId = (tree, id) => flatten(tree).find(e => e.attributes.id?.[0] === id);
 function viewOf(f, mode) {
-  const Type = createRosterView(kit, appOf(f.host), { host: f.host, layoutHost: layoutHostUnused });
+  const Type = createRosterView(kit, appOf(f.host), { host: f.host, layoutHost: layoutHostUnused, ...expanded });
   const view = new Type(), { cx } = context(); view.init({}, cx);
   view.controller.change({ type: 'view', view: mode });
   return { view, cx };
@@ -29,8 +29,12 @@ for (const mode of ['projects', 'status']) for (const state of ['working', 'bloc
     for (const child of children) {
       view.controller.cursor = child.key;
       const tree = view.render(cx);
-      for (const el of [byId(tree, child.key), byId(tree, 'roster-focus-tooltip')]) {
-        const drawn = textOf(el);
+      // The compact row draws only known facts; hover and the focus footer keep the full context.
+      const drawnRow = textOf(byId(tree, child.key));
+      assert.doesNotMatch(drawnRow, /Parent:|Project:|Context unknown|Unassigned/);
+      // The machine is named in the tail only when remote; a pinned Needs you row always says where.
+      if (child.pinned) assert.match(drawnRow, /This computer/); else assert.doesNotMatch(drawnRow, /This computer/);
+      for (const drawn of [byId(tree, child.key).attributes.accessibility_label[0], textOf(byId(tree, 'roster-focus-tooltip'))]) {
         assert.match(drawn, /Parent: Coordinator/);
         assert.ok(drawn.includes(mapped ? 'Sample project' : 'Unassigned'));
         assert.match(drawn, /Local/);
@@ -49,10 +53,11 @@ for (const mode of ['projects', 'status']) {
     const row = view.controller.projection.instances.find(i => i.kind === 'terminal');
     assert.equal(row.context.parent, null);
     view.controller.cursor = row.key; const tree = view.render(cx);
-    for (const el of [byId(tree, row.key), byId(tree, 'roster-focus-tooltip')]) {
-      assert.match(textOf(el), /Unassigned/);
-      assert.match(textOf(el), /Context unknown/);
-      assert.doesNotMatch(textOf(el), /Parent: Coordinator|Sample project/);
+    assert.doesNotMatch(textOf(byId(tree, row.key)), /Unassigned|Context unknown|Parent:|Sample project/);
+    for (const drawn of [byId(tree, row.key).attributes.accessibility_label[0], textOf(byId(tree, 'roster-focus-tooltip'))]) {
+      assert.match(drawn, /Unassigned/);
+      assert.match(drawn, /Context unknown/);
+      assert.doesNotMatch(drawn, /Parent: Coordinator|Sample project/);
     }
     assert.equal(f.calls.length, 0);
   });
@@ -87,11 +92,12 @@ for (const mode of ['projects', 'status']) {
     assert.ok(footer.children[0].attributes.flex_none);
     assert.ok(textOf(footer.children[1]).includes(waiting));
     assert.match(textOf(footer.children[1]), /Sample project.*Context unknown/);
-    assert.ok(byId(tree, parent.key).attributes.tooltip[0].includes(waiting)); assert.match(byId(tree, parent.key).attributes.tooltip[0], /Project: Sample project/); assert.match(byId(tree, parent.key).attributes.tooltip[0], /Context unknown/);
+    assert.ok(byId(tree, parent.key).attributes.accessibility_label[0].includes(waiting)); assert.match(byId(tree, parent.key).attributes.accessibility_label[0], /Project: Sample project/); assert.match(byId(tree, parent.key).attributes.accessibility_label[0], /Context unknown/);
     // Worst fixed regions: Options, selected disabled row, and a layout message.
     view.toolsOpen = true; view.message = 'Sample layout result';
     const full = view.render(cx), body = byId(full, 'roster-rows');
-    const fixed = full.children.filter(e => e !== body).reduce((n, e) => n + (e.attributes.h?.[0] ?? e.attributes.max_h?.[0] ?? 350), 0);
+    const stack = byId(full, 'roster-stack'); assert.ok(stack.children.includes(body));
+    const fixed = full.children.filter(e => e !== stack).reduce((n, e) => n + (e.attributes.h?.[0] ?? e.attributes.max_h?.[0] ?? 350), 0);
     const available = 350 - 2 * full.attributes.p[0] - (full.children.length - 1) * full.attributes.gap[0] - fixed;
     assert.ok(available - (350 - 350 / 1.1) >= 2 * 64 + 24 + 2 * 3, `only ${available}px for rows`);
     assert.equal(f.calls.length, 0);
