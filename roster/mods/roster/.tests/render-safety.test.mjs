@@ -46,7 +46,7 @@ for (const how of ['selected row', 'its Info', 'its footer Details', 'hovered on
     assert.equal(s.stats.notify, notifies, 'render asked for no redraw');
     assert.equal(textOf(tree).includes('could not be re-rendered'), false);
     if (how.startsWith('details open')) {
-      assert.ok(byId(tree, 'roster-details'), 'Details stay on their snapshot');
+      assert.equal(!!byId(tree, 'roster-details'), how !== 'details open on it', 'a missing target hides Details immediately');
       s.view.key({ keystroke: 'escape' }, s.cx); tree = s.render();
       assert.equal(s.view.controller.cursor, how === 'details open on it' ? 'mode:projects' : 'info:' + other.key);
     }

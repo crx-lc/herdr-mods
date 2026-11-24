@@ -59,8 +59,8 @@ export const kit = { View: GuardedView, InputState, Input, image: path => { cons
   // Chevrons read as text so header assertions stay legible.
   const glyph = { 'chevron-right': '▸', 'chevron-down': '▾' }[path.split('/').pop().replace('.svg', '')]; if (glyph) e.child(glyph); return e; }, ScrollHandle: { new: () => ({ requests: [], scroll_to_item(index) { this.requests.push(index); } }) }, div: () => new Element(), h_flex: () => new Element().flex().flex_row(), v_flex: () => new Element().flex().flex_col() };
 export function context() {
-  const stats = { focus: 0, notify: 0, stop: 0 }, timers = [], tasks = [];
-  const cx = { focus_handle: () => ({ focus: () => stats.focus++ }), notify: () => {
+  const stats = { focus: 0, notify: 0, stop: 0, focused: null }, handles = [], timers = [], tasks = [];
+  const cx = { focus_handle: () => { const id = handles.length; const h = { id, focus: () => { stats.focus++; stats.focused = id; }, is_focused: () => stats.focused === id, release: () => true }; handles.push(h); return h; }, notify: () => {
     if (cx.phase === 'render') throw Error('cx.notify() is not allowed during the `render` phase; request a re-render from an event handler instead');
     stats.notify++; }, stop_propagation: () => stats.stop++,
     timer: { after: (ms, callback) => { assert.equal(ms, 2000); timers.push(callback); } }, spawn: fn => { tasks.push(Promise.resolve().then(() => fn(cx))); } };

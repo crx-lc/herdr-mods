@@ -623,13 +623,25 @@ where feasible without Intl. Oversized graphemes split at the bounded limit to
 retain progress; this is not full UAX #29 or a native shaping guarantee.
 Concatenating a field's spans exactly recovers its value. The external R3 Windows report linked in README records tested native fit at both zooms and separate stock font limitations; Node Unicode coverage alone does not establish native shaping.
 
-The view captures fields with the exact source instance key as Details at opening,
-keeps a separate reader control set, and never activates a row from reader Enter.
-D or Info/Details opens; arrows/Previous/Next page; Home/End jump; Esc/Back returns
-to that surviving control/reveals its row, else Projects. View/filter/fold/Options
-changes close it without origin return; toolbar clicks retain the clicked cursor.
-A pending Back/Esc return is cancelled by intervening transitions. No snapshot storage/timers/new route protocol or global keys.
-Rows keep four independent visible lines at 64px; machine summary and context
-share the last line in equal zero-basis flex columns with independent truncation, and Options uses a fixed
-viewport up to 52px with no max_h, retaining existing direct-child indices.
-The R3 report linked in README records native presentation checks at runtime source `929d859`; full release acceptance remains open.
+The view uses live truthful facts in an inline disclosure below its exact current row.
+`disclosure.js` supplies pure row/machine/Space anchors, same-target toggle decisions,
+focus-return selection, folder-action admission and long-token wrap opportunities.
+The view owns one panel across Details, Options and folder entry. Stable direct list
+children and retained scroll handles preserve folds and scroll identity; no absolute
+Roster sidebar panels remain. Panel controls share the surrounding control order;
+Home/End/PageUp/PageDown reveal direct content children. Native focus handles are
+created in init/events, attached to exact triggers, and focused on explicit returns.
+Removal consults actual `is_focused()`/input focus events, never selection tint.
+
+Anchors compare the exact instance key, current raw terminal incarnation/process/run
+and unique ready machine. Unknown permanent Core identity stays unknown. Folder
+confirmation compares the exact drawn path/proof and current machine before native
+execution; existing Spaces are rechecked against their current ID/machine/tabs/place.
+Native machine API names do not prove an unobserved connection epoch. Details and
+folder content use bounded inner scroll, with shorter pinned Details. Rendering
+produces control/scroll-index output and schedules invalidation tasks; panel/cursor/
+focus updates and scroll requests happen only in events/tasks. No new global keys,
+terminal-input protocol, remote file reader or terminal operations were added.
+
+See README.md for final-candidate Windows checks still pending; injected Node views
+verify decisions and requested focus/scroll calls, not real native focus or geometry.

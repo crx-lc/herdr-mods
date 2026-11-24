@@ -123,8 +123,8 @@ test('Cancel, × and Esc change nothing; typing in the dialog never triggers Ros
   const cursor = s.view.controller.cursor, state = JSON.stringify(s.view.controller.state);
   for (const key of ['d', 'down', 'enter', 'up']) s.view.key({ keystroke: key }, s.cx);
   assert.equal(s.view.reader, null); assert.equal(s.view.controller.cursor, cursor); assert.equal(JSON.stringify(s.view.controller.state), state);
-  // List clicks are ignored while it is open.
-  s.click(tree, 'space:s-local'); assert.deepEqual(s.f.calls, []);
+  // Surrounding rows remain usable; the form does not block Space navigation.
+  s.click(tree, 'space:s-local'); assert.deepEqual(s.f.calls, [['space.select', { id: 's-local' }]]); s.f.calls.length = 0;
   s.click(tree, 'new-space:cancel'); assert.equal(s.view.newSpace, null);
   tree = s.render(); s.click(tree, 'spaces:new'); s.view.key({ keystroke: 'escape' }, s.cx);
   assert.equal(s.view.newSpace, null); assert.deepEqual(s.f.calls, []); assert.deepEqual(s.execs, []);

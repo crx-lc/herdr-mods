@@ -84,7 +84,7 @@ export function hoverText(instance, status) {
   return lines.map(line => wrapText(clip(line.replace(/\s+/g, ' ').trim(), HOVER_LINE_CAP))).join('\n');
 }
 
-// Agent details for the compact modal: only verified or host-reported facts, empty
+// Agent details for the inline disclosure: only verified or host-reported facts, empty
 // fields hidden, identifiers and paths under Technical details. Pure: the caller
 // passes the projected instance, the same snapshot, the reduced rows and the home.
 const ROLE_TITLES = { coordinator: 'Coordinator', planner: 'Planner', developer: 'Developer', reviewer: 'Reviewer', watcher: 'Watcher', supervisor: 'Supervisor' };

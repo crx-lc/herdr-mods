@@ -8,7 +8,8 @@ export const LOCAL_MACHINE = 'This computer';
 
 const validName = value => typeof value === 'string' && !!value.trim() && !/[\x00-\x1f\x7f]/.test(value);
 const color = value => typeof value === 'string' && (/^#[0-9a-fA-F]{6}$/.test(value) || /^[a-z][a-z0-9_]{0,31}$/.test(value)) ? value : null;
-export const machineKey = machine => 'spaces:machine:' + (machine ?? 'local');
+// Reserve local for this computer. Escape remote names, including a literal local.
+export const machineKey = machine => 'spaces:machine:' + (machine == null ? 'local' : machine === 'local' ? '%6cocal' : encodeURIComponent(machine));
 export const spaceKey = id => 'space:' + id;
 
 // A space's tail is its branch, only where unusual: not main/master, not its own name.

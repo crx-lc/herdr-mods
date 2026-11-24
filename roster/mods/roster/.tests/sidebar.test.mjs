@@ -279,7 +279,7 @@ test('350px vertical budget retains multiple rows with Options, selection and a 
     // Two 64px rows plus a 24px group and intervening gaps, also at zoom 1.1.
     assert.ok(available - (350 - 350 / 1.1) >= 2 * 64 + 24 + 2 * 3, `only ${available}px left in ${mode}, options=${open}`);
     assert.ok(body.attributes.min_h); assert.ok(body.attributes.track_scroll);
-    assert.ok(body.children.every(e => e.attributes.flex_none && e.attributes.h), 'scroll content must retain its height');
+    assert.ok(body.children.every(e => e.attributes.flex_none && (e.attributes.h || e.children.every(child => child.attributes.flex_none && child.attributes.h))), 'inline row blocks retain content height');
   }
 });
 

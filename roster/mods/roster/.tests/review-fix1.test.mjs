@@ -227,14 +227,14 @@ test('keyboard only: Cancel and Esc close the dialog and change nothing', async 
 
 // ---- The first arrival pulses even before the first timer tick ----
 
-test('the reviewer timing: empty at 0 ms, a new item at 500 ms, the first tick at 1000 ms pulses; no replay', () => {
+test('the reviewer timing: empty at 0 ms, a new item at 500 ms, the first tick at 1000 ms pulses; no replay', async () => {
   const f = fakeHost([terminal('t1', 'idle', { created_ms: 100, labels: { 'herdr.role': 'developer' } })]);
   const Type = createRosterView(kit, appOf(f.host), { host: f.host, layoutHost: layoutHostUnused, initialView: 'status', storage: null });
   const v = new Type(), c = context(), every = [], after = [];
   c.cx.timer.every = (ms, fn) => every.push(fn); c.cx.timer.after = (ms, fn) => after.push(fn);
   v.init({}, c.cx);
   const bell = () => byId(v.render(c.cx), 'group-icon:' + JSON.stringify(['attention']));
-  v.render(c.cx);                                   // 0 ms: nothing pending
+  v.render(c.cx); await flush();                                   // 0 ms: nothing pending
   f.values.terminals = f.values.terminals.map(t => ({ ...t, status: 'blocked' }));
   v.render(c.cx);                                   // 500 ms: the item arrives and is drawn
   assert.equal(c.stats.notify, 0, 'render asked for no redraw');

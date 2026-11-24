@@ -39,22 +39,20 @@ test('a discreet ⓘ appears on hover or keyboard focus, keeps its place, and ne
   assert.equal(s.view.reader.sourceKey, i.key); assert.deepEqual(s.f.calls, []);
 });
 
-test('the modal lies over the list without changing scroll, folds or rows; no pagination', () => {
+test('Details expands inside the exact stable row block; closing preserves list identity, folds and scroll requests', () => {
   const s = setup(); let tree = s.render(); const i = item(s.view, 't1');
-  // The list text without the open row's hover marks (its ⓘ and chevron).
-  const skip = new Set(['info-glyph:' + i.key, 'row-open:' + i.key]);
-  const listText = el => el && typeof el === 'object' ? (skip.has(el.attributes.id?.[0]) ? '' : el.children.map(listText).join(' ')) : String(el ?? '');
-  const rowsBefore = listText(byId(tree, 'roster-rows')), folds = JSON.stringify(s.view.controller.state.folds), scrolls = s.view.rowScroll.requests.length;
+  const before = byId(tree, 'roster-rows').children.map(e => e.attributes.id[0]);
+  const folds = JSON.stringify(s.view.controller.state.folds), scrolls = s.view.rowScroll.requests.length;
   click(s, tree, 'info:' + i.key); tree = s.render();
-  const stack = byId(tree, 'roster-stack'), modal = byId(tree, 'roster-details');
-  assert.ok(stack.attributes.relative); assert.ok(modal.attributes.absolute);
-  assert.deepEqual(stack.children.map(e => e.attributes.id[0]), ['roster-rows', 'roster-details']);
-  // The list is unchanged except that the open row keeps its ⓘ (and chevron) shown.
-  assert.equal(listText(byId(tree, 'roster-rows')), rowsBefore);
-  assert.doesNotMatch(textOf(modal), /Page \d|Previous|Next|Details at opening/);
+  const block = byId(tree, 'inline:' + i.key), panel = byId(tree, 'roster-details');
+  assert.equal(panel.attributes.absolute, undefined);
+  assert.deepEqual(block.children.map(e => e.attributes.id[0]), ['line:' + i.key, 'roster-details']);
+  assert.deepEqual(byId(tree, 'roster-rows').children.map(e => e.attributes.id[0]), before);
+  assert.ok(panel.attributes.overflow_y_scrollbar); assert.ok(panel.attributes.h[0] <= 112);
   s.key('escape'); tree = s.render();
   assert.equal(byId(tree, 'roster-details'), undefined);
-  assert.equal(s.view.controller.cursor, 'info:' + i.key, 'back on the same row');
+  assert.equal(s.view.controller.cursor, 'info:' + i.key);
+  assert.deepEqual(byId(tree, 'roster-rows').children.map(e => e.attributes.id[0]), before);
   assert.equal(JSON.stringify(s.view.controller.state.folds), folds); assert.equal(s.view.rowScroll.requests.length, scrolls);
   assert.deepEqual(s.f.calls, []);
 });
@@ -105,23 +103,25 @@ test('an issue link opens only through open_url; nothing runs in Herdr', () => {
   assert.deepEqual(s.opened, ['https://github.com/sample/repo/issues/12']); assert.deepEqual(s.f.calls, []);
 });
 
-test('keyboard: Up/Down cycle only the modal controls, Enter acts on them, × and Esc return to the same row', () => {
+test('keyboard: inline controls and surrounding rows share one order; Esc returns to the exact trigger', () => {
   const s = setup(); let tree = s.render(); const i = item(s.view, 't1');
   s.view.place(i.key); s.key('d'); tree = s.render();
-  const order = s.view.readerControls.map(c => c.key);
-  assert.deepEqual(order, ['details:close', 'details:link', 'details:go', 'details:technical']);
-  for (const expected of order) { s.key('down'); assert.equal(s.view.readerCursor, expected); }
-  s.key('up'); assert.equal(s.view.readerCursor, 'details:go');
-  s.key('down'); s.key('enter'); s.render(); assert.equal(s.view.reader.technical, true);
+  assert.equal(s.view.controller.cursor, 'details:close');
+  assert.deepEqual(s.view.readerControls.map(c => c.key), ['details:close', 'details:link', 'details:go', 'details:technical']);
+  const order = s.view.controls.map(c => c.key);
+  const at = order.indexOf('details:close');
+  for (let n = at + 1; n < order.length; n++) { s.key('tab'); assert.equal(s.view.controller.cursor, order[n]); }
+  s.view.place('details:technical'); s.key('enter'); s.render(); assert.equal(s.view.reader.technical, true);
   assert.deepEqual(s.f.calls, []);
   click(s, s.render(), 'details:close'); assert.equal(s.view.reader, null); assert.equal(s.view.controller.cursor, i.key);
 });
 
-test('a row that leaves while its details are open says so; Esc then selects Projects', () => {
+test('a disappearing row hides its panel without a render-phase update; Esc chooses the stable fallback', () => {
   const s = setup(); let tree = s.render();
   click(s, tree, 'info:' + item(s.view, 'edge/t3').key);
+  const notify = s.stats.notify;
   s.f.values.terminals = s.f.values.terminals.filter(t => t.address !== 'edge/t3'); tree = s.render();
-  assert.match(textOf(byId(tree, 'roster-details')), /no longer listed/);
+  assert.equal(byId(tree, 'roster-details'), undefined); assert.equal(s.stats.notify, notify);
   s.key('escape'); assert.equal(s.view.controller.cursor, 'mode:projects'); assert.deepEqual(s.f.calls, []);
 });
 
@@ -136,24 +136,15 @@ test('known delegation shows the active delegates and the full waiting phrase', 
   assert.equal(value(tree, 'role'), 'Coordinator');
 });
 
-test('clicks in the modal stop there; list controls under an open modal change nothing', () => {
+test('panel actions stop propagation; surrounding rows remain usable and a second trigger replaces the panel', () => {
   const s = setup(); let tree = s.render(); const i = item(s.view, 't1'), other = item(s.view, 't2');
-  s.view.place(i.key); click(s, s.render(), 'info:' + i.key); tree = s.render();
-  // Every modal control and the box itself stop propagation (GPUI also hit-tests the rows beneath).
-  for (const id of ['roster-details', 'details:close', 'details:technical', 'details:go']) {
+  click(s, tree, 'info:' + i.key); tree = s.render();
+  for (const id of ['roster-details', 'details:technical']) {
     const stops = s.stats.stop; click(s, tree, id); tree = s.render();
-    assert.equal(s.stats.stop, stops + 1, id);
-    if (!s.view.reader) { click(s, tree, 'info:' + i.key); tree = s.render(); }
+    assert.equal(s.stats.stop, stops + 1, id); assert.deepEqual(s.f.calls, []);
   }
-  s.f.calls.length = 0;
-  if (!s.view.reader) { click(s, tree, 'info:' + i.key); tree = s.render(); }
-  const before = JSON.stringify([s.view.controller.cursor, s.view.controller.state, s.view.reader.sourceKey]);
-  const group = s.view.controller.projection.instances.find(x => x.kind === 'section');
-  for (const id of [other.key, 'info:' + other.key, group.key]) click(s, tree, id);
-  assert.equal(JSON.stringify([s.view.controller.cursor, s.view.controller.state, s.view.reader.sourceKey]), before);
-  assert.deepEqual(s.f.calls, []);
-  // Toolbar controls are outside the list and still work (and close the modal).
-  click(s, tree, 'mode:status'); assert.equal(s.view.reader, null); assert.equal(s.view.controller.state.view, 'status');
-  // With the modal closed, list clicks act again.
-  tree = s.render(); click(s, tree, item(s.view, 't1').key); assert.deepEqual(s.f.calls, [['pane.focus', { pane: 'p1' }]]);
+  click(s, tree, 'info:' + other.key); tree = s.render(); assert.equal(s.view.reader.sourceKey, other.key);
+  assert.equal(flatten(tree).filter(e => e.attributes.id?.[0] === 'roster-details').length, 1);
+  click(s, tree, i.key); assert.deepEqual(s.f.calls, [['pane.focus', { pane: 'p1' }]]);
+  tree = s.render(); click(s, tree, 'mode:status'); assert.equal(s.view.reader, null); assert.equal(s.view.controller.state.view, 'status');
 });

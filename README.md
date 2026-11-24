@@ -5,7 +5,7 @@ Mods for the [Herdr](https://herdr.dev) desktop app.
 | Mod | What it is |
 |---|---|
 | [Quotr](quotr/mods/quotr/README.md) | Stock and crypto watchlist panel with logos, charts and pre/post-market data. Based on [Pulse](https://github.com/fatwang2/Pulse) by fatwang2. |
-| [Roster](roster/mods/roster/README.md) | Passive, limited Projects/Status sidebar with provisional rows and explicit opt-in; [Windows presentation checks passed](https://github.com/crx-lc/herdr-mods/issues/21#issuecomment-7083288510) for runtime `929d859`; accessibility and other release gates remain open. |
+| [Roster](roster/mods/roster/README.md) | Opt-in Spaces/Projects/Status sidebar with inline Details, Options and folder panels. Final-candidate Windows validation for [#29](https://github.com/crx-lc/herdr-mods/issues/29) is pending; UIA/Narrator remains separate. |
 
 ## Install a mod
 

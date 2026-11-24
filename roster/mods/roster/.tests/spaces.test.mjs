@@ -156,10 +156,10 @@ test('a machine header + opens Open folder as Space for that machine without fol
 
 test('a connected machine without Spaces offers "New space there", which opens the same dialog', () => {
   const s = setup([sp('s1', 'Alpha', { active: true })]); const tree = s.render();
-  const row = byId(tree, 'spaces:new:edge');
+  const row = byId(tree, 'spaces:new:spaces:machine:edge');
   assert.match(textOf(row), /New space there/); assert.equal(row.children[0].attributes.svg[0], 'mods/roster/icons/plus.svg');
   row.attributes.on_click[0]({}, s.cx); assert.equal(s.view.newSpace.machine, 'edge'); assert.deepEqual(s.f.calls, []);
-  assert.equal(byId(tree, 'spaces:new:zed'), undefined, 'not for a machine that is still loading');
+  assert.equal(byId(tree, 'spaces:new:spaces:machine:zed'), undefined, 'not for a machine that is still loading');
 });
 
 // One header in every view: 30px, an 18px leading icon, a 12px bold title in full contrast
