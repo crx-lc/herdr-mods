@@ -12,11 +12,11 @@ A panel with a provisional 340 logical-pixel first-dock request (existing layout
 - **Market clock**, one 11.5px line: `NY` and the time semibold, New York's weekday and date between them in `muted` (`NY Tue Nov 17 14:20`); the session word (`Open` in `done`; `Pre-market` or `After-hours` in `working`; `Closed`, `Weekend`, `Holiday` or `Regular closed` in `dim`); right-aligned, the next event in `muted` and its countdown in `foreground` (`Closes 16:00 · 1h 39m`, `Opens Mon 09:30 · 2d 16h`, `Early close 13:00 · 1h 00m`). Without a usable schedule: the date and time, then `Loading schedule…` or `Market schedule unavailable`, and no countdown. Below 380 logical pixels, the clock drops the inline date (retained in its tooltip), stacks time/phase and event/countdown with wrapping, and never guesses a countdown for a missing schedule.
 - **Status line**: a 6px dot and 11.5px text in one color: `Auto-refresh every 60s` (`done`), `Refreshing quotes…` (`working`, the dot pulsing 0.35 to 1 over 1.2s), `Auto-refresh paused` (`blocked`).
 - **Add field**, 10px below: a 30px input, radius 6, `background` fill, `input` border (brand blue while focused), placeholder `Add a ticker: AAPL, 0700.HK, BTC/USDT`. Under it, one short line when there is something to say: an error (`ansi1`), the last edit's notice (`dim`), or a Yahoo rate-limit note (`blocked`).
-- **Watchlist**, below 380px stacked without logo/sparkline: full symbol above wrapping price/percentage, with metadata secondary. At wider sizes the row below applies; primary text wraps in chunks instead of truncating. The rest of the height, scrolling. One row per ticker in saved order, 12px left padding, 7px vertical, `hover` background on hover:
+- **Watchlist**, staged per row: charts at 340+, logos at 300+, horizontal ordinary rows at 300+. Long symbols (8px per character exceeds identity budget) or long prices (first atom >10 characters or total >12) stack with full-width values. Below 300 all rows stack. Symbols wrap in chunks; financial numbers, percentages and currency codes are whole whitespace-separated atoms. The rest of the height, scrolling. One row per ticker in saved order, 12px left padding, 7px vertical, `hover` background on hover:
   - a 31.5px logo tile (round for crypto, radius 7 for stocks): the cached logo over a monogram (the first letter in a `raised` tile), which shows alone when there is no logo. A logo with transparency sits on a white backdrop (a bare vector glyph inset, a raster icon full size);
   - the ticker (semibold, wraps) over the instrument name in 11px `dim`, with `As of Oct 31`, `Delay 15m` and `Updated 13:05` joined by ` · ` when they apply;
   - a 56×22 sparkline: today's 5-minute line for a stock, the last 24 hours for a pair, 1.25px in the change color, the previous close as a dashed `border` rule. In reorder mode, four 14px arrows instead (`⇈ ↑ ↓ ⇊`), dimmed where they can't move;
-  - right-aligned in a 108px column: the price with its currency and under it the signed change (`ansi2` gains, `ansi1` losses, `dim` unknown). A 5px `working` dot pulses left of the price while that row refreshes. After a quote that moved, a 9px `▲` or `▼` stays until the next quote and a tint behind the price (32% opacity) fades over 1.6s;
+  - right-aligned in a 108px column for an ordinary horizontal row, or full row width when stacked: the price with its currency and under it the signed change (`ansi2` gains, `ansi1` losses, `dim` unknown). A 5px `working` dot pulses left of the price while that row refreshes. After a quote that moved, a 9px `▲` or `▼` stays until the next quote and a tint behind the price (32% opacity) fades over 1.6s;
   - a `dim` `×` that removes the ticker;
   - after a failed refresh, an 11px `blocked` line: `Stale · last updated 13:05 · <reason>`. Before any quote the price reads `Waiting…` (`Not fetched` while paused).
 - **Footer**, a `border` line above, 10.5px: the sources in `dim` (`Yahoo Finance · Binance Spot · Stocks: regular session, exchange delays vary · Crypto: 24h change`), then one brand-blue link per logo source on screen with its count (`7 logos by AllInvestView ↗`, `4 logos by Elbstream ↗`).
@@ -32,7 +32,7 @@ A panel with a provisional 340 logical-pixel first-dock request (existing layout
 - `As of 15:04 · Delay 15m · Yahoo Finance · regular session` in 11px `dim`.
 - the logo line: `Logo by AllInvestView ↗` (brand blue) and, when more than one source can show the ticker, a small outlined **Change** button.
 
-**Band**: at least 600px wide and under 72px tall (docked top or bottom), one row: the 14px logo and `Quotr`, the clock shortened (`NY 14:20 Open closes 1h 39m`), `Paused` if paused, then each ticker as a 13px monogram, `AAPL 230.10 +1.23%`, 14px apart, clipped at the right edge.
+**Band**: under 72px tall at any width (docked top or bottom), one row: the 14px logo and `Quotr`, the clock shortened (`NY 14:20 Open closes 1h 39m`), `Paused` if paused, then each ticker as a 13px monogram, `AAPL 230.10 +1.23%`, 14px apart, clipped at the right edge.
 
 ## How it behaves
 
@@ -77,8 +77,8 @@ A panel with a provisional 340 logical-pixel first-dock request (existing layout
 
 ## Watch out
 
-- Widths **280 / 340 / 440 logical px are provisional**, pending Windows previews before settlement: usable minimum / suggested setup or first-dock default / maximum useful content. At 280/340 the row has 238/298px after 42px outer allocation; header/clock 256/316px after padding. Wide 440 leaves 174.5px for identity after outer 42, gaps 20, chart 56, values 108 and logo/gap 39.5. These are design budgets, not native font measurements.
-- Root bounds are measured with `on_size_change`, deduplicated at rounded logical pixels; invalid/zero values retain the previous valid size, unknown starts compact. No render-phase notification, host resize or layout persistence writes. The soft 440 content cap cannot reclaim terminal space. Below 280 shorter chunks wrap; there is no forced content minimum and no readability guarantee at arbitrarily tiny widths. Under 360px height the whole panel scrolls.
+- Widths **280 / 340 / 440 logical px are provisional**, pending Windows previews before settlement: usable minimum / suggested setup or first-dock default / maximum useful content. At 280/340 stacked rows have 238/298px after 42px outer allocation; ordinary 340 rows retain logo/chart with 74.5px identity; header/clock 256/316px after padding. Wide 440 leaves 174.5px for identity after outer 42, gaps 20, chart 56, values 108 and logo/gap 39.5. These are design budgets, not native font measurements.
+- Root bounds are measured with `on_size_change`, deduplicated at rounded logical pixels; invalid/zero values retain the previous valid size, unknown starts compact. No render-phase notification, host resize or layout persistence writes. The soft 440 content cap cannot reclaim terminal space. Below 280 shorter symbol chunks wrap, financial atoms remain whole (very small widths can still overflow); there is no forced content minimum and no readability guarantee at arbitrarily tiny widths. At heights 72–359px the whole normal panel scrolls; under 72px the historical band applies.
 - The saved official manual/source at App `317e673f1f1568b876cbaa0b41dabeb9153ecbea` documents first-time `mod.json` docking, layout-node `size/min/max/resizable`, `layout.resize`, delta `pane.resize`, logical root sizes and persisted layout clicks/tab panes. This is **not installed API proof** and establishes no per-mod tab-split bounds. See the mod README for the control audit, scale explanation and Windows checklist. Do not resize existing layouts on load or conflate overlay width with pane size.
 
 - The mod reaches the network (Yahoo Finance, Binance, Nasdaq, AllInvestView and its CDN, Elbstream), runs `curl` and a URL opener, and writes logo files inside its own `.cache/` folder.
@@ -106,4 +106,9 @@ A panel with a provisional 340 logical-pixel first-dock request (existing layout
 - **Change** in a dialog switches the logo's source and the panel's footer counts follow.
 - Reorder moves a row and the order survives a restart; so do the watchlist, the paused state and logo choices.
 - Clicking an attribution link opens the browser on Windows, macOS and Linux.
-- Resizing a block at least 600px wide below 72px shows the historical band. At narrower sizes a short panel scrolls vertically with controls and footer reachable.
+- Resizing any block below 72px shows the historical band, including 300–599px top/bottom blocks. At 72–359px a short normal panel scrolls vertically with controls and footer reachable.
+
+Before acceptance/merge, the second of Quotr PR32/PR33 needs semantic integration by a developer,
+then fresh independent review, CI and required native evidence at the integrated head. Recheck
+chart call/wiring, availability, budgets and responsive tests against the actual integrated 56×22
+channel. This gate is pending; neither candidate is combined here.

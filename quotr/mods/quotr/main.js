@@ -9,7 +9,7 @@ import { nextCommand, openOverlay, props, setShared, shared, theme, checking } f
 import { Watchlist, INTERVAL_MS } from "./watchlist.js";
 import { formatBandPrice, formatChange, formatPrice, formatStaleDate, isCryptoPair } from "./quotes.js";
 import { createTickMemory, primeTicks, takeTicks } from "./ticks.js";
-import { contentPolicy, measuredSize, textChunks } from "./responsive.js";
+import { contentPolicy, measuredSize, textChunks, valueAtoms, rowPolicy } from "./responsive.js";
 import { MarketClock } from "./clockview.js";
 import {
   STORE, RENAMED_KEYS, HEADERS, LOGO, brand, stamp, loadSnapshot, saveSnapshot, LOGOS,
@@ -217,9 +217,9 @@ export default class Quotr extends View {
   }
 
   // Split text only at explicit wrap opportunities; primary information never truncates.
-  primary(text, id, policy) {
+  primary(text, id, policy, symbol = false) {
     return h_flex().id(id).min_w(0).flex_wrap()
-      .children(textChunks(text, policy.chunk).map((part) => div().child(part)));
+      .children((symbol ? textChunks(text, policy.chunk) : valueAtoms(text)).map((part) => div().whitespace_nowrap().child(part)));
   }
 
   panel(root, t) {
@@ -271,22 +271,24 @@ export default class Quotr extends View {
         quote.delaySeconds ? `Delay ${Math.ceil(quote.delaySeconds / 60)}m` : "",
         old ? `Updated ${stamp(quote.fetchedAt, now)}` : ""].filter(Boolean).join(" · ") : "";
       const color = quote ? this.changeColor(t, quote.changePercent) : t.dim;
+      const price = quote ? formatPrice(quote) : failed ? "Unavailable" : paused ? "Not fetched" : "Waiting…";
+      const row = rowPolicy(policy, symbol, price);
       return h_flex().min_w(0).pl(12).pr(10).gap(6).items_center().hover((s) => s.bg(t.hover))
         // The row opens the ticker's day; × sits beside it, not inside it.
         .child(v_flex().id(`quotr-row-${symbol}`).flex_1().min_w(0).py(7).gap(3)
           .when(Boolean(quote) && !reordering, (el) => el.cursor_pointer())
           // In reorder mode a click on the row does nothing, so a missed arrow never opens a dialog.
           .on_click(() => { if (!this.reordering) this.openDetail(symbol); })
-          .child((policy.compact ? v_flex().items_start() : h_flex().items_center()).min_w(0).gap(policy.compact ? 4 : 10)
+          .child((row.stack ? v_flex().items_start() : h_flex().items_center()).id(`quotr-layout-${symbol}`).min_w(0).gap(row.stack ? 4 : 10)
             // The asset's logo (or its initial) beside the ticker; no extra height.
-            .child(h_flex().when(!policy.compact, (el) => el.flex_1()).when(policy.compact, (el) => el.w_full()).min_w(0).gap(8).items_center()
-              .when(!policy.compact, (el) => el.child(this.assetIcon(symbol, 31.5, t)))
+            .child(h_flex().when(!row.stack, (el) => el.flex_1()).when(row.stack, (el) => el.w_full()).min_w(0).gap(8).items_center()
+              .when(row.logo, (el) => el.child(this.assetIcon(symbol, 31.5, t)))
               .child(v_flex().flex_1().min_w(0).gap(1)
-                .child(this.primary(symbol, `quotr-symbol-${symbol}`, policy).font_semibold())
+                .child(this.primary(symbol, `quotr-symbol-${symbol}`, policy, true).font_semibold())
                 .when(Boolean(meta), (el) => el.child(div().text_size(11).text_color(t.dim).truncate().child(meta)))))
             .when(reordering, (el) => el.child(this.moveButtons(symbol, index, symbols.length, t)))
-            .when(Boolean(quote) && !reordering && !policy.compact, (el) => el.child(this.chart(quote, color, t, { width: 56, height: 22 })))
-            .child((policy.compact ? h_flex().w_full().flex_wrap().gap(8) : v_flex().flex_none().w(108).gap(1)).min_w(0)
+            .when(Boolean(quote) && !reordering && row.chart, (el) => el.child(this.chart(quote, color, t, { width: 56, height: 22 }).id(`quotr-chart-${symbol}`)))
+            .child((row.stack ? h_flex().w_full().flex_wrap().gap(8) : v_flex().flex_none().w(108).gap(1)).id(`quotr-values-${symbol}`).min_w(0)
               // The last value stays during a refresh; a small pulsing dot marks the update in flight.
               // "Waiting…" only when there has never been a quote for this row.
               .child(h_flex().min_w(0).flex_wrap().justify_end().items_center().gap(5)
@@ -304,7 +306,7 @@ export default class Quotr extends View {
                     div().id(`quotr-flash-${symbol}-${flash.id}`).absolute().top(0).left(0).size_full().rounded(4)
                       .bg(flash.dir === "up" ? t.ansi2 : t.ansi1).opacity(flash.on ? 0.32 : 0)
                       .transition("opacity", { duration: 1600, easing: "ease-out" })))
-                  .child(this.primary(quote ? formatPrice(quote) : failed ? "Unavailable" : paused ? "Not fetched" : "Waiting…",
+                  .child(this.primary(price,
                     `quotr-price-${symbol}`, policy).relative().justify_end().text_color(quote && !failed ? t.foreground : t.dim))))
               .child(this.primary(quote ? formatChange(quote.changePercent) : "—", `quotr-change-${symbol}`, policy)
                 .justify_end().text_size(11).text_color(color))))

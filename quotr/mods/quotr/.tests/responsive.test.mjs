@@ -35,8 +35,8 @@ test('shrink/grow changes secondary layout before primary text and ignores trans
   assert.ok(widePaths > 0, 'wide panel contains real chart boxes');
   for (const width of [340, 280, 180, 440, 340, 440]) {
     tree = f.resize(width);
-    assert.equal(flatten(tree).some(e => e.attrs.h?.[0] === 31.5 && e.attrs.w?.[0] === 31.5), width >= 380, 'logos compact first');
-    assert.equal(flatten(tree).some(e => e.attrs.w?.[0] === 56), width >= 380, 'sparklines compact first');
+    assert.equal(flatten(tree).some(e => e.attrs.h?.[0] === 31.5 && e.attrs.w?.[0] === 31.5), width >= 300, 'logo stage independent of stacked primary text');
+    assert.equal(flatten(tree).some(e => e.attrs.w?.[0] === 56), width >= 340, 'chart stage independent of stacked primary text');
     assert.equal(textOf(byId(tree, `quotr-symbol-${symbols[1]}`)), symbols[1]);
   }
   const previous = f.view.size, count = f.stats.notifications;
@@ -50,7 +50,7 @@ test('shrink/grow changes secondary layout before primary text and ignores trans
 test('small height keeps the panel and all actions reachable in vertical scroll', () => {
   const f = fixture();
   for (const width of [180, 280, 340, 440]) {
-    const tree = f.resize(width, 60);
+    const tree = f.resize(width, 72);
     assert.deepEqual(tree.attrs.overflow_y_scrollbar, []);
     assert.ok(byId(tree, 'quotr-refresh')); assert.ok(byId(tree, 'quotr-content'));
     assert.ok(byId(tree, `quotr-remove-${symbols[0]}`));
@@ -128,5 +128,75 @@ test('detail render stays on its own production path across panel widths', () =>
     assert.ok(byId(tree, 'quotr-detail')); assert.equal(byId(tree, 'quotr-content'), undefined);
     assert.match(textOf(tree), /day change vs prev close/); assert.match(textOf(tree), /Cached quote · Neutral cached error/);
     for (const range of ['1D', '1W', '1M', '1Y']) assert.ok(byId(tree, `quotr-range-${range}`));
+  }
+});
+
+// Inspect every production segment, not concatenation alone: these assertions reject
+// both the former one-character and fixed-three-character financial chunk mutants.
+for (const width of [180, 279, 280, 340, 440]) {
+  test(`financial atoms and sibling budget at ${width}`, () => {
+    const f = fixture();
+    const cases = [
+      [130000000, 'KRW', 1234.5], [15000000, 'JPY', -1234.5],
+      [9876543.21, 'USD', 12.34], [97123.45, 'USDT', -0.12],
+      [230.10, 'USD', null], [0.000012345, 'USDT', 0.01],
+    ];
+    for (const [price, currency, changePercent] of cases) {
+      const q = f.view.watch.quotes.Q;
+      Object.assign(q, { price, currency, changePercent });
+      const tree = f.resize(width);
+      for (const [kind, text] of [['price', formatPrice(q)], ['change', formatChange(changePercent)]]) {
+        const node = byId(tree, `quotr-${kind}-Q`);
+        assert.deepEqual(node.kids.map(textOf), text.match(/\S+\s*/g));
+        for (const atom of node.kids) assert.deepEqual(atom.attrs.whitespace_nowrap, []);
+      }
+      const layout = byId(tree, 'quotr-layout-Q');
+      if (price >= 15000000 || price === 9876543.21) {
+        assert.equal(layout.kind, 'v', 'long values get full row instead of 108px');
+        assert.deepEqual(byId(tree, 'quotr-values-Q').attrs.w_full, []);
+        assert.equal(byId(tree, 'quotr-values-Q').attrs.w, undefined);
+      }
+      const priceParent = flatten(tree).find(n => n.kids.includes(byId(tree, 'quotr-price-Q')));
+      const lane = flatten(tree).find(n => n.kids.includes(priceParent));
+      assert.deepEqual(lane.attrs.flex_wrap, [], 'dot/arrow can wrap separately from number');
+      assert.ok(lane.kids.some(n => textOf(n) === '▲'));
+      assert.ok(lane.kids.some(n => n.attrs?.w?.[0] === 5), 'update dot retained');
+    }
+    // Unknown states use semantic words too, and remain actionable.
+    delete f.view.watch.errors.MISSING;
+    for (const paused of [false, true]) {
+      f.view.watch.preferences.paused = paused;
+      f.view.watch.host.load = () => structuredClone(f.view.watch.preferences);
+      const tree = f.resize(width);
+      assert.deepEqual(byId(tree, 'quotr-price-MISSING').kids.map(textOf), paused ? ['Not ', 'fetched'] : ['Waiting…']);
+      assert.ok(byId(tree, 'quotr-remove-MISSING').attrs.on_click);
+    }
+  });
+}
+
+test('ordinary default retains secondary information; long primary text adapts per row', () => {
+  const f = fixture(); Object.assign(f.view.watch.quotes.Q, { price: 230.10 });
+  for (const width of [280, 300, 340, 440]) {
+    const tree = f.resize(width);
+    const ordinary = byId(tree, 'quotr-layout-Q');
+    assert.equal(ordinary.kind, width >= 300 ? 'h' : 'v');
+    assert.equal(Boolean(byId(tree, 'quotr-chart-Q')), width >= 340);
+    assert.equal(Boolean(byId(tree, 'quotr-chart-MISSING')), false);
+    assert.equal(flatten(ordinary).some(e => e.attrs.w?.[0] === 31.5), width >= 300);
+    assert.equal(byId(tree, `quotr-layout-${symbols[1]}`).kind, 'v', 'long symbol uses full row');
+    assert.equal(textOf(byId(tree, 'quotr-price-Q')), '230.10 USD');
+  }
+});
+
+test('established short bands at every width, panel scroll begins at 72px', () => {
+  const f = fixture();
+  for (const width of [300, 500, 599, 600, 900]) {
+    const band = f.resize(width, 48);
+    assert.equal(band.kind, 'h'); assert.deepEqual(band.attrs.overflow_hidden, []);
+    assert.match(textOf(band), /Q.*9,876,543/);
+    assert.equal(byId(band, 'quotr-content'), undefined);
+    const panel = f.resize(width, 72);
+    assert.equal(panel.kind, 'v'); assert.ok(byId(panel, 'quotr-refresh').attrs.on_click);
+    assert.deepEqual(panel.attrs.overflow_y_scrollbar, []);
   }
 });

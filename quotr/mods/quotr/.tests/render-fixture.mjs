@@ -4,14 +4,14 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 // Recording builders expose structure only, not native text metrics or layout.
 function builder(kind) {
-  const e = { kind, attrs: {}, kids: [] };
+  const e = { kind, attrs: {}, kids: [], ops: [] };
   const proxy = new Proxy(e, { get(target, name) {
     if (name in target) return target[name];
     if (name === 'then') return undefined;
     if (name === 'child') return value => { if (value != null) e.kids.push(value); return proxy; };
     if (name === 'children') return values => { e.kids.push(...values); return proxy; };
     if (name === 'when') return (cond, fn) => cond ? fn(proxy) : proxy;
-    return (...args) => { e.attrs[name] = args; return proxy; };
+    return (...args) => { e.ops.push([name, args]); e.attrs[name] = args; return proxy; };
   } });
   return proxy;
 }
@@ -40,7 +40,7 @@ const api = {
   mkdir: forbidden('mkdir'), unlink: forbidden('unlink'),
 };
 globalThis[key] = api;
-globalThis.window = { paint_path: () => builder("path") };
+globalThis.window = { paint_path: (path, paint) => builder("path-layer").child(path).paint(paint) };
 const exportsFor = names => url(names.map(name => `export const ${name} = globalThis.${key}.${name};`).join('\n'));
 const bare = {
   'gpui-kit': exportsFor(['View', 'div', 'image', 'PathBuilder', 'Background']),

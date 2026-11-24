@@ -117,23 +117,33 @@ zoom 1; app zoom and OS scale change physical screenshot pixels. Record both dur
 | Proposal | Logical px | Content budget and rationale |
 |---|---:|---|
 | Usable minimum | 280 | Row: 22 padding + 6 gap + 14 remove = 42; 238 remain for stacked symbol and values. Header/clock have 256 after 24 padding. |
-| Suggested default | 340 | 298 for row content, 316 for header/clock. Large price and signed percentage can share a line; wrapping keeps exceptional values intact. Costs 60 more terminal pixels than 280. |
-| Maximum useful content width | 440 | Wide row: 42 outer + 20 gaps + 56 chart + 108 values + 39.5 logo/gap = 265.5, leaving 174.5 for symbol/name. Costs 100 more terminal pixels than 340. |
+| Suggested default | 340 | 298 for row content, 316 for header/clock. Ordinary tickers retain logo and 56×22 chart; long symbols/values get a full-width stacked row. Costs 60 more terminal pixels than 280. |
+| Maximum useful content width | 440 | Ordinary wide row: 42 outer + 20 gaps + 56 chart + 108 values + 39.5 logo/gap = 265.5, leaving 174.5 for symbol/name. Costs 100 more terminal pixels than 340. |
 
 These budgets specify component allocation, **not measured native glyph bounds or a no-overflow
-pass**. Below 380, logos and sparklines give way and the symbol sits above price/percentage. The
-clock drops its inline date (kept in its tooltip) and stacks the next event and countdown, retaining
-New York time and the market phase or schedule-unavailable label. Metadata may truncate; primary
-symbol, price and percentage instead have explicit wrap opportunities, including long symbols.
-The Add field, source/session explanations, refresh/pause, removal, reorder and detail actions stay.
-No financial formatting, quote source, session definition or watchlist defaults change.
+pass**. The clock compacts first below 380 of its own header pixels (about 404 panel
+pixels), dropping the inline date into its tooltip while retaining time, phase, event/countdown
+or schedule-unavailable label. Row stages are independent: charts at 340+, logos at 300+,
+stacking below 300 or when conservative character budgets reject the horizontal row. At 340,
+42 outer + 20 gaps + 56 chart + 108 values + 39.5 logo/gap leave 74.5px for identity;
+at 300 without a chart, 100.5px remain. The row uses an 8px-per-symbol-character budget;
+a price with a first atom over 10 characters or total length over 12 also stacks. These are
+provisional allocation heuristics, not native glyph measurements. Long stacked rows retain
+logos/charts when their independent stages allow, at the cost of extra height.
 
-Below 280, the same stacked layout uses shorter text chunks and wrapping controls. It has no
-content minimum width that forces the host wider. This emergency fallback trades height for width;
-arbitrarily tiny panes cannot promise readable controls. Under 360px height the whole panel scrolls
-vertically, including controls and attribution, rather than squeezing the watchlist to zero. The
-historical one-line band remains for blocks at least 600px wide and under 72px high; it still clips
-after the quotes that fit. At the three proposed widths even a short block keeps the scrolling panel.
+Symbols may wrap in fixed chunks. Financial values break only at whitespace: signed numbers,
+grouping, decimal precision, percentage suffixes and currency codes remain indivisible. Long
+values get the full row allocation (238/298/398px at the proposals), rather than a 108px column.
+The update dot and arrow are separately wrapping siblings. Metadata may truncate. Add, sources,
+sessions, refresh/pause, removal, reorder and detail actions stay; financial formatting is unchanged.
+
+Below 280, symbols use shorter chunks and controls wrap; financial atoms remain whole. There
+is no forced content minimum. An atom wider than the available row can still overflow at tiny
+widths; no native fit is claimed. At heights 72–359px the whole normal panel scrolls vertically.
+The established height-only band rule remains: any block under 72px uses the historical one-line
+quotes, clipped after those that fit, including top/bottom blocks 300–599px wide. This band has
+its established shortened clock/quotes rather than normal-panel editing controls. At exactly
+72px the normal scrolling panel resumes; a shortened panel test must use at least that height.
 Above 440 the content stays at a soft 440px cap, aligned to the starting edge. **This does not bound
 the host pane or recover terminal space**; the user must move the splitter to reclaim it.
 
@@ -170,9 +180,15 @@ capture 280/340/440 in dark/light with an adjacent terminal; inspect intermediat
 widths, long symbols, large/low prices, both signs, unknown/stale/error states, clock states and all
 actions. Drag both directions, shrink the window, then reload/restart an existing resized fixture
 layout and verify its width/order/watchlist stay intact. Also check detail dialogs, logo attribution,
-reorder and the wide short band. These checks and App check/typecheck have **NOT RUN** for this
+reorder, bands at 300/500/599/600/900×48, and the 72px panel boundary. These checks and App check/typecheck have **NOT RUN** for this
 candidate on this Linux host. Node render recordings and any external drawings are **MODELED NOT
 GPUI**, never Windows acceptance evidence.
+
+Before acceptance/merge, whichever Quotr PR (#32 or #33) merges second requires a developer's
+semantic rebase/resolution and fresh independent review, CI and required native evidence at the
+integrated head. Recheck actual chart calls/wiring, availability, row budgets, responsive behavior
+and tests against the actual integrated 56×22 channel. Textual conflict resolution alone is
+insufficient. This same-issue gate is pending; this PR does not combine the candidates.
 
 ## Data sources and limits
 
