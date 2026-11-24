@@ -28,7 +28,7 @@ test('actual main entry defaults passive, captures exactly once, renders labels 
   // Spaces lists no agents; only the pinned Needs you rows, drawn above the tabs.
   assert.ok(rows(view.controller.projection).every(i => i.pinned)); assert.doesNotMatch(textOf(flatten(tree).find(e => e.attributes.id?.[0] === 'roster-rows')), /Planner #12/);
   view.controller.change({ type: 'view', view: 'projects' }); tree = view.render(c.cx);
-  assert.match(textOf(tree), /Planner #12/); assert.ok(flatten(tree).some(e => e.attributes.accessibility_label?.[0] === 'GitHub issue #12'), 'the provider is named on the work item'); assert.doesNotMatch(textOf(tree), /Context unknown/);
+  assert.match(textOf(tree), /Planner #12/); assert.match(textOf(flatten(tree).find(e => /^alert-summary:/.test(e.attributes.id?.[0] ?? ''))), /#12/, 'the pinned row reports its issue on the alert line'); assert.doesNotMatch(textOf(tree), /Context unknown/);
   // Production default: Needs you stays open; the Other group starts folded with its count.
   assert.ok(view.controller.projection.instances.filter(i => i.kind === 'section' && i.label === 'Other').every(i => i.collapsed));
   // Needs you never folds, so it has no chevron; Other starts folded.

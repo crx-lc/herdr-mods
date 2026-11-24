@@ -6,6 +6,8 @@ import { actionReason, rowContext, detailLabel, hoverText, reasonText, agentFact
 import { terminalKind } from './runtime.js';
 import { reducedMotion, readStored, writeStored, Arrivals, PULSE } from './motion.js';
 
+// One distinct icon per status group, so each reads as its own section.
+export const STATUS_ICONS = Object.freeze({ 'Needs you': 'bell', 'Child needs you': 'bell-dot', Working: 'working', Done: 'check-circle', Idle: 'pause-circle', Offline: 'offline', Stale: 'clock', Unknown: 'help-circle' });
 // Stock-style working spinner frames, drawn natively by frames().
 export const WORKING_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 export function timerDeadline(cx, promise) {
@@ -87,7 +89,8 @@ export function createRosterView(kit, app, options = {}) {
     focus(cx) { this.handle.focus(); cx.notify(); }
     reduceMotion() { return reducedMotion(typeof app.settings === 'function' ? app.settings() : null, readStored(storage)); }
     watchArrivals(cx) {
-      const pending = (this.controller.projection?.instances ?? []).filter(i => i.pinned && i.kind === 'terminal').map(i => i.identity);
+      if (!this.controller.projection) return;
+      const pending = this.controller.projection.instances.filter(i => i.pinned && i.kind === 'terminal').map(i => i.identity);
       if (!this.arrivals.take(pending) || this.reduceMotion()) return;
       this.pulseUntil = this.controller.host.now() + PULSE.ms;
       cx.notify();
@@ -250,7 +253,7 @@ export function createRosterView(kit, app, options = {}) {
           extras.push(div().id('machine-state:' + row.key).size(6).rounded(3).flex_none().bg(row.ready ? theme.ansi2 ?? theme.working ?? fg : dim));
           add(groupHeader(row.key, row.label + (row.collapsed ? ', folded' : ''), row.label,
             change({ type: 'fold', key: row.key, collapsed: !row.collapsed }),
-            { icon: os?.icon ?? (row.machine ? 'server' : 'monitor'), collapsed: row.collapsed, extras,
+            { icon: os?.icon ?? (row.machine ? 'server' : 'monitor'), collapsed: row.collapsed, extras, first: row === rows[0],
               tooltip: [row.label, os?.tooltip, row.machine ? (row.ready ? 'connected' : row.loading ? 'loading' : 'not connected') : null].filter(Boolean).join(' · ') }));
           if (!row.collapsed && row.count === 0 && row.ready) add(click('spaces:new:' + (row.machine ?? 'local'), 'New space on ' + row.label, newSpace)
             .h(28).flex_none().px(8).gap(7).rounded(7).text_size(12).text_color(dim).cursor_pointer()
@@ -417,14 +420,14 @@ export function createRosterView(kit, app, options = {}) {
       // chevron keep the header's own 11px size and stay aligned.
       // The one group header for Spaces, Projects and Status. The Spaces machine header is the
       // reference: 30px, an 18px leading icon (a shipped icon name, or an element such as a
-      // Space's initial or the Working spinner), a 12px bold title in full contrast whether
+      // Space's initial or the Working ring), a 13px bold title in full contrast whether
       // folded or not, then a right-aligned tail: view-specific extras, a count, and the
       // chevron (or an empty slot of its size where a group never folds). The header's own
       // 11px size and dim color reach only the tail.
-      const HEADER = { height: 30, iconSize: 18, titleSize: 11 + 1, chevron: 11 };
+      const HEADER = { height: 30, iconSize: 18, titleSize: 13, chevron: 11, gapAbove: 8 };
       const groupHeader = (key, label, title, activate, { icon: lead = null, collapsed = false, foldable = true, extras = [], tooltip = label, depth = 0,
-        count = null } = {}) => {
-        const head = click(key, label, activate).h(HEADER.height).flex_none().px(8).pl(8 + Math.min(depth, 3) * 8).gap(7)
+        count = null, first = false } = {}) => {
+        const head = click(key, label, activate).h(HEADER.height).mt(first ? 0 : HEADER.gapAbove).flex_none().px(8).pl(8 + Math.min(depth, 3) * 8).gap(7)
           .text_size(11).text_color(dim).cursor_pointer().hover(el => el.bg(theme.hover ?? theme.raised)).tooltip(tooltip);
         const leadEl = typeof lead === 'string' ? icon(lead, HEADER.iconSize) : lead;
         if (leadEl) head.child(leadEl.id('group-icon:' + key));
@@ -443,7 +446,6 @@ export function createRosterView(kit, app, options = {}) {
         return leadBox().rounded(5).bg(spaceFill(typeof colors[space.id] === 'string' ? colors[space.id] : 'ansi6', theme))
           .child(div().text_size(10.5).font_bold().text_color('#ffffff').child((Array.from(name)[0] ?? '?').toUpperCase()));
       };
-      const STATUS_ICONS = { 'Needs you': 'bell', 'Child needs you': 'bell', Working: 'working', Done: 'check-circle', Idle: 'pause-circle', Offline: 'offline', Stale: 'clock', Unknown: 'help-circle' };
       // Color helps but is never the only signal: every header also names its status.
       const STATUS_COLORS = { 'Needs you': theme.blocked, 'Child needs you': theme.blocked, Working: theme.working, Done: theme.done,
         Idle: theme.idle, Unknown: theme.unknown };
@@ -525,11 +527,11 @@ export function createRosterView(kit, app, options = {}) {
         if (i.pinned) { pinnedRows.child(element); pinnedAt++; } else { body.child(element); bodyAt++; }
       };
       const slot = i => i.pinned ? { pinnedIndex: pinnedAt, pinned: true } : { rowIndex: bodyAt };
-      let section = null;
+      let section = null, firstHeader = true;
       for (const i of projection.instances) {
         if (i.kind === 'section' && i.pinned) {
           section = i;
-          const bell = statusIcon('Needs you');
+          const bell = leadBox().child(statusIcon('Needs you'));
           if (!still && this.pulseUntil > c.host.now()) bell.loop('opacity', { from: PULSE.from, to: PULSE.to, period: PULSE.period });
           pinned.child(groupHeader(i.key, 'Needs you, ' + i.counts.needsYou, 'Needs you', () => {},
             { icon: bell, foldable: false, count: i.counts.needsYou, tooltip: 'Needs you: pending in any Space, on any machine' }).cursor_default());
@@ -551,10 +553,11 @@ export function createRosterView(kit, app, options = {}) {
           const where = i.space ? 'Space · ' + (i.space.machine ?? 'This computer') : null;
           const extras = where ? [div().id('group-space:' + i.key).flex_none().text_size(10).text_color(muted).child(where)] : [];
           const header = groupHeader(i.key, title + (count != null ? ', ' + count : '') + (where ? ', ' + where : '') + (foldable ? (i.collapsed ? ', folded' : ', open') : ''), title,
-            change({ type: 'fold', key: i.key, collapsed: !i.collapsed }), { icon: lead, collapsed: i.collapsed, foldable, extras, depth: i.depth, count,
+            change({ type: 'fold', key: i.key, collapsed: !i.collapsed }), { icon: lead, collapsed: i.collapsed, foldable, extras, depth: i.depth, count, first: firstHeader || i.depth > 0,
               tooltip: where ? i.label + ': the Herdr Space on ' + (i.space.machine ?? 'this computer') + ' that shows these terminals (project not verified)' : undefined });
           Object.assign(this.controls.at(-1), slot(i));
           place(i, header);
+          firstHeader = false;
           continue;
         }
         const row = i.row, waiting = row.roster.state === 'waiting';
@@ -591,15 +594,30 @@ export function createRosterView(kit, app, options = {}) {
         element.child(h().id('row-kind:' + i.key).w(16).h(16).flex_none().justify_center().accessibility_label(kind.label).child(kindIcon));
         // An echo is the alert's own terminal listed again in its group: muted, never a second alert.
         const echo = i.echo === true;
-        element.child(labelText(row.displayLabel, 12, i.navigation.enabled && !echo ? fg : muted).id('row-name:' + i.key).font_semibold().flex_none().max_w(150));
-        // Then the project and work item, when reported (a pinned row has them on its alert line).
+        // The task is the easiest part to spot: the name is plain, the task follows in full
+        // contrast ("Developer · herdr-agents #141"). A task is only a verified association:
+        // the terminal's own herdr.issue / herdr.pr label (titles are in no label, so none is
+        // shown). A Done session says nothing about the issue being closed.
+        const live = i.navigation.enabled && !echo;
         const item = row.workItem ? (row.workItem.kind === 'pr' ? 'PR #' : '#') + row.workItem.numberOrId : null;
-        // A role name may already carry its issue ("Planner #21"): never twice.
-        const facts = i.pinned ? [] : [context.knownProject, item && !row.displayLabel.endsWith(' ' + item) ? item : null].filter(Boolean);
-        const factsEl = labelText(facts.join(' · '), 11, muted).id('row-facts:' + i.key).flex_1();
-        // The provider is named for people using a screen reader instead of a GH/ADO chip.
-        if (item && provider) factsEl.accessibility_label([context.knownProject, provider + ' ' + (row.workItem.kind === 'pr' ? 'pull request ' : 'issue ') + item].filter(Boolean).join(' · '));
-        element.child(factsEl);
+        const repo = row.workItem ? String(row.workItem.repositoryIdentity ?? '').split('/').filter(Boolean).pop() ?? null : null;
+        const task = item && !i.pinned ? [repo, item].filter(Boolean).join(' ') : null;
+        // A role name carries its issue ("Planner #21"); with the task beside it, never twice.
+        const name = task && row.displayLabel.endsWith(' ' + item) ? row.displayLabel.slice(0, -(item.length + 1)) : row.displayLabel;
+        element.child(labelText(name, 12, live ? fg : muted).id('row-name:' + i.key).flex_none().max_w(task ? 110 : 150));
+        // Working and Done in Status say so when nothing is reported (direct work without a label).
+        const wantsTask = !i.pinned && viewMode === 'status' && ['Working', 'Done'].includes(section?.label);
+        const sep = () => labelText('·', 12, dim).flex_none();
+        if (task) {
+          const kind = row.workItem.kind === 'pr' ? 'pull request' : 'issue';
+          element.child(sep()).child(labelText(task, 12, live ? fg : muted).id('row-task:' + i.key).font_semibold().flex_none().max_w(150)
+            .accessibility_label([provider ?? 'Work item', kind, item, 'in', row.workItem.repositoryIdentity].join(' ')
+              + (section?.label === 'Done' ? '; the session is done, the ' + kind + ' state is not checked' : '')));
+        } else if (wantsTask) element.child(sep()).child(labelText('Task not reported', 11, dim).id('row-task:' + i.key).flex_none()
+          .accessibility_label('Task not reported: no herdr.issue or herdr.pr label on this terminal'));
+        // Then the verified project, unless the group already is that project.
+        const facts = i.pinned || !context.knownProject || context.knownProject === section?.label ? [] : [context.knownProject];
+        element.child(labelText(facts.join(' · '), 11, muted).id('row-facts:' + i.key).flex_1());
         // The quiet tail: the Space when the group is not that Space, and the machine only
         // when remote (a pinned row always names where it is, This computer included).
         const where = [i.space && !section?.space ? i.space.name : null,

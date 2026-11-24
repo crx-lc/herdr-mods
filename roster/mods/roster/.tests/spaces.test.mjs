@@ -122,8 +122,8 @@ test('machine headers follow the stock order: icon, name, then +, the connection
   for (const [key, head] of [['local', local], ['edge', edge], ['zed', zed]]) {
     assert.equal(head.attributes.h[0], 30); assert.equal(head.attributes.text_size[0], 11); assert.ok(head.attributes.hover);
     const label = byId(head, 'group-label:spaces:machine:' + key);
-    // Bold at the Spaces tab's 12px.
-    assert.equal(label.attributes.text_size[0], 12); assert.ok(label.attributes.font_bold); assert.equal(label.attributes.text_color[0], '#eeeeee');
+    // Bold, one step above the tabs' 12px, like every group header.
+    assert.equal(label.attributes.text_size[0], 13); assert.ok(label.attributes.font_bold); assert.equal(label.attributes.text_color[0], '#eeeeee');
     assert.deepEqual(byId(head, 'group-icon:spaces:machine:' + key).attributes.size, [18]);
     assert.deepEqual(byId(head, 'group-chevron:spaces:machine:' + key).attributes.size, [11]);
     assert.deepEqual(byId(head, 'machine-state:spaces:machine:' + key).attributes.size, [6]);
@@ -166,6 +166,7 @@ test('a connected machine without Spaces offers "New space there", which opens t
 // (folded or not), the tail, and the chevron last (or an empty slot where a group never folds).
 const shape = el => el.children.map(e => {
   const id = e.attributes.id?.[0] ?? '';
+  if (/^group-icon:/.test(id) && !e.attributes.svg && e.children[0]?.attributes?.svg) return 'icon:' + e.children[0].attributes.svg[0].split('/').pop().replace('.svg', '');
   if (/^group-icon:/.test(id)) return e.attributes.spin ? 'icon:spinning-' + e.attributes.svg[0].split('/').pop().replace('.svg', '') : e.attributes.frames ? 'icon:spinner' : e.attributes.svg ? 'icon:' + e.attributes.svg[0].split('/').pop().replace('.svg', '') : 'icon:initial';
   if (/^group-label:/.test(id)) return 'title';
   if (/^group-count:/.test(id)) return 'count:' + textOf(e);
@@ -176,7 +177,7 @@ const shape = el => el.children.map(e => {
 const sameLook = (el, key) => {
   assert.equal(el.attributes.h[0], 30, key);
   const title = el.children.find(e => /^group-label:/.test(e.attributes.id?.[0] ?? ''));
-  assert.equal(title.attributes.text_size[0], 12); assert.ok(title.attributes.font_bold); assert.equal(title.attributes.text_color[0], '#eeeeee', key + ' full contrast');
+  assert.equal(title.attributes.text_size[0], 13); assert.ok(title.attributes.font_bold); assert.equal(title.attributes.text_color[0], '#eeeeee', key + ' full contrast');
   const lead = el.children[0];
   assert.ok(lead.attributes.size?.[0] === 18 || (lead.attributes.w?.[0] === 18 && lead.attributes.h?.[0] === 18), key + ' 18px icon');
 };

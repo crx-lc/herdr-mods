@@ -79,16 +79,18 @@ for (const [name, theme] of Object.entries(THEMES)) {
       for (const i of [shell, claude, unknown]) assert.equal(byId(tree, i.key).children[0].attributes.id[0], 'row-kind:' + i.key, 'the icon leads');
       // Role and runtime stay distinct: Claude Code is the icon, Developer the label.
       assert.equal(byId(tree, 'row-kind:' + claude.key).attributes.accessibility_label[0], 'Claude Code');
-      assert.equal(textOf(byId(tree, 'row-name:' + claude.key)), 'Developer #7');
+      // A plain name, then the task in full contrast; the issue is not repeated in the name.
+      assert.equal(textOf(byId(tree, 'row-name:' + claude.key)), 'Developer');
       assert.equal(byId(tree, 'row-name:' + claude.key).attributes.text_color[0], theme.foreground);
-      // The issue is already in the name; it is not repeated. The provider is still named.
-      assert.equal(textOf(byId(tree, 'row-facts:' + claude.key)), '');
-      assert.equal(byId(tree, 'row-facts:' + claude.key).attributes.accessibility_label[0], 'GitHub issue #7');
+      assert.equal(byId(tree, 'row-name:' + claude.key).attributes.font_semibold, undefined, 'names are not bold');
+      assert.equal(textOf(byId(tree, 'row-task:' + claude.key)), 'repo #7');
+      assert.ok(byId(tree, 'row-task:' + claude.key).attributes.font_semibold);
+      assert.equal(byId(tree, 'row-task:' + claude.key).attributes.accessibility_label[0], 'GitHub issue #7 in sample/repo');
       // Tail: the remote machine only; nothing for this computer.
       assert.match(textOf(byId(tree, 'row-machine:' + claude.key)), /edge$/);
       // Locally the tail names only the Space (when the group is not that Space), never the machine.
       if (view === 'status') { assert.equal(textOf(byId(tree, 'row-machine:' + shell.key)), 'Local work'); assert.equal(byId(tree, 'row-machine:' + unknown.key), undefined); }
-      for (const i of [shell, claude, unknown]) assert.doesNotMatch(textOf(byId(tree, 'line:' + i.key)), /This computer|\bGH\b|Claude/);
+      for (const i of [shell, claude, unknown]) assert.doesNotMatch(textOf(byId(tree, 'line:' + i.key)), /This computer|\bGH\b|Claude|Task not reported/);
       assert.equal(textOf(byId(tree, 'row-name:' + shell.key)), 't1', 'the shell keeps its own name, not the tab title');
       // Status: no chip repeats its header. Nothing on a row moves.
       if (view === 'status') assert.equal(flatten(byId(tree, 'roster-rows')).filter(e => e.attributes.max_w?.[0] === 104).length, 0);
@@ -175,7 +177,7 @@ test('a new arrival in Needs you pulses the bell once, then it is still; never a
   const bell = () => byId(s.render(), 'group-icon:' + JSON.stringify(['attention']));
   s.every[0].fn(s.cx); assert.equal(s.stats.notify, 0, 'already pending at start: no pulse');
   assert.equal(bell().attributes.loop, undefined);
-  assert.equal(bell().attributes.text_color[0], THEMES.dark.blocked);
+  assert.equal(bell().children[0].attributes.text_color[0], THEMES.dark.blocked);
   // A second session starts needing you.
   s.f.values.terminals = s.f.values.terminals.map(t => t.address === 't1' ? { ...t, status: 'blocked' } : t);
   tree = s.render(); s.every[0].fn(s.cx);
