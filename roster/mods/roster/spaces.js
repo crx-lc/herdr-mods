@@ -49,6 +49,23 @@ export function spaceRows({ spaces = [], machines = [] } = {}, { colors = {}, fo
   return rows;
 }
 
+// Selection observation separates real list position from disclosure/fold layout changes.
+// at counts the same direct children as the view, including empty-machine prompts.
+export function spaceObservation(snapshot, { view, folds = {}, identityOf = () => null } = {}) {
+  const active = (snapshot.spaces ?? []).filter(s => s.active);
+  const id = active.length === 1 ? active[0].id : null;
+  const rows = spaceRows(snapshot, { folds, identityOf });
+  const expanded = spaceRows(snapshot, { identityOf });
+  let drawn = 0, at = -1;
+  for (const row of rows) {
+    if (row.kind === 'space' && row.id === id) at = drawn;
+    drawn++;
+    if (row.kind === 'machine' && !row.collapsed && row.count === 0 && row.ready) drawn++;
+  }
+  return { id, view, at, position: expanded.findIndex(row => row.kind === 'space' && row.id === id),
+    order: JSON.stringify(rows.map(row => [row.key, row.collapsed, row.ready, row.count])) };
+}
+
 // A stored color name or hex as a fill, the same way the stock list resolves it.
 export const spaceFill = (name, theme = {}) => name.startsWith('#') ? name : SPACE_MARKS[name] ?? theme[name] ?? SPACE_MARKS.ansi6;
 

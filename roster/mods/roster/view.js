@@ -2,7 +2,7 @@ import { machineAnchor, rowAnchor, sameDisclosure, returnControl, folderActionAl
 import { Controller } from './controller.js';
 import { LayoutOptIn } from './layout.js';
 import { desktopHost, desktopLayoutHost } from './desktop.js';
-import { spaceRows, machineKey, spaceFill, spacePlace, GitIdentities, MachineOs, folderSuggestions, matchingSpace, verifyFolder } from './spaces.js';
+import { spaceRows, machineKey, spaceFill, spacePlace, GitIdentities, MachineOs, folderSuggestions, matchingSpace, verifyFolder, spaceObservation } from './spaces.js';
 import { actionReason, rowContext, detailLabel, hoverText, reasonText, agentFacts, homeRelative } from './detail.js';
 import { terminalKind } from './runtime.js';
 import { reducedMotion, readStored, writeStored, Arrivals, PULSE } from './motion.js';
@@ -129,7 +129,7 @@ export function createRosterView(kit, app, options = {}) {
     // The same event path owns all Roster disclosures. Native picker/dialogs stay native.
     dismissPanel(cx, restore = true) {
       const panel = this.panel;
-      if (panel) this.observedSpace = { id: this.controller.host.spaces().find(sp => sp.active)?.id ?? null };
+      if (panel) this.observedSpace = this.currentSpaceObservation();
       this.panel = null; this.reader = null; this.newSpace = null; this.toolsOpen = false;
       const oldInput = this.pathInput; this.pathInput = null; oldInput?.release?.();
       this.readerControls = []; this.inputFocused = false; this.inputRequest = null; this.newSpaceCursor = null;
@@ -220,7 +220,10 @@ export function createRosterView(kit, app, options = {}) {
       const request = this.inputRequest;
       this.inputRequest = null;
       if (request && this.newSpace === request.owner && this.pathInput === request.input
-        && this.controller.cursor === 'new-space:path' && this.handle.is_focused?.() === true) {
+        && this.controller.cursor === 'new-space:path'
+        && (this.handle.is_focused?.() === true
+          || (controls.some(control => control.key === panel.returnKey)
+            && this.triggerHandles.get(panel.returnKey)?.is_focused?.() === true))) {
         // Failure or no focus event leaves normal sidebar keys usable.
         try { request.input?.focus?.(); } catch { this.inputFocused = false; }
       }
@@ -411,16 +414,25 @@ export function createRosterView(kit, app, options = {}) {
         add(element);
       }
       if (!rows.length) body.child(labelText('No Spaces', 12, muted).p(6));
-      this.spaceReveal = { id: activeId, at: activeAt, view: c.state.view };
+      this.spaceReveal = { ...this.currentSpaceObservation(snapshot), id: activeId, at: activeAt };
+    }
+    currentSpaceObservation(snapshot = null) {
+      const host = this.controller.host;
+      snapshot ??= { spaces: host.spaces(), machines: host.machines(), panes: host.panes() };
+      return spaceObservation(snapshot, { view: this.controller.state.view, folds: this.controller.state.folds,
+        identityOf: space => this.git?.lookup(space.machine ?? null, spacePlace(space, snapshot.panes)) ?? null });
     }
     observeSpace(next, cx) {
-      // Observed changes are consumed even during inspection, never queued for close.
-      const current = this.controller.host.spaces().filter(sp => sp.active);
-      const activeId = current.length === 1 ? current[0].id : null;
-      if (next?.id !== activeId) return; // A queued old render cannot reveal a stale key/index.
-      const changed = next?.id !== this.observedSpace?.id;
+      const current = this.currentSpaceObservation();
+      // Refuse a queued render even if its active id survived a reorder or fold.
+      if (!next || next.id !== current.id || next.view !== current.view
+        || next.at !== current.at || next.order !== current.order) return;
+      const previous = this.observedSpace;
+      const changed = next.id !== previous?.id || next.view !== previous?.view
+        || (next.at !== previous?.at && next.position !== previous?.position);
+      // Inspection consumes the newest position too; closing has no pending jump.
       this.observedSpace = next;
-      if (changed && !this.panel && next?.view === 'spaces' && this.controller.state.view === 'spaces' && next.at >= 0) {
+      if (changed && !this.panel && next.view === 'spaces' && next.at >= 0) {
         const control = this.controls.find(c => c.key === 'space:' + next.id);
         if (control?.rowIndex === next.at) { this.rowScroll.scroll_to_item(next.at); cx.notify(); }
       }
@@ -536,7 +548,7 @@ export function createRosterView(kit, app, options = {}) {
       const c = this.controller;
       // this.controls is this render's output: the callbacks key events use. Nothing else is written.
       this.controls = [];
-      this.spaceReveal = { id: c.feed.snapshot?.spaces?.find(sp => sp.active)?.id ?? null, at: -1, view: c.state.view };
+      this.spaceReveal = this.currentSpaceObservation(c.feed.snapshot);
       const parents = new Set(c.feed.reduced.rows.map(r => r.parent?.associationKey).filter(Boolean));
       const fg = theme.foreground ?? theme.text;
       const muted = theme.muted ?? fg;

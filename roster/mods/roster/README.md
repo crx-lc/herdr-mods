@@ -51,7 +51,9 @@ Tab at the last control and Shift-Tab at the first propagate to native focus tra
 without wrapping or forcing terminal focus.
 The real path input keeps its editing keys and Enter checks the path; Tab leaves
 it. Focus is requested after mounting; editing-key ownership starts only on an actual
-focus event. Failed requests leave sidebar keys usable. Home/End and PageUp/PageDown read the panel's scrollable content when the input
+focus event. Reopening with Enter after Esc also requests the field when the exact
+current machine trigger holds focus; another control or pane does not authorize it.
+Failed requests leave sidebar keys usable. Home/End and PageUp/PageDown read the panel's scrollable content when the input
 is not editing. Esc closes the panel and focuses the exact surviving trigger via
 its retained native focus handle; if the target disappeared, Projects is the stable
 fallback. Automatic target removal returns focus only when a native focus handle
@@ -64,7 +66,9 @@ or a folder form requests a minimal reveal of its owning direct list child after
 render, plus its first inner control. Already visible children stay put through the
 supported ScrollHandle API; close adds no compensating jump. Other viewports retain
 their offsets. Actual external Space selection changes reveal promptly from a
-post-render task. Changes observed during inspection are consumed without scrolling
+post-render task, including return from Projects/Status and a changed drawn position
+of the same active Space. Folds, unrelated refreshes and panel layout changes do not
+request a selection reveal. Changes observed during inspection are consumed without scrolling
 and are never replayed when a panel closes. Details and
 the folder form use a bounded 112px internal vertical scrollbar (96px for pinned
 Details); Options retains its 52px viewport. Long values/actions wrap, with invisible
@@ -113,13 +117,18 @@ Core version, OS scale and zoom; verify at zoom 1 and 1.1:
    focus, not selection tint; Esc returns to exact Info/footer/machine +/Options.
    Tab forward past the last and backward past the first must leave Roster through
    native traversal, including from a folder panel; confirm input editing after real
-   focus and usable arrows/Enter/Space when input focus fails.
+   focus and usable arrows/Enter/Space when input focus fails. Repeat + → input → Esc
+   → Enter and verify typing enters the path with root focus false and trigger focus
+   true; moving to another control or pane before the task must not steal focus.
 4. Scroll a long list; open/close each panel without resetting its offset/folds.
    Open at the bottom main row and third/bottom pinned alert: panel and close/Cancel
    must be visible, with the trigger visible where feasible. Check all three tabs,
    exact owning viewport and no unrelated offset changes. Needs you stays pinned.
    External active-Space changes reveal promptly without a panel; changes during
    inspection must not cause a delayed jump on close, refresh or the next timer.
+   Change selection in both Projects and Status, return to Spaces, then insert/reorder
+   above the same active Space: reveal promptly once at its fresh position. Folding,
+   unchanged refresh and opening/closing panels must not cause unrelated jumps.
 5. Read long names, paths, URLs, multiline/Unicode facts and Technical details;
    use both internal scroll and keyboard reading without horizontal clipping.
 6. Local/remote folder target and validation are visible. Expand/toggle/Cancel/Esc,

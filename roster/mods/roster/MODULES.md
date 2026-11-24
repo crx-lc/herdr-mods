@@ -653,3 +653,10 @@ Boundary Tab/Shift-Tab propagate to native traversal without wrapping. Input edi
 ownership begins on an owner-guarded focus event, never a request. Post-render tasks
 request minimal panel-owner/first-control reveals and prompt active-Space reveals;
 selection changes during inspection are consumed without a post-close replay.
+
+The `spaces.js` selection observation records active ID, tab, drawn index and unfolded
+position separately. Post-render checks compare fresh host row order/index before
+revealing on selection, tab return or a real position change. Inspection consumes
+observations without a close replay; folds and disclosure layout do not impersonate
+position changes. Deferred path focus accepts only the root or current folder
+trigger actual focus, while owner/input/cursor/readiness guards still apply.
