@@ -3,6 +3,8 @@ import { LayoutOptIn } from './layout.js';
 import { desktopHost, desktopLayoutHost } from './desktop.js';
 import { spaceRows, spaceFill, spacePlace, GitIdentities, MachineOs, folderSuggestions, matchingSpace, verifyFolder } from './spaces.js';
 import { actionReason, rowContext, detailLabel, hoverText, reasonText, agentFacts, homeRelative } from './detail.js';
+import { terminalKind } from './runtime.js';
+import { reducedMotion, readStored, writeStored, Arrivals, PULSE } from './motion.js';
 
 // Stock-style working spinner frames, drawn natively by frames().
 export const WORKING_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
@@ -14,9 +16,15 @@ export function timerDeadline(cx, promise) {
   });
 }
 export function createRosterView(kit, app, options = {}) {
-  const { View, div, h_flex, v_flex, ScrollHandle, svg, InputState, Input } = kit;
+  const { View, div, h_flex, v_flex, ScrollHandle, svg, image, InputState, Input } = kit;
   // Roster's own icons, shipped in the mod folder; icon paths resolve against Herdr's root.
   const icon = (name, size) => svg('mods/roster/icons/' + name + '.svg').size(size).flex_none();
+  // Roster's full-color icons, and Herdr's shipped program icons (icons/<name>.svg in its
+  // home; runtime.js admits only that shape). These four helpers are the only asset reads.
+  const picture = (name, size) => image('mods/roster/icons/' + name + '.svg').w(size).h(size).flex_none();
+  const herdrGlyph = (name, size) => svg('icons/' + name + '.svg').size(size).flex_none();
+  const herdrPicture = (name, size) => image('icons/' + name + '.svg').w(size).h(size).flex_none();
+  const storage = options.storage ?? (typeof localStorage === 'undefined' ? null : localStorage);
   return class Roster extends View {
     init(_props, cx) {
       this.handle = cx.focus_handle();
@@ -39,17 +47,21 @@ export function createRosterView(kit, app, options = {}) {
       if (!app.checking()) cx.spawn(async cx => {
         for (;;) { if (await app.nextCommand() === 'focus') this.focus(cx); }
       });
+      // A new arrival in Needs you pulses the bell once; the check reads the last drawn list.
+      this.arrivals = new Arrivals(); this.pulseUntil = 0;
       // Git identity for worktree nesting: the stock panel's two read-only rev-parse
       // queries, probed in the background (never in render, never under check).
       const exec = options.exec ?? app.exec, readTextFile = options.readTextFile ?? app.readTextFile;
-      if (!app.checking() && typeof cx.timer?.every === 'function' && (typeof exec === 'function' || typeof readTextFile === 'function')) {
+      const ticking = !app.checking() && typeof cx.timer?.every === 'function';
+      if (ticking && (typeof exec === 'function' || typeof readTextFile === 'function')) {
         const now = () => this.controller.host.now();
         if (typeof exec === 'function') this.git = new GitIdentities({ exec, now });
         // Machine OS for the header icons: os-release through Herdr's read-only file API.
         if (typeof readTextFile === 'function') this.os = new MachineOs({ readTextFile, now });
         this.machineReady = new Map();
-        cx.timer.every(1000, cx => this.pollGit(cx));
       }
+      // One gentle 1s timer: the Needs you arrival check, and the Spaces probes when there are any.
+      if (ticking) cx.timer.every(1000, cx => { this.watchArrivals(cx); if (this.machineReady) this.pollGit(cx); });
     }
     // Ask about Spaces' folders on ready machines; ask again on reconnect; redraw on answers.
     pollGit(cx) {
@@ -73,6 +85,15 @@ export function createRosterView(kit, app, options = {}) {
       if (gitChanged || osChanged) cx.notify();
     }
     focus(cx) { this.handle.focus(); cx.notify(); }
+    reduceMotion() { return reducedMotion(typeof app.settings === 'function' ? app.settings() : null, readStored(storage)); }
+    watchArrivals(cx) {
+      const pending = (this.controller.projection?.instances ?? []).filter(i => i.pinned && i.kind === 'terminal').map(i => i.identity);
+      if (!this.arrivals.take(pending) || this.reduceMotion()) return;
+      this.pulseUntil = this.controller.host.now() + PULSE.ms;
+      cx.notify();
+      // Then still: one redraw after the pulse draws the bell without it.
+      cx.timer.after(PULSE.ms, cx => cx.notify());
+    }
     async layoutAction(operation, cx) {
       if (app.checking()) return;
       try { await operation(); this.message = 'Agents slot updated'; } catch (e) { this.message = `Layout unchanged or incomplete: ${e.message}`; }
@@ -422,7 +443,15 @@ export function createRosterView(kit, app, options = {}) {
         return leadBox().rounded(5).bg(spaceFill(typeof colors[space.id] === 'string' ? colors[space.id] : 'ansi6', theme))
           .child(div().text_size(10.5).font_bold().text_color('#ffffff').child((Array.from(name)[0] ?? '?').toUpperCase()));
       };
-      const STATUS_ICONS = { 'Needs you': 'bell', 'Child needs you': 'bell', Done: 'check-circle', Idle: 'pause-circle', Offline: 'offline', Stale: 'clock', Unknown: 'help-circle' };
+      const STATUS_ICONS = { 'Needs you': 'bell', 'Child needs you': 'bell', Working: 'working', Done: 'check-circle', Idle: 'pause-circle', Offline: 'offline', Stale: 'clock', Unknown: 'help-circle' };
+      // Color helps but is never the only signal: every header also names its status.
+      const STATUS_COLORS = { 'Needs you': theme.blocked, 'Child needs you': theme.blocked, Working: theme.working, Done: theme.done,
+        Idle: theme.idle, Unknown: theme.unknown };
+      const still = this.reduceMotion();
+      const statusIcon = label => {
+        const el = icon(STATUS_ICONS[label] ?? 'help-circle', HEADER.iconSize).text_color(STATUS_COLORS[label] ?? dim);
+        return label === 'Working' && !still ? el.spin(1200) : el;
+      };
       const change = event => cx => { this.closeDetails(cx, false); this.controls = []; c.change(event); cx.notify(); };
       const viewMode = c.state.view;
       const root = v().id('roster').size_full().p(5).gap(3).bg(theme.surface).text_color(fg).text_size(12)
@@ -463,6 +492,9 @@ export function createRosterView(kit, app, options = {}) {
           for (const id of ids) option('filter:' + field + ':' + (id === null ? 'null' : 'value:' + id), title + ': ' + (id ?? 'unknown'),
             change({ type: 'filters', [field]: [id] }), { active: selected?.includes(id) });
         }
+        option('motion:toggle', still ? 'Motion: reduced (status icons stay still)' : 'Motion: on (Working turns, a new Needs you pulses once)', cx => {
+          writeStored(storage, still ? 'full' : 'reduce'); this.pulseUntil = 0; cx.notify();
+        }, { active: still, text: still ? 'Motion: reduced' : 'Motion: on' });
         option('layout:select', 'Choose an existing Agents slot…', cx => {
           if (app.checking()) return;
           try { this.selection = this.optIn.inspect(); this.message = this.selection.slots.length ? 'Select the Agents slot to replace in a new layout copy' : 'No existing Agents slot'; }
@@ -497,8 +529,10 @@ export function createRosterView(kit, app, options = {}) {
       for (const i of projection.instances) {
         if (i.kind === 'section' && i.pinned) {
           section = i;
+          const bell = statusIcon('Needs you');
+          if (!still && this.pulseUntil > c.host.now()) bell.loop('opacity', { from: PULSE.from, to: PULSE.to, period: PULSE.period });
           pinned.child(groupHeader(i.key, 'Needs you, ' + i.counts.needsYou, 'Needs you', () => {},
-            { icon: 'bell', foldable: false, count: i.counts.needsYou, tooltip: 'Needs you: pending in any Space, on any machine' }).cursor_default());
+            { icon: bell, foldable: false, count: i.counts.needsYou, tooltip: 'Needs you: pending in any Space, on any machine' }).cursor_default());
           this.controls.at(-1).pinned = true;
           continue;
         }
@@ -509,8 +543,7 @@ export function createRosterView(kit, app, options = {}) {
           const foldable = true;
           // The leading icon says what kind of group it is. Working's is the one live
           // indicator: a native spinner, decoration rather than a control.
-          const lead = viewMode === 'status' ? (i.label === 'Working' ? leadBox().id('roster-working-indicator').text_size(12)
-              .text_color(theme.working ?? theme.accent ?? muted).frames(WORKING_FRAMES, 80) : STATUS_ICONS[i.label] ?? 'help-circle')
+          const lead = viewMode === 'status' ? statusIcon(i.label)
             : i.space ? spaceInitial(i.space) : i.label === 'Done' ? 'check-circle' : i.label === 'Unidentified' ? 'terminal'
             : i.label === 'Infrastructure' ? 'server' : i.repository ? 'branch' : 'folder';
           // A Space group is named as a Space on its machine: where these terminals are shown,
@@ -549,14 +582,29 @@ export function createRosterView(kit, app, options = {}) {
         const selected = this.controls.at(-1), at = slot(i);
         Object.assign(selected, { ...at, instance: i, detail: label, hover,
           disabledReason: i.navigation.enabled ? null : explanation });
-        // Neutral monogram only for a known project: an "Unassigned" initial says nothing.
-        if (context.knownProject) element.child(h().w(16).h(16).flex_none().justify_center().rounded(4).bg(theme.raised)
-          .accessibility_label(context.knownProject + ' project icon fallback').child(labelText(Array.from(context.knownProject)[0] ?? '?', 10)));
+        // One leading icon: what runs there, from Herdr's program table only (runtime.js),
+        // never a tab title or role. A neutral terminal when nothing is known.
+        const kind = terminalKind(row.program);
+        const kindIcon = kind.source === 'herdr'
+          ? (kind.color ? herdrPicture(kind.name, 14) : herdrGlyph(kind.name, 14).text_color(fg))
+          : (kind.color ? picture(kind.name, 14) : icon(kind.name, 14).text_color(dim));
+        element.child(h().id('row-kind:' + i.key).w(16).h(16).flex_none().justify_center().accessibility_label(kind.label).child(kindIcon));
         // An echo is the alert's own terminal listed again in its group: muted, never a second alert.
         const echo = i.echo === true;
-        element.child(labelText(row.displayLabel, 12, i.navigation.enabled && !echo ? fg : muted).id('row-name:' + i.key).font_semibold().flex_1());
-        const where = i.space && !section?.space ? i.space.name + ' · ' + context.machineShort : context.machineShort;
-        element.child(labelText(where, 10, muted).id('row-machine:' + i.key).flex_none().max_w(i.space && !section?.space ? 150 : 84));
+        element.child(labelText(row.displayLabel, 12, i.navigation.enabled && !echo ? fg : muted).id('row-name:' + i.key).font_semibold().flex_none().max_w(150));
+        // Then the project and work item, when reported (a pinned row has them on its alert line).
+        const item = row.workItem ? (row.workItem.kind === 'pr' ? 'PR #' : '#') + row.workItem.numberOrId : null;
+        // A role name may already carry its issue ("Planner #21"): never twice.
+        const facts = i.pinned ? [] : [context.knownProject, item && !row.displayLabel.endsWith(' ' + item) ? item : null].filter(Boolean);
+        const factsEl = labelText(facts.join(' · '), 11, muted).id('row-facts:' + i.key).flex_1();
+        // The provider is named for people using a screen reader instead of a GH/ADO chip.
+        if (item && provider) factsEl.accessibility_label([context.knownProject, provider + ' ' + (row.workItem.kind === 'pr' ? 'pull request ' : 'issue ') + item].filter(Boolean).join(' · '));
+        element.child(factsEl);
+        // The quiet tail: the Space when the group is not that Space, and the machine only
+        // when remote (a pinned row always names where it is, This computer included).
+        const where = [i.space && !section?.space ? i.space.name : null,
+          row.core.alias || i.pinned ? context.machineShort : null].filter(Boolean).join(' · ');
+        if (where) element.child(labelText(where, 10, muted).id('row-machine:' + i.key).flex_none().max_w(i.space && !section?.space ? 150 : 84));
         if (context.knownContext) element.child(labelText(context.knownContext, 10, muted).id('row-execution-context:' + i.key).flex_none().max_w(72));
         const stateColor = ({ Working: theme.working, 'Needs you': theme.blocked, 'Child needs you': theme.blocked,
           Done: theme.done, Idle: theme.idle })[status] ?? (waiting ? theme.accent : muted) ?? fg;
@@ -564,10 +612,6 @@ export function createRosterView(kit, app, options = {}) {
           const chip = h().h(18).max_w(104).min_w(0).flex_none().px(4).rounded(4).bg(theme.raised).child(labelText(value, 10));
           return outline ? chip.border(1).border_color(outline) : chip;
         };
-        if (provider === 'GitHub' || provider === 'Azure DevOps') {
-          const providerChip = badge(provider === 'GitHub' ? 'GH' : 'ADO').accessibility_label(provider + ' provider badge').tooltip(provider);
-          element.child(providerChip);
-        }
         // Status groups by state, so a chip that repeats its header is dropped there; Projects
         // mixes states and keeps every chip. Waiting stays in Working with a compact marker.
         const statusView = viewMode === 'status';
@@ -577,10 +621,15 @@ export function createRosterView(kit, app, options = {}) {
         // The pinned header already says Needs you: its rows carry no repeated chip.
         else if (i.pinned) { /* no chip */ }
         else if (!(statusView && !i.display.error && section?.label === i.status)) element.child(badge(status, stateColor));
+        // A discreet chevron on hover or keyboard focus, only on a row that can open its
+        // exact session; its place is always reserved so nothing shifts.
+        const infoShown = this.hoverKey === i.key || [i.key, 'info:' + i.key].includes(c.cursor) || reader?.sourceKey === i.key;
+        const opens = h().id('row-open:' + i.key).w(10).h(16).flex_none().justify_center();
+        if (infoShown && i.navigation.enabled) opens.child(icon('chevron-right', 10).text_color(muted));
+        element.child(opens);
         const line = h().id('line:' + i.key).h(24).flex_none().min_w(0).gap(2).pl(Math.min(i.depth, 3) * 8).child(element)
           .on_hover((on, cx) => { if (on) this.hoverKey = i.key; else if (this.hoverKey === i.key) this.hoverKey = null; cx.notify(); });
         // A discreet ⓘ, drawn on hover or keyboard focus; its place is always reserved.
-        const infoShown = this.hoverKey === i.key || [i.key, 'info:' + i.key].includes(c.cursor) || reader?.sourceKey === i.key;
         const info = click('info:' + i.key, 'Agent details for ' + row.displayLabel, cx => this.openDetails({ key: 'info:' + i.key, instance: i }, cx))
           .w(18).h(24).flex_none().px(0).justify_center().tooltip('Agent details')
           .child(labelText(infoShown ? 'ⓘ' : '', 12, muted).id('info-glyph:' + i.key));

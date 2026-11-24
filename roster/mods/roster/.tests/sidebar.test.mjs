@@ -28,7 +28,7 @@ test('actual main entry defaults passive, captures exactly once, renders labels 
   // Spaces lists no agents; only the pinned Needs you rows, drawn above the tabs.
   assert.ok(rows(view.controller.projection).every(i => i.pinned)); assert.doesNotMatch(textOf(flatten(tree).find(e => e.attributes.id?.[0] === 'roster-rows')), /Planner #12/);
   view.controller.change({ type: 'view', view: 'projects' }); tree = view.render(c.cx);
-  assert.match(textOf(tree), /Planner #12/); assert.match(textOf(tree), /\bGH\b/); assert.doesNotMatch(textOf(tree), /Context unknown/);
+  assert.match(textOf(tree), /Planner #12/); assert.ok(flatten(tree).some(e => e.attributes.accessibility_label?.[0] === 'GitHub issue #12'), 'the provider is named on the work item'); assert.doesNotMatch(textOf(tree), /Context unknown/);
   // Production default: Needs you stays open; the Other group starts folded with its count.
   assert.ok(view.controller.projection.instances.filter(i => i.kind === 'section' && i.label === 'Other').every(i => i.collapsed));
   // Needs you never folds, so it has no chevron; Other starts folded.
@@ -151,7 +151,8 @@ test('hidden children retain an accessible unfold control and use full waiting l
 test('configured private icons always fall back when production containment guarantees are unavailable', () => {
   const { f } = waitingWorld(); const e = f.host.evidence(); const cfg = JSON.parse(settings); cfg.icons = [{ projectId: 'sample', asset: 'sample.svg' }];
   e.settings = JSON.stringify(cfg); f.host.evidence = () => structuredClone(e); const { view, cx } = viewOf(f); const tree = view.render(cx);
-  assert.match(textOf(tree), /Sample project/); assert.ok(flatten(tree).some(e => e.attributes.accessibility_label?.[0] === 'Sample project project icon fallback'));
+  // Project branding stays apart from terminal icons: the project is named in text, no project icon.
+  assert.match(textOf(tree), /Sample project/); assert.equal(flatten(tree).some(e => /project icon/.test(e.attributes.accessibility_label?.[0] ?? '')), false);
   assert.equal(flatten(tree).some(e => e.attributes.image), false);
 });
 
@@ -237,9 +238,9 @@ test('compact sidebar keeps a single default toolbar and puts row badges on the 
     const second = byId(tree, find(view.controller.projection, 't2').key);
     assert.ok(first.attributes.flex_row);
     assert.equal(first.attributes.h[0], 24);
-    assert.ok(flatten(first).some(e => e.attributes.accessibility_label?.[0] === 'GitHub provider badge'));
+    assert.ok(flatten(first).some(e => /GitHub issue #/.test(e.attributes.accessibility_label?.[0] ?? '')), 'provider named on the work item, no chip');
     assert.equal(flatten(first).some(e => /project icon fallback/.test(e.attributes.accessibility_label?.[0] ?? '')), false);
-    assert.equal(flatten(second).some(e => e.attributes.accessibility_label?.[0].includes('provider badge')), false);
+    assert.equal(flatten(second).some(e => /GitHub|Azure DevOps/.test(e.attributes.accessibility_label?.[0] ?? '')), false);
     assert.doesNotMatch(textOf(rows), /Open unavailable|Waiting/);
     assert.equal(first.attributes.tooltip[0].replace(/\n/g, ' '), 'Developer #12 · Working Open unavailable: terminal identity is unverified');
     assert.match(first.attributes.accessibility_label[0], /Open unavailable: terminal identity is unverified/);
@@ -323,7 +324,7 @@ test('unknown filters and literal null IDs stay distinct; a vanished selection a
   assert.equal(f.calls.length, 0);
 });
 
-test('both providers are inline, named separately from project fallback; unknown providers are absent', () => {
+test('both providers are named on the work item, never as a chip; unknown providers are absent', () => {
   const f = fakeHost([
     terminal('t1', 'working', { labels: { 'herdr.issue': 'sample/repo#12' } }),
     terminal('t2', 'working', { labels: { 'herdr.issue': 'https://dev.azure.com/sample/project/_workitems/edit/42' } }),
@@ -334,13 +335,16 @@ test('both providers are inline, named separately from project fallback; unknown
     view.controller.change({ type: 'view', view: mode }); const tree = view.render(cx);
     for (const [address, provider] of [['t1', 'GitHub'], ['t2', 'Azure DevOps'], ['t3', null]]) {
       const item = find(view.controller.projection, address), element = flatten(tree).find(e => e.attributes.id?.[0] === item.key);
-      const badges = flatten(element).filter(e => e.attributes.accessibility_label?.[0].includes('provider badge'));
-      assert.deepEqual(badges.map(e => e.attributes.accessibility_label[0]), provider ? [provider + ' provider badge'] : []);
+      const named = flatten(element).filter(e => /^(GitHub|Azure DevOps) issue #/.test(e.attributes.accessibility_label?.[0] ?? ''));
+      assert.deepEqual(named.map(e => e.attributes.accessibility_label[0].split(' issue')[0]), provider ? [provider] : []);
+      assert.doesNotMatch(textOf(element), /\b(GH|ADO)\b/);
       assert.equal(flatten(element).some(e => /project icon fallback/.test(e.attributes.accessibility_label?.[0] ?? '')), false);
-      assert.match(textOf(element), /This computer/); assert.doesNotMatch(textOf(element), /Context unknown|Unassigned/);
+      // Local: no machine in the tail.
+      assert.doesNotMatch(textOf(element), /This computer|Context unknown|Unassigned/);
       if (!provider) assert.match(textOf(element), /Sample unlabeled process/);
-      const chip = element.children.at(-1);
-      assert.ok(chip.attributes.max_w[0] <= 104, 'long state text must leave room for row identity');
+      // Any status chip is bounded (Status drops a chip its header already names).
+      for (const chip of element.children.filter(e => e.attributes.rounded && e.attributes.border)) assert.ok(chip.attributes.max_w[0] <= 104, 'long state text must leave room for row identity');
+      assert.equal(element.children.at(-1).attributes.id[0], 'row-open:' + item.key, 'the chevron slot is last');
     }
   }
 });

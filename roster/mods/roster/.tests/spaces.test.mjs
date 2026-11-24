@@ -166,7 +166,7 @@ test('a connected machine without Spaces offers "New space there", which opens t
 // (folded or not), the tail, and the chevron last (or an empty slot where a group never folds).
 const shape = el => el.children.map(e => {
   const id = e.attributes.id?.[0] ?? '';
-  if (/^group-icon:/.test(id)) return e.attributes.frames ? 'icon:spinner' : e.attributes.svg ? 'icon:' + e.attributes.svg[0].split('/').pop().replace('.svg', '') : 'icon:initial';
+  if (/^group-icon:/.test(id)) return e.attributes.spin ? 'icon:spinning-' + e.attributes.svg[0].split('/').pop().replace('.svg', '') : e.attributes.frames ? 'icon:spinner' : e.attributes.svg ? 'icon:' + e.attributes.svg[0].split('/').pop().replace('.svg', '') : 'icon:initial';
   if (/^group-label:/.test(id)) return 'title';
   if (/^group-count:/.test(id)) return 'count:' + textOf(e);
   if (/^group-chevron:/.test(id)) return e.attributes.svg ? 'chevron' : 'slot';
@@ -189,7 +189,7 @@ test('Status headers: the shared header with a status icon, the count, and the c
   const sections = view.controller.projection.instances.filter(i => i.kind === 'section');
   const head = label => byId(tree, sections.find(x => x.label === label).key);
   assert.deepEqual(shape(head('Needs you')), ['icon:bell', 'title', 'count:1', 'slot'], 'never folds: slot keeps the count aligned');
-  assert.deepEqual(shape(head('Working')), ['icon:spinner', 'title', 'count:1', 'chevron']);
+  assert.deepEqual(shape(head('Working')), ['icon:spinning-working', 'title', 'count:1', 'chevron']);
   assert.deepEqual(shape(head('Done')), ['icon:check-circle', 'title', 'count:1', 'chevron']);
   assert.deepEqual(shape(head('Idle')), ['icon:pause-circle', 'title', 'count:1', 'chevron']);
   assert.deepEqual(shape(head('Unknown')), ['icon:help-circle', 'title', 'count:1', 'chevron']);

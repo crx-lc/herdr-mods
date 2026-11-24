@@ -1,3 +1,4 @@
+import { programOf } from './runtime.js';
 // Pure adapters: the caller supplies observations and time, never a live host.
 export const object = value => value !== null && typeof value === 'object' && !Array.isArray(value) ? value : {};
 export const list = value => Array.isArray(value) ? value : [];
@@ -58,6 +59,8 @@ function adapt(source, input, observation, now) {
     name: text(r.name), tabTitle: text(o.tabTitle), tabNamed: o.tabNamed === true,
     // The agent's own status message, when it reports one (Herdr's report / status.msg).
     reportMessage: text(typeof r.report === 'string' ? r.report : object(r.report).msg ?? object(r.status).msg),
+    // What runs there, from Herdr's program table only (see runtime.js).
+    program: compact ? null : programOf(r.program),
     labels, invalidLabels, incarnation: createdMs,
     process: compact ? null : { pid: stamp(r.pid), run: text(object(r.labels)['herdr.run']) },
     lifecycle, rawStatus,

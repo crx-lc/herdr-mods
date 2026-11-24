@@ -206,6 +206,18 @@ and [herdr-agents delegations v1 at 55c71df](https://github.com/crx-lc/herdr-age
 These pins are source evidence, not installed Desktop version proof. No network
 source, external asset, dependency or Better Sidebar code/assets is bundled.
 
+Terminal row icons: each row's one leading icon comes from Herdr's own program table
+(the `program` Herdr reports for the terminal), never from a tab title, name or role.
+Agent and program icons (Claude Code, Codex, Antigravity, the Watcher's and Supervisor's
+entries, other shells) are Herdr's shipped files in `icons/` of Herdr's home, drawn by
+reference and not bundled here; their notices are Herdr's (`icons/LICENSES.md`). Roster
+ships two original glyphs, `icons/bash.svg` and `icons/powershell.svg`: a generic prompt
+in each shell's customary color, not either project's logo. An unknown program gets the
+neutral `icons/terminal.svg`. Motion is limited to the Working header icon and one short
+pulse of the Needs you bell; Herdr does not report a system reduced-motion preference, so
+Options > Motion turns both off (kept in this mod's `localStorage`), as does a
+`reduce_motion` flag if Herdr's settings ever carry one.
+
 Run `npm test` in the repository. For optional offline published contract parity,
 set `ROSTER_DELEGATION_FIXTURES` to the separately downloaded pinned evidence
 folder containing `reader-cases.json` and `delegation-read.mjs`; tests never fetch.

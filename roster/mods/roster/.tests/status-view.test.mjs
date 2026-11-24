@@ -1,16 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createRosterView, WORKING_FRAMES } from '../view.js';
+import { createRosterView } from '../view.js';
 import { fakeHost, terminal, fixture, prove, settings, kit, context, appOf, flatten, textOf, layoutHostUnused, expanded } from './sidebar-fixtures.mjs';
 
 const byId = (tree, id) => flatten(tree).find(e => e.attributes.id?.[0] === id);
 const chips = el => flatten(el).filter(e => e.attributes.max_w?.[0] === 104).map(textOf);
-function setup(f) {
-  const Type = createRosterView(kit, appOf(f.host), { host: f.host, layoutHost: layoutHostUnused, ...expanded });
+function setup(f, app = {}) {
+  const Type = createRosterView(kit, { ...appOf(f.host), ...app }, { host: f.host, layoutHost: layoutHostUnused, ...expanded });
   const view = new Type(), c = context(); view.init({}, c.cx); return { view, ...c, render: () => view.render(c.cx) };
 }
 const rowsOf = view => view.controller.projection.instances.filter(i => i.kind === 'terminal');
-const spinners = tree => flatten(tree).filter(e => e.attributes.frames);
+// Anything that moves: a frames spinner, a turning icon, or a looping property.
+const spinners = tree => flatten(tree).filter(e => e.attributes.frames || e.attributes.spin || e.attributes.loop);
 const mixed = () => fakeHost([terminal('t1', 'working'), terminal('t2', 'idle'), terminal('t3', 'done'), terminal('t4', 'blocked'), terminal('t5', 'error')]);
 
 test('Status drops chips that repeat their group header; Projects keeps every chip', () => {
@@ -40,12 +41,13 @@ test('Status drops chips that repeat their group header; Projects keeps every ch
   assert.equal(f.calls.length, 0);
 });
 
-test('one native spinner marks the Working header in Status, and only there', () => {
-  const f = mixed(), s = setup(f);
+test('one native turning ring marks the Working header in Status, in the working color, and only there', () => {
+  const f = mixed(), s = setup(f, { theme: () => ({ ...appOf(f.host).theme(), working: '#33aa55' }) });
   s.view.controller.change({ type: 'view', view: 'status' }); let tree = s.render();
   const found = spinners(tree);
   assert.equal(found.length, 1);
-  assert.deepEqual(found[0].attributes.frames, [WORKING_FRAMES, 80]);
+  assert.equal(found[0].attributes.svg[0], 'mods/roster/icons/working.svg'); assert.equal(found[0].attributes.spin[0], 1200);
+  assert.equal(found[0].attributes.text_color[0], '#33aa55');
   const working = s.view.controller.projection.instances.find(i => i.kind === 'section' && i.label === 'Working');
   assert.ok(flatten(byId(tree, working.key)).includes(found[0]), 'inside the Working header');
   assert.equal(found[0].attributes.on_click, undefined);

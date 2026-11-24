@@ -41,13 +41,16 @@ test('a discreet ⓘ appears on hover or keyboard focus, keeps its place, and ne
 
 test('the modal lies over the list without changing scroll, folds or rows; no pagination', () => {
   const s = setup(); let tree = s.render(); const i = item(s.view, 't1');
-  const rowsBefore = textOf(byId(tree, 'roster-rows')), folds = JSON.stringify(s.view.controller.state.folds), scrolls = s.view.rowScroll.requests.length;
+  // The list text without the open row's hover marks (its ⓘ and chevron).
+  const skip = new Set(['info-glyph:' + i.key, 'row-open:' + i.key]);
+  const listText = el => el && typeof el === 'object' ? (skip.has(el.attributes.id?.[0]) ? '' : el.children.map(listText).join(' ')) : String(el ?? '');
+  const rowsBefore = listText(byId(tree, 'roster-rows')), folds = JSON.stringify(s.view.controller.state.folds), scrolls = s.view.rowScroll.requests.length;
   click(s, tree, 'info:' + i.key); tree = s.render();
   const stack = byId(tree, 'roster-stack'), modal = byId(tree, 'roster-details');
   assert.ok(stack.attributes.relative); assert.ok(modal.attributes.absolute);
   assert.deepEqual(stack.children.map(e => e.attributes.id[0]), ['roster-rows', 'roster-details']);
-  // The list is unchanged except that the open row keeps its ⓘ shown.
-  assert.equal(textOf(byId(tree, 'roster-rows')).replace('ⓘ', ''), rowsBefore);
+  // The list is unchanged except that the open row keeps its ⓘ (and chevron) shown.
+  assert.equal(listText(byId(tree, 'roster-rows')), rowsBefore);
   assert.doesNotMatch(textOf(modal), /Page \d|Previous|Next|Details at opening/);
   s.key('escape'); tree = s.render();
   assert.equal(byId(tree, 'roster-details'), undefined);

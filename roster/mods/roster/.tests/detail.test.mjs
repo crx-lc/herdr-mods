@@ -43,7 +43,7 @@ test('truthful project, verified parent, host vs route, context, provider, reaso
   assert.equal(fields.provider, 'Azure DevOps'); assert.match(detailLabel(i), /Verified parent/);
   assert.equal(s.f.calls.length, 0);
 });
-test('compact row keeps known project as a monogram only; parent/project read in Info, a sibling with exact owner and row index', () => {
+test('compact row leads with the runtime icon, never a project monogram; parent/project read in Info, a sibling with exact owner and row index', () => {
   const f = fakeHost([terminal('t1', 'idle', { labels: { 'herdr.role': 'coordinator' } }),
     terminal('t2', 'blocked', { parent: 't1', labels: { 'herdr.project': 'sample', 'herdr.role': 'developer' } })]);
   prove(f.host, { settings }); const s = setup(f);
@@ -51,7 +51,9 @@ test('compact row keeps known project as a monogram only; parent/project read in
     s.view.controller.change({ type: 'view', view: mode }); const tree = s.view.render(s.cx), i = item(s.view, 't2');
     const el = byId(tree, i.key), body = byId(tree, 'roster-rows');
     assert.equal(el.attributes.h[0], 24);
-    assert.ok(flatten(el).some(e => e.attributes.accessibility_label?.[0] === 'Sample project project icon fallback'));
+    // Project branding stays apart from terminal icons: the one leading icon is the runtime's.
+    assert.equal(flatten(el).some(e => /project icon fallback/.test(e.attributes.accessibility_label?.[0] ?? '')), false);
+    assert.equal(el.children[0].attributes.id[0], 'row-kind:' + i.key);
     assert.doesNotMatch(textOf(el), /Project:|Parent:|Context unknown/);
     assert.match(el.attributes.accessibility_label[0], /Project: Sample project.*Parent: Coordinator/);
     assert.equal(byId(el, 'info:' + i.key), undefined, 'Info must not bubble into terminal activation');

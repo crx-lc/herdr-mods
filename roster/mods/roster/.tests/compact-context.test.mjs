@@ -32,7 +32,8 @@ for (const mode of ['projects', 'status']) for (const state of ['working', 'bloc
       // The compact row draws only known facts; hover and the focus footer keep the full context.
       const drawnRow = textOf(byId(tree, child.key));
       assert.doesNotMatch(drawnRow, /Parent:|Project:|Context unknown|Unassigned/);
-      assert.match(drawnRow, /This computer/);
+      // The machine is named in the tail only when remote; a pinned Needs you row always says where.
+      if (child.pinned) assert.match(drawnRow, /This computer/); else assert.doesNotMatch(drawnRow, /This computer/);
       for (const drawn of [byId(tree, child.key).attributes.accessibility_label[0], textOf(byId(tree, 'roster-focus-tooltip'))]) {
         assert.match(drawn, /Parent: Coordinator/);
         assert.ok(drawn.includes(mapped ? 'Sample project' : 'Unassigned'));
