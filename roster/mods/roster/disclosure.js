@@ -10,9 +10,12 @@ export function rowAnchor(instance, snapshot = {}) {
   if (!instance || instance.kind !== 'terminal') return null;
   const row = instance.row, raw = (snapshot.terminals ?? []).filter(t => t?.address === row.address);
   const machine = row.address.includes('/') ? row.address.slice(0, row.address.indexOf('/')) : null;
-  const target = machineAnchor(machine, snapshot.machines);
-  if (!target || raw.length !== 1 || raw[0].state !== 'live') return null;
-  return JSON.stringify([instance.key, instance.identity, row.associationKey, target,
+  // Inspection records observed availability; it does not admit native actions.
+  // Missing machines are inspectable, but any later availability/identity change closes.
+  const found = (snapshot.machines ?? []).filter(m => m && (m.name ?? null) === machine);
+  const target = JSON.stringify([machine, found.map(m => [m.id ?? null, m.layout ?? null])]);
+  if (raw.length !== 1) return null;
+  return JSON.stringify([instance.key, instance.identity, row.associationKey, target, raw[0].state ?? null,
     raw[0].created_ms ?? null, raw[0].pid ?? null, raw[0].labels?.['herdr.run'] ?? null]);
 }
 export function sameDisclosure(panel, kind, anchor) {

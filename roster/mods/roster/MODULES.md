@@ -634,7 +634,10 @@ created in init/events, attached to exact triggers, and focused on explicit retu
 Removal consults actual `is_focused()`/input focus events, never selection tint.
 
 Anchors compare the exact instance key, current raw terminal incarnation/process/run
-and unique ready machine. Unknown permanent Core identity stays unknown. Folder
+and observed machine identity/availability (including absence) for read-only inspection.
+Availability changes close an existing inspection; a currently listed unavailable row
+can open a new one with disabled actions. Folder admission requires a unique ready
+machine. Unknown permanent Core identity stays unknown. Folder
 confirmation compares the exact drawn path/proof and current machine before native
 execution; existing Spaces are rechecked against their current ID/machine/tabs/place.
 Native machine API names do not prove an unobserved connection epoch. Details and
@@ -645,3 +648,8 @@ terminal-input protocol, remote file reader or terminal operations were added.
 
 See README.md for final-candidate Windows checks still pending; injected Node views
 verify decisions and requested focus/scroll calls, not real native focus or geometry.
+
+Boundary Tab/Shift-Tab propagate to native traversal without wrapping. Input editing
+ownership begins on an owner-guarded focus event, never a request. Post-render tasks
+request minimal panel-owner/first-control reveals and prompt active-Space reveals;
+selection changes during inspection are consumed without a post-close replay.

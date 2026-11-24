@@ -44,19 +44,9 @@ export function createRosterView(kit, app, options = {}) {
       this.controls = []; this.message = ''; this.selection = null; this.reading = false; this.toolsOpen = false;
       // Where the cursor was when an event last placed it; Up/Down resume there if its row vanishes.
       this.cursorAt = null;
-      // "Open folder as Space…": a retained path field for remote machines, made once here.
+      // "Open folder as Space…": each owner gets its own retained remote path field.
       this.newSpace = null;
-      this.pathInput = typeof InputState?.new === 'function' ? InputState.new({ placeholder: 'Folder on that machine' }) : null;
-      this.pathInput?.on?.('change', (_e, cx) => {
-        const ns = this.newSpace;
-        if (ns?.machine && ns.folder && this.pathInput.value().trim() !== ns.folder) {
-          ns.folder = null; ns.check = null; ns.confirmUnverified = false; cx.notify();
-        }
-      });
-      this.pathInput?.on?.('submit', (_e, cx) => { if (this.newSpace) this.checkFolder(this.pathInput.value(), cx); });
-      // The inline form knows when its path field holds the keyboard, so the field keeps its keys.
-      this.pathInput?.on?.('focus', () => { this.inputFocused = true; if (this.newSpace) { this.newSpaceCursor = 'new-space:path'; this.place('new-space:path'); } });
-      this.pathInput?.on?.('blur', () => { this.inputFocused = false; });
+      this.pathInput = null; this.inputFocused = false;
       // D8: whether Herdr reports a machine ready right now, from a fresh machines().
       this.isReady = machine => machineAnchor(machine, this.controller.host.machines() ?? []) !== null;
       if (!app.checking()) cx.spawn(async cx => {
@@ -76,7 +66,7 @@ export function createRosterView(kit, app, options = {}) {
         this.machineReady = new Map();
       }
       // One gentle 1s timer: the Needs you arrival check, and the Spaces probes when there are any.
-      if (ticking) cx.timer.every(1000, cx => { this.reconcilePanel(cx); this.revealSpace(); this.watchArrivals(cx); if (this.machineReady) this.pollGit(cx); });
+      if (ticking) cx.timer.every(1000, cx => { this.reconcilePanel(cx); this.watchArrivals(cx); if (this.machineReady) this.pollGit(cx); });
     }
     // Watch readiness in every tab; ask about Spaces' folders on ready machines while Spaces
     // is shown; redraw on answers.
@@ -139,8 +129,10 @@ export function createRosterView(kit, app, options = {}) {
     // The same event path owns all Roster disclosures. Native picker/dialogs stay native.
     dismissPanel(cx, restore = true) {
       const panel = this.panel;
+      if (panel) this.observedSpace = { id: this.controller.host.spaces().find(sp => sp.active)?.id ?? null };
       this.panel = null; this.reader = null; this.newSpace = null; this.toolsOpen = false;
-      this.readerControls = []; this.inputFocused = false; this.newSpaceCursor = null;
+      const oldInput = this.pathInput; this.pathInput = null; oldInput?.release?.();
+      this.readerControls = []; this.inputFocused = false; this.inputRequest = null; this.newSpaceCursor = null;
       if (restore && panel) {
         const projection = this.controller.render();
         const available = this.controls.filter(control => !control.instance || projection.instances.some(i => i.key === control.instance.key));
@@ -160,7 +152,7 @@ export function createRosterView(kit, app, options = {}) {
       for (const [key, handle] of this.triggerHandles) if (key !== 'mode:projects' && !this.controls.some(control => control.key === key)) { handle.release?.(); this.triggerHandles.delete(key); }
       if (!this.triggerHandles.has(returnKey)) this.triggerHandles.set(returnKey, cx.focus_handle());
       this.panelRead = 0;
-      this.panel = { kind, anchor, returnKey, ...extra };
+      this.panel = { kind, anchor, returnKey, revealPending: true, ...extra };
       return true;
     }
     reconcilePanel(cx) {
@@ -184,17 +176,59 @@ export function createRosterView(kit, app, options = {}) {
       const anchor = machineAnchor(machine, this.controller.host.machines());
       if (!this.beginPanel('folder', anchor, returnKey, cx, { machine })) return;
       this.newSpace = { machine, anchor, returnKey, folder: null, check: null, confirmUnverified: false };
-      this.pathInput?.set_value?.('');
+      this.makePathInput();
       // The real input keeps editing keys; Tab can leave the inline form for surrounding rows.
       this.newSpaceCursor = machine && this.pathInput ? 'new-space:path' : 'new-space:pick';
       this.place(this.newSpaceCursor);
-      if (machine && this.pathInput) { this.inputFocused = true; this.pathInput.focus?.(); }
+      if (machine && this.pathInput) this.requestInputFocus();
       cx.notify();
+    }
+    makePathInput() {
+      const owner = this.newSpace;
+      const input = typeof InputState?.new === 'function' ? InputState.new({ placeholder: 'Folder on that machine' }) : null;
+      this.pathInput = input;
+      const current = () => this.newSpace === owner && this.pathInput === input && this.activeNewSpace();
+      input?.on?.('change', (_e, cx) => {
+        if (!current()) return;
+        if (owner.folder && input.value().trim() !== owner.folder) {
+          owner.folder = null; owner.check = null; owner.confirmUnverified = false; cx.notify();
+        }
+      });
+      input?.on?.('submit', (_e, cx) => { if (current()) this.checkFolder(input.value(), cx); });
+      input?.on?.('focus', () => {
+        if (!current()) return;
+        // A native focus event also covers clicking back into the mounted field.
+        this.inputFocused = true; this.newSpaceCursor = 'new-space:path'; this.place('new-space:path');
+      });
+      input?.on?.('blur', () => { if (this.pathInput === input) this.inputFocused = false; });
+    }
+    requestInputFocus() {
+      this.inputFocused = false;
+      this.inputRequest = { owner: this.newSpace, input: this.pathInput };
+    }
+    // Render supplies fresh direct-child indices; native requests execute in a task.
+    afterRender(cx, panel, controls, selection) {
+      this.observeSpace(selection, cx);
+      if (this.panel !== panel || !panel) return;
+      this.reconcilePanel(cx);
+      if (this.panel !== panel) return;
+      if (panel.revealPending) {
+        panel.revealPending = false;
+        const first = controls.find(c => c.key === (panel.kind === 'details' ? 'details:close' : panel.kind === 'folder' ? 'new-space:cancel' : null));
+        if (first) { this.reveal(first); cx.notify(); }
+      }
+      const request = this.inputRequest;
+      this.inputRequest = null;
+      if (request && this.newSpace === request.owner && this.pathInput === request.input
+        && this.controller.cursor === 'new-space:path' && this.handle.is_focused?.() === true) {
+        // Failure or no focus event leaves normal sidebar keys usable.
+        try { request.input?.focus?.(); } catch { this.inputFocused = false; }
+      }
     }
     closeNewSpace(cx) { this.dismissPanel(cx); }
     placeNewSpace(control, cx) {
       this.newSpaceCursor = control.key; this.place(control.key);
-      if (control.input) this.pathInput?.focus?.();
+      if (control.input) { this.requestInputFocus(); try { this.pathInput?.focus?.(); } catch { /* Await actual focus. */ } }
       else { this.inputFocused = false; this.handle.focus(); }
       cx.notify();
     }
@@ -250,7 +284,7 @@ export function createRosterView(kit, app, options = {}) {
       const projection = this.controller.render();
       const instance = projection.instances.find(i => i.key === control.instance.key);
       const anchor = rowAnchor(instance, this.controller.feed.snapshot);
-      if (!anchor || (control.anchor && anchor !== control.anchor)) return;
+      if (!anchor || (control.anchor && anchor !== control.anchor)) { this.message = 'Details unavailable: the exact listed instance changed or is ambiguous'; cx.notify(); return; }
       if (!this.beginPanel('details', anchor, control.key, cx)) return;
       this.reader = { sourceKey: instance.key, returnKey: control.key, anchor,
         state: JSON.stringify(this.controller.state), technical: false };
@@ -277,8 +311,12 @@ export function createRosterView(kit, app, options = {}) {
         cx.stop_propagation(); this.openDetails(selected, cx); return;
       }
       if (!['up', 'down', 'tab', 'shift-tab', 'enter', 'space'].includes(chord)) return;
-      cx.stop_propagation();
       const c = this.controller, controls = this.controls, count = controls.length;
+      const at = controls.findIndex(i => i.key === c.cursor);
+      // At either boundary let native Tab traversal leave this sidebar.
+      if ((chord === 'tab' && (count === 0 || at === count - 1))
+        || (chord === 'shift-tab' && (count === 0 || at === 0))) return;
+      cx.stop_propagation();
       if (chord === 'enter' || chord === 'space') controls.find(i => i.key === c.cursor)?.activate(cx);
       else if (count) {
         const index = controls.findIndex(i => i.key === c.cursor), step = ['up', 'shift-tab'].includes(chord) ? -1 : 1;
@@ -290,7 +328,7 @@ export function createRosterView(kit, app, options = {}) {
         } else next = step > 0 ? 0 : count - 1;
         const control = controls[next];
         this.place(control.key); this.newSpaceCursor = control.key; this.readerCursor = control.key;
-        if (control.input) this.pathInput?.focus?.();
+        if (control.input) { this.requestInputFocus(); try { this.pathInput?.focus?.(); } catch { /* No focus event: keep sidebar keys. */ } }
         else { this.inputFocused = false; this.handle.focus(); }
         this.reveal(control);
       }
@@ -309,7 +347,7 @@ export function createRosterView(kit, app, options = {}) {
       const identityOf = space => this.git?.lookup(space.machine ?? null, spacePlace(space, snapshot.panes)) ?? null;
       const rows = spaceRows({ spaces: snapshot.spaces, machines: snapshot.machines }, { colors, folds: c.state.folds, identityOf });
       // The list scrolls by its direct children; count them to find the active row's place.
-      let drawn = 0, activeAt = -1, activeId = null;
+      let drawn = 0, activeAt = -1, activeId = snapshot.spaces?.find(sp => sp.active)?.id ?? null;
       const add = element => { body.child(element); drawn++; };
       if (this.activeNewSpace() && !rows.some(row => row.kind === 'machine' && row.machine === this.newSpace.machine)) {
         const before = this.controls.length;
@@ -373,15 +411,19 @@ export function createRosterView(kit, app, options = {}) {
         add(element);
       }
       if (!rows.length) body.child(labelText('No Spaces', 12, muted).p(6));
-      // Render output consumed by the next event, like controls. Opening a panel never
-      // sends a scroll request. An actual active-Space change can reveal itself on the timer.
-      this.spaceReveal = { id: activeId, at: activeAt };
+      this.spaceReveal = { id: activeId, at: activeAt, view: c.state.view };
     }
-    revealSpace() {
-      const next = this.spaceReveal;
-      if (!next || this.panel || (next.id === this.revealed?.id && next.at === this.revealed?.at)) return;
-      this.revealed = next;
-      if (next.at >= 0) this.rowScroll.scroll_to_item(next.at);
+    observeSpace(next, cx) {
+      // Observed changes are consumed even during inspection, never queued for close.
+      const current = this.controller.host.spaces().filter(sp => sp.active);
+      const activeId = current.length === 1 ? current[0].id : null;
+      if (next?.id !== activeId) return; // A queued old render cannot reveal a stale key/index.
+      const changed = next?.id !== this.observedSpace?.id;
+      this.observedSpace = next;
+      if (changed && !this.panel && next?.view === 'spaces' && this.controller.state.view === 'spaces' && next.at >= 0) {
+        const control = this.controls.find(c => c.key === 'space:' + next.id);
+        if (control?.rowIndex === next.at) { this.rowScroll.scroll_to_item(next.at); cx.notify(); }
+      }
     }
     renderNewSpace(theme, { labelText, h, v, fg, muted }) {
       const c = this.controller, ns = this.newSpace, snapshot = c.feed.snapshot ?? {};
@@ -409,7 +451,7 @@ export function createRosterView(kit, app, options = {}) {
       if (!ns.machine) append(control('new-space:pick', 'Choose a folder on this computer', 'Choose folder…', cx => { this.chooseLocalFolder(cx); }));
       else {
         // A typed path on that machine, or one of the folders Herdr already reports there.
-        if (this.pathInput) { const input = { key: 'new-space:path', label: 'Folder on ' + machineLabel, input: true, panelIndex, activate: () => this.pathInput.focus?.() }; this.readerControls.push(input); this.controls.push(input); }
+        if (this.pathInput) { const input = { key: 'new-space:path', label: 'Folder on ' + machineLabel, input: true, panelIndex, activate: () => { try { this.pathInput?.focus?.(); } catch { /* No focus event: sidebar keys stay usable. */ } } }; this.readerControls.push(input); this.controls.push(input); }
         if (this.pathInput) append(h().flex_none().gap(4).child(Input.new(this.pathInput).id('new-space:path').h(24).min_w(0).flex_1().text_size(12))
           .child(control('new-space:check', 'Check this folder on ' + machineLabel, 'Check', cx => this.checkFolder(this.pathInput.value(), cx))));
         const tops = [...(this.git?.cache ?? new Map()).entries()].filter(([key, e]) => JSON.parse(key)[0] === ns.machine && e.status === 'repo').map(([, e]) => e.top);
@@ -494,6 +536,7 @@ export function createRosterView(kit, app, options = {}) {
       const c = this.controller;
       // this.controls is this render's output: the callbacks key events use. Nothing else is written.
       this.controls = [];
+      this.spaceReveal = { id: c.feed.snapshot?.spaces?.find(sp => sp.active)?.id ?? null, at: -1, view: c.state.view };
       const parents = new Set(c.feed.reduced.rows.map(r => r.parent?.associationKey).filter(Boolean));
       const fg = theme.foreground ?? theme.text;
       const muted = theme.muted ?? fg;
@@ -771,10 +814,12 @@ export function createRosterView(kit, app, options = {}) {
         const line = h().id('line:' + i.key).h(24).flex_none().min_w(0).gap(2).pl(Math.min(i.depth, 3) * 8).child(element)
           .on_hover((on, cx) => { if (on) this.hoverKey = i.key; else if (this.hoverKey === i.key) this.hoverKey = null; cx.notify(); });
         // A discreet ⓘ, drawn on hover or keyboard focus; its place is always reserved.
-        const info = click('info:' + i.key, 'Agent details for ' + row.displayLabel, cx => this.openDetails({ key: 'info:' + i.key, instance: i, anchor: selected.anchor }, cx))
+        const info = selected.anchor ? click('info:' + i.key, 'Agent details for ' + row.displayLabel, cx => this.openDetails({ key: 'info:' + i.key, instance: i, anchor: selected.anchor }, cx))
           .w(18).h(24).flex_none().px(0).justify_center().tooltip('Agent details')
-          .child(labelText(infoShown ? 'ⓘ' : '', 12, muted).id('info-glyph:' + i.key));
-        Object.assign(this.controls.at(-1), { ...at, instance: i, anchor: rowAnchor(i, c.feed.snapshot), detail: label, hover, disabledReason: selected.disabledReason });
+          .child(labelText(infoShown ? 'ⓘ' : '', 12, muted).id('info-glyph:' + i.key))
+          : div().id('info-unavailable:' + i.key).text_size(10).text_color(muted)
+            .child('Details unavailable: ambiguous instance');
+        if (selected.anchor) Object.assign(this.controls.at(-1), { ...at, instance: i, anchor: rowAnchor(i, c.feed.snapshot), detail: label, hover, disabledReason: selected.disabledReason });
         line.child(info);
         if (parents.has(row.associationKey)) {
           const collapsed = c.state.folds[i.key] ?? false;
@@ -826,7 +871,7 @@ export function createRosterView(kit, app, options = {}) {
         .tooltip(this.message).accessibility_label(this.message));
       const footerOwner = (reader?.returnKey === 'details:open' ? this.controls.find(control => control.key === reader.sourceKey) : null) ?? this.controls.find(control => control.key === c.cursor)
         ?? (c.cursor === 'details:open' ? this.controls.find(control => control.key === this.footerSourceKey) : null);
-      if (footerOwner?.instance) {
+      if (footerOwner?.instance && footerOwner.anchor) {
         this.controls.push({ ...footerOwner, key: 'details:open',
           activate: cx => this.openDetails({ key: 'details:open', instance: footerOwner.instance, anchor: footerOwner.anchor }, cx) });
       }
@@ -842,7 +887,7 @@ export function createRosterView(kit, app, options = {}) {
           .id('roster-disabled-reason').h(16).flex_none());
         const summary = h().h(16).flex_none().min_w(0)
           .child(labelText(foot.detail ?? foot.label, 11, muted).flex_1());
-        if (foot.instance) { const trigger = h().id('details:open').h(16).flex_none().px(3)
+        if (foot.instance && foot.anchor) { const trigger = h().id('details:open').h(16).flex_none().px(3)
           .bg(c.cursor === 'details:open' ? theme.selected ?? theme.raised : theme.surface)
           .accessibility_label('Details (D)').on_click((_e, cx) => {
             cx.stop_propagation(); this.footerSourceKey = foot.instance.key; this.place('details:open'); this.focus(cx);
@@ -855,6 +900,10 @@ export function createRosterView(kit, app, options = {}) {
         footer.child(summary);
         root.child(footer);
       }
+      const panel = this.panel, controls = this.controls, selection = this.spaceReveal;
+      cx.spawn(async cx => {
+        if (this.controls === controls) this.afterRender(cx, panel, controls, selection);
+      });
       return root;
     }
   };

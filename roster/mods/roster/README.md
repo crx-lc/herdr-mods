@@ -28,7 +28,8 @@ inline panels, with surrounding rows still usable; none covers the sidebar.
 - Info (ⓘ), D on a session control, or the footer's Details opens Agent Details
   directly below that exact row inside its group. The row stays mounted. Current
   host-reported/verified facts appear first; Technical details expands IDs and paths.
-  Unknown identity and missing facts remain unknown. The row name retains its exact
+  Listed Stale/Unknown, disconnected and missing-machine rows remain readable with
+  an unavailable-action reason; unknown identity and missing facts remain unknown. The row name retains its exact
   guarded native activation. Opening/closing Details does not activate a terminal;
   **Go to terminal** is a separate explicit action using the same fresh host checks.
 - Options expands immediately below the tab toolbar. It retains independent
@@ -46,8 +47,11 @@ inline panels, with surrounding rows still usable; none covers the sidebar.
 
 Up/Down and Tab/Shift-Tab traverse visible controls in visual order, including
 surrounding rows and inline actions; Enter/Space activates the selected control.
+Tab at the last control and Shift-Tab at the first propagate to native focus traversal
+without wrapping or forcing terminal focus.
 The real path input keeps its editing keys and Enter checks the path; Tab leaves
-it. Home/End and PageUp/PageDown read the panel's scrollable content when the input
+it. Focus is requested after mounting; editing-key ownership starts only on an actual
+focus event. Failed requests leave sidebar keys usable. Home/End and PageUp/PageDown read the panel's scrollable content when the input
 is not editing. Esc closes the panel and focuses the exact surviving trigger via
 its retained native focus handle; if the target disappeared, Projects is the stable
 fallback. Automatic target removal returns focus only when a native focus handle
@@ -55,7 +59,13 @@ or the input's actual focus event says Roster holds the keyboard; visual selecti
 alone never authorizes taking focus from a terminal. Native keyboard routing,
 input Esc propagation and focus return still require final Windows validation.
 
-Panels preserve group folds, list handles and stable row containers. Details and
+Panels preserve group folds, list handles and stable row containers. Opening Details
+or a folder form requests a minimal reveal of its owning direct list child after
+render, plus its first inner control. Already visible children stay put through the
+supported ScrollHandle API; close adds no compensating jump. Other viewports retain
+their offsets. Actual external Space selection changes reveal promptly from a
+post-render task. Changes observed during inspection are consumed without scrolling
+and are never replayed when a panel closes. Details and
 the folder form use a bounded 112px internal vertical scrollbar (96px for pinned
 Details); Options retains its 52px viewport. Long values/actions wrap, with invisible
 wrap opportunities in tokens longer than 24 code points. Accessible labels and
@@ -63,10 +73,13 @@ native action arguments retain the original text. These are compact-layout provi
 not evidence of native fit or Unicode shaping. No new screenshot is claimed.
 
 A panel binds to the exact current projection instance and observed terminal
-incarnation/process/run, or to the exact unique ready machine name (null means this
-computer). A remote machine literally named `local` has a separate key. Missing,
-replaced, duplicate or unavailable targets hide the panel immediately and cancel
-its state in a subsequent event/task. View/filter/fold changes close Details;
+incarnation/process/run and observed machine identity/availability, including a
+currently absent machine record. Folder actions require the exact unique ready
+machine (null means this computer). A remote machine named `local` has a separate
+key. Removal, replacement or an observed availability change hides an open panel
+and cancels its state in a subsequent event/task. Opening a new read-only inspection
+of a currently unavailable row is permitted. Ambiguous raw occurrences show an
+explicit Details-unavailable reason instead of a focusable Info trigger. View/filter/fold changes close Details;
 unchanged refreshes do not. Old action callbacks recheck the panel owner, current
 machine, path and proof. Existing Space actions recapture the model and reject a
 changed target. Late picker/check answers cannot enter a replacement panel.
@@ -90,13 +103,23 @@ At a neutral 330×350 sidebar, record final commit SHA, installed file hashes, D
 Core version, OS scale and zoom; verify at zoom 1 and 1.1:
 
 1. Details is immediately below its exact row in Projects, Status and pinned Needs
-   you in all tabs. Test duplicate names and the echo of one pending session.
+   you in all tabs. Test duplicate names, pending echoes and Info/D/footer on listed
+   Stale/Unknown, loading/disconnected/missing-machine and unknown-lifecycle rows.
+   Unavailable rows explain why actions are disabled; existing live inspections close
+   on disconnect/replacement before a new unavailable inspection can be opened.
 2. Info/D/toggle/Esc do not focus/open a terminal; row-name activation still targets
    the exact local/remote/pane-less session. Panel actions cannot activate a row.
 3. Tab/Shift-Tab and arrows reach surrounding rows and all actions. Check actual
    focus, not selection tint; Esc returns to exact Info/footer/machine +/Options.
+   Tab forward past the last and backward past the first must leave Roster through
+   native traversal, including from a folder panel; confirm input editing after real
+   focus and usable arrows/Enter/Space when input focus fails.
 4. Scroll a long list; open/close each panel without resetting its offset/folds.
-   Keep the triggering row and other rows reachable. Needs you stays pinned.
+   Open at the bottom main row and third/bottom pinned alert: panel and close/Cancel
+   must be visible, with the trigger visible where feasible. Check all three tabs,
+   exact owning viewport and no unrelated offset changes. Needs you stays pinned.
+   External active-Space changes reveal promptly without a panel; changes during
+   inspection must not cause a delayed jump on close, refresh or the next timer.
 5. Read long names, paths, URLs, multiline/Unicode facts and Technical details;
    use both internal scroll and keyboard reading without horizontal clipping.
 6. Local/remote folder target and validation are visible. Expand/toggle/Cancel/Esc,

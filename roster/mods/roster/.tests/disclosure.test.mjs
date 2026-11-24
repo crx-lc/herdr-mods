@@ -95,16 +95,18 @@ test('view, filter and fold changes dismiss Details; refresh alone keeps the sam
   }
 });
 
-test('folder panel preserves stable list children, folds and scroll requests; cancel returns exact machine trigger', () => {
+test('folder panel preserves children/folds with minimal owner reveal; cancel returns exact machine trigger', async () => {
   const s = setup('spaces'); let tree = s.render();
   const before = byId(tree, 'roster-rows').children.map(e => e.attributes.id[0]);
   const state = JSON.stringify(s.view.controller.state), scrolls = [...s.view.rowScroll.requests];
-  const trigger = 'machine-add:' + machineKey('edge'); s.click(tree, trigger); tree = s.render();
+  const trigger = 'machine-add:' + machineKey('edge'); s.click(tree, trigger); tree = s.render(); await tick();
+  assert.deepEqual(s.view.rowScroll.requests.slice(scrolls.length), [s.view.controls.find(c => c.key === 'new-space:cancel').rowIndex]);
+  const revealed = [...s.view.rowScroll.requests];
   assert.deepEqual(byId(tree, 'roster-rows').children.map(e => e.attributes.id[0]), before);
   s.click(tree, 'new-space:cancel'); tree = s.render();
   assert.equal(s.view.controller.cursor, trigger); assert.equal(s.view.triggerHandles.get(trigger).is_focused(), true);
   assert.deepEqual(byId(tree, 'roster-rows').children.map(e => e.attributes.id[0]), before);
-  assert.equal(JSON.stringify(s.view.controller.state), state); assert.deepEqual(s.view.rowScroll.requests, scrolls); assert.deepEqual(s.f.calls, []);
+  assert.equal(JSON.stringify(s.view.controller.state), state); assert.deepEqual(s.view.rowScroll.requests, revealed); assert.deepEqual(s.f.calls, []);
 });
 
 test('folder final callbacks reject changed path, pending check, cancellation and disconnect even before redraw', () => {

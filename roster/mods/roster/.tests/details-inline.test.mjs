@@ -39,11 +39,13 @@ test('a discreet ⓘ appears on hover or keyboard focus, keeps its place, and ne
   assert.equal(s.view.reader.sourceKey, i.key); assert.deepEqual(s.f.calls, []);
 });
 
-test('Details expands inside the exact stable row block; closing preserves list identity, folds and scroll requests', () => {
+test('Details expands inside the exact stable row block; closing preserves list identity, folds and minimal reveal', async () => {
   const s = setup(); let tree = s.render(); const i = item(s.view, 't1');
   const before = byId(tree, 'roster-rows').children.map(e => e.attributes.id[0]);
   const folds = JSON.stringify(s.view.controller.state.folds), scrolls = s.view.rowScroll.requests.length;
-  click(s, tree, 'info:' + i.key); tree = s.render();
+  click(s, tree, 'info:' + i.key); tree = s.render(); for (let n = 0; n < 12; n++) await Promise.resolve();
+  assert.deepEqual(s.view.rowScroll.requests.slice(scrolls), [s.view.controls.find(c => c.key === 'details:close').rowIndex]);
+  const revealed = s.view.rowScroll.requests.length;
   const block = byId(tree, 'inline:' + i.key), panel = byId(tree, 'roster-details');
   assert.equal(panel.attributes.absolute, undefined);
   assert.deepEqual(block.children.map(e => e.attributes.id[0]), ['line:' + i.key, 'roster-details']);
@@ -53,7 +55,7 @@ test('Details expands inside the exact stable row block; closing preserves list 
   assert.equal(byId(tree, 'roster-details'), undefined);
   assert.equal(s.view.controller.cursor, 'info:' + i.key);
   assert.deepEqual(byId(tree, 'roster-rows').children.map(e => e.attributes.id[0]), before);
-  assert.equal(JSON.stringify(s.view.controller.state.folds), folds); assert.equal(s.view.rowScroll.requests.length, scrolls);
+  assert.equal(JSON.stringify(s.view.controller.state.folds), folds); assert.equal(s.view.rowScroll.requests.length, revealed);
   assert.deepEqual(s.f.calls, []);
 });
 

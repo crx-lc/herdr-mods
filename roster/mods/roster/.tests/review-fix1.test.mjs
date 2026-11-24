@@ -176,15 +176,21 @@ function dialog() {
   v.init({}, c.cx);
   // The fake input reports focus like gpui-base: focus() fires its focus handler.
   let inputFocus = 0;
-  v.pathInput.focus = () => { inputFocus++; v.pathInput.handlers.focus?.({}, c.cx); };
+  const mount = () => {
+    if (v.pathInput && !v.pathInput.simulatedFocus) {
+      v.pathInput.simulatedFocus = true;
+      const input = v.pathInput; input.focus = () => { inputFocus++; input.handlers.focus?.({}, c.cx); };
+    }
+    return v.render(c.cx);
+  };
   const key = k => { const before = c.stats.stop; v.key({ keystroke: k }, c.cx); v.render(c.cx); return c.stats.stop > before; };
-  return { f, v, c, key, render: () => v.render(c.cx), inputFocus: () => inputFocus };
+  return { f, v, c, key, render: mount, inputFocus: () => inputFocus };
 }
 const tabTo = (d, target, max = 12) => { for (let n = 0; n < max && d.v.newSpaceCursor !== target; n++) d.key('tab'); return d.v.newSpaceCursor; };
 
 test('keyboard only: open on a remote machine, type a path, check it and create the Space', async () => {
   const d = dialog(); d.render();
-  d.v.openNewSpace('edge', d.c.cx); d.render();
+  d.v.handle.focus(); d.v.openNewSpace('edge', d.c.cx); d.render(); await flush();
   assert.equal(d.inputFocus(), 1, 'the path field takes the keyboard on open');
   assert.equal(d.v.newSpaceCursor, 'new-space:path'); assert.equal(d.v.inputFocused, true);
   // The field keeps its own keys: arrows, Home/End and Enter are not taken by Roster.
@@ -219,7 +225,7 @@ test('keyboard only: Cancel and Esc close the dialog and change nothing', async 
   for (const how of ['cancel', 'escape', 'escape-in-field']) {
     const d = dialog(); d.render();
     d.v.openNewSpace('edge', d.c.cx); d.render();
-    if (how === 'cancel') { d.key('tab'); assert.equal(tabTo(d, 'new-space:cancel'), 'new-space:cancel'); d.key('enter'); }
+    if (how === 'cancel') { d.key('shift-tab'); assert.equal(d.v.newSpaceCursor, 'new-space:cancel'); d.key('enter'); }
     else { if (how === 'escape') d.key('tab'); d.key('escape'); }
     assert.equal(d.v.newSpace, null, how); assert.deepEqual(d.f.calls, [], how);
   }

@@ -37,7 +37,9 @@ toggles it; Esc closes and returns native focus to that exact surviving trigger,
 a nearby stable Projects control when removed. Actual focus handles/input focus events
 control automatic focus return; a visual cursor alone never takes terminal focus.
 Up/Down and Tab/Shift-Tab traverse surrounding controls and inline actions; Enter/Space
-activates. The real path field retains editing keys and Enter checks the path. When
+activates. Boundary Tab/Shift-Tab propagate to native focus traversal without wrapping.
+The real path field retains editing keys only after actual focus; failed focus requests
+leave sidebar keys usable. Enter in the focused field checks the path. When
 not editing, Home/End/PageUp/PageDown reveal panel content for keyboard reading.
 
 Row-name activation keeps the existing exact native session/pane revalidation.
@@ -49,11 +51,15 @@ or select a still-matching existing Space. Unverified creation requires a second
 explicit confirmation. Cancelled/late picker/check results never enter another panel.
 
 Keep group folds, retained list scroll handles and stable direct children through
-panel open/close. Needs you stays outside the scrolling tab list. Bind to actual row
-instance/incarnation/process/run, not a label/index; bind machines by unique exact
-ready name (null local), escaping the remote name local separately. Target removal,
-identity change, view/filter/fold change or machine unavailability closes the relevant
-panel conservatively. Unchanged refresh preserves it. No render-time panel/cursor/
+panel open/close. After render, minimally reveal the new panel
+through its owning direct list child and first inner control; closing adds no jump.
+Reveal external active-Space changes promptly after render, consuming changes during
+inspection without replay on close. Needs you stays outside the scrolling tab list. Bind to actual row
+instance/incarnation/process/run and observed machine availability, not a label/index.
+Read-only Details may open on currently listed unavailable rows and must explain disabled
+actions. Folder admission still requires a unique exact ready machine (null local),
+escaping the remote name local separately. Removal, identity/availability change or
+view/filter/fold change closes existing panels conservatively. Unchanged refresh preserves it. No render-time panel/cursor/
 focus mutation or notify: invalidate after rendering in a task/event. No global
 navigation, terminal status/input/approval/lifecycle or native-dialog changes.
 
