@@ -13,7 +13,7 @@ test("large signed moves retain observed shape, separate daily magnitude and no 
     const saved = JSON.stringify(q);
     const g = watchlistSparkline(q, NOW);
     assert.equal(g.line.length, q.points.length);
-    assert.ok(extent(g.line) > 10, "actual observed variation remains legible at 22px");
+    assert.ok(extent(g.line) > 0 && extent(g.line) < 11, "observed trend uses price-relative floor, no reference compression");
     assert.equal(g.move?.percent ?? null, q.changePercent);
     assert.equal(JSON.stringify(q), saved);
     assert.equal(g.line[0][0], 2, "starts at first observed bar, not previous close");
@@ -90,7 +90,8 @@ test("crypto uses rolling 24h reference and observed kline times, including reta
   assert.ok(g.line[0][0] > 2, "does not imply a full rolling window");
   q.points = q.points.map(p => ({ ...p, t: p.t - 86_400_000 }));
   g = watchlistSparkline(q, NOW);
-  assert.equal(g.line.length, 0, "retained old klines are not rebased onto new 24h quote");
+  assert.equal(g.line.length, 1, "only the bar exactly at the rolling-window start survives");
+  assert.equal(g.line[0][0], 2, "survivor stays at its actual time");
   assert.equal(g.move.percent, 30);
 });
 

@@ -54,16 +54,23 @@ Compared with Pulse at `99f70b2c`:
 **Panel and refresh**
 - The watchlist's 56×22 sparkline separates two scales: observed closes above, a daily-move rail
   below. The rail runs from zero at the center toward −50% or +50%, with an end stop beyond those
-  limits; the adjacent signed percentage gives the exact magnitude. Stocks use the same previous
-  regular close as the headline; Binance pairs use their rolling 24h reference. It is a day-move
+  limits. Nonzero moves have a 3px visibility minimum (not literal linear magnitude below
+  that length), painted above the zero tick; the adjacent signed percentage gives the exact magnitude.
+  Stocks use the same previous regular close as the headline; Binance pairs use their rolling 24h reference. It is a day-move
   indicator, not an opening-gap path.
-- The upper line uses only observed bar closes and its own vertical scale. Time positions use the
+- The upper line uses only observed bar closes and its own vertical scale: the total span is at
+  least 1% of their midpoint, with 16% padding for larger ranges. Thus 0.03% noise stays almost
+  flat (0.33px), an ordinary 1% trend remains legible, and a 20% swing spans about 9.48px.
+  This price-relative scale is independent of the daily rail. Time positions use the
   reported regular session for stocks or the quote's rolling 24h window for pairs; blank time is
-  unobserved. Hover for bar times, observed price range, reference and freshness. No opening price
-  is inferred from a late first bar, and the headline quote is never appended to bars.
+  unobserved. Hover for bar times, formatted observed price range and reference (with the headline’s
+  supported currency/precision), scale rules and freshness. No opening price is inferred from a late first bar, and the headline quote is never appended to bars.
 - Missing or inconsistent references omit the rail. Missing session/times, mismatched cached
-  points or out-of-window bars omit the line; one bar is a dot. Old caches remain readable without
-  a schema migration. A stale/failed quote dims the sparkline; bar times remain independent of the
+  points omit the line; one bar is a dot. Stocks with out-of-session bars omit the line.
+  For crypto, the entire cache must first have paired, ordered, positive finite values; then only
+  bars outside the quote’s rolling window are clipped. Surviving bars keep actual time positions
+  and blank coverage, including when the ticker advances before klines. Old caches remain readable
+  without a schema migration. A stale/failed quote dims the sparkline; bar times remain independent of the
   quote's fetch time, including retained Binance klines after a failed bar request.
 - A New York market clock under the title (`marketclock.js`, `clockview.js`): New York time, the
   US regular session's state (Open, Pre-market, After-hours, Closed, Weekend, Holiday) and its next

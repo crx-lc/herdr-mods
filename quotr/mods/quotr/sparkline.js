@@ -1,16 +1,18 @@
 // Watchlist only: observed bars and headline day move use separate scales.
 // No host imports, inferred opening price, synthetic points, or quote/bar splicing.
-import { chartGeometry, formatChange, isCryptoPair } from "./quotes.js";
+import { formatPrice, formatChange, isCryptoPair } from "./quotes.js";
 import { formatPointTime } from "./readout.js";
 
 export const SPARK_WIDTH = 56;
 export const SPARK_HEIGHT = 22;
 export const MOVE_LIMIT = 50; // percent; symmetric fixed scale, capped beyond either end
+export const MIN_MOVE_PIXELS = 3; // visibility cue, not literal linear magnitude below this length
+export const MIN_PRICE_SPAN = 0.01; // total vertical span: at least 1% of observed midpoint
 const positive = (v) => typeof v === "number" && Number.isFinite(v) && v > 0;
 const range = (r) => Array.isArray(r) && positive(r[0]) && positive(r[1]) && r[1] > r[0];
 
 /** Pixel geometry. x uses the reported regular session / rolling 24h window;
- * y uses only observed closes. The lower rail uses the headline's reference.
+ * y uses only observed closes with a price-relative minimum span. The lower rail uses the headline's reference.
  * An old cache without matching point times omits the line conservatively.
  */
 export function watchlistSparkline(quote, now, { failed = false } = {}) {
@@ -24,34 +26,46 @@ export function watchlistSparkline(quote, now, { failed = false } = {}) {
   const move = consistent ? {
     percent: q.changePercent,
     from: 28,
-    to: 28 + 26 * Math.max(-1, Math.min(1, q.changePercent / MOVE_LIMIT)),
+    to: 28 + Math.sign(q.changePercent) * (q.changePercent === 0 ? 0
+      : Math.max(MIN_MOVE_PIXELS, 26 * Math.min(1, Math.abs(q.changePercent) / MOVE_LIMIT))),
     capped: Math.abs(q.changePercent) > MOVE_LIMIT,
   } : null;
-  const window = crypto && positive(q.timestamp)
-    ? [q.timestamp - 86_400_000, q.timestamp] : q.periods?.regular;
+  const window = crypto
+    ? (positive(q.timestamp) ? [q.timestamp - 86_400_000, q.timestamp] : null) : q.periods?.regular;
   const series = Array.isArray(q.series) ? q.series : [];
   const points = Array.isArray(q.points) ? q.points : [];
-  // Fail closed on a corrupt, unpaired, unordered, or out-of-session cached line.
-  const usable = range(window) && points.length > 0 && points.length === series.length
-    && points.every((p, i) => positive(p?.t) && positive(p.close) && p.close === series[i]
-      && p.t >= window[0] && p.t <= window[1] && (i === 0 || p.t > points[i - 1].t));
-  const shape = usable ? chartGeometry(series, null) : null;
-  const line = usable ? points.map((p, i) => [
+  // Validate the entire cache before clipping: no unpaired or corrupt survivors.
+  const paired = points.length > 0 && points.length === series.length
+    && Array.from(points).every((p, i) => positive(p?.t) && positive(p.close) && p.close === series[i]
+      && (i === 0 || p.t > points[i - 1].t));
+  const inWindow = (p) => p.t >= window[0] && p.t <= window[1];
+  const observed = range(window) && paired
+    ? (crypto ? points.filter(inWindow) : points.every(inWindow) ? points : []) : [];
+  const usable = observed.length > 0;
+  const closes = observed.map(p => p.close);
+  const low = usable ? Math.min(...closes) : null;
+  const high = usable ? Math.max(...closes) : null;
+  const midpoint = usable ? low + (high - low) / 2 : null;
+  // 1% floor keeps noise flat; 16% padding keeps real swings clear of stroke edges.
+  // Only observed prices set this extent; never the daily reference or headline quote.
+  const span = usable ? Math.max(midpoint * MIN_PRICE_SPAN, (high - low) * 1.16) : null;
+  const line = observed.map(p => [
     2 + 52 * (p.t - window[0]) / (window[1] - window[0]),
-    shape ? 1 + shape.points[i][1] * 0.13 : 7.5,
-  ]) : [];
+    7.5 - 11 * (p.close - midpoint) / span,
+  ]);
   const stale = failed || !positive(q.fetchedAt) || !Number.isFinite(now) || now < q.fetchedAt
     || now - q.fetchedAt > 180_000;
   const time = (t) => formatPointTime(t, q.timeZone, { now }) ?? "unknown";
+  const price = (value) => formatPrice({ price: value, currency: q.currency ?? null });
   const description = [
-    `Top: observed ${crypto ? "15-minute" : "regular-session 5-minute"} closes, independent vertical scale.`,
-    usable ? `${points.length} bars, ${time(points[0].t)} to ${time(points.at(-1).t)}; range ${Math.min(...series)}–${Math.max(...series)}.`
+    `Top: observed ${crypto ? "15-minute" : "regular-session 5-minute"} closes, independent vertical scale with minimum total span 1% of observed midpoint (16% padding for larger ranges).`,
+    usable ? `${observed.length} bars, ${time(observed[0].t)} to ${time(observed.at(-1).t)}; observed range ${price(low)}–${price(high)}.`
       : "Bar times/session unavailable or inconsistent; line omitted.",
     "Blank time is unobserved; coverage may be partial; no opening-price inference.",
-    move ? `Bottom: ${formatChange(move.percent)} vs ${referenceName} ${q.previousClose}; zero at center, −50% to +50%${move.capped ? ", capped" : ""}.`
+    move ? `Bottom: ${formatChange(move.percent)} vs ${referenceName} ${price(q.previousClose)}; zero at center, −50% to +50%; nonzero rail has a 3px visibility minimum, not linear magnitude below that length${move.capped ? ", capped" : ""}.`
       : `Bottom omitted: ${referenceName} unavailable or inconsistent with displayed change.`,
     `Quote: ${time(q.timestamp)}. ${stale ? "Stale or refresh failed." : "Fetched within 3 minutes; exchange delays may apply."}`,
-    usable && points.at(-1).t !== q.timestamp ? "Quote and last bar have different timestamps; bar freshness is independent; quote is not appended to bars." : "",
+    usable && observed.at(-1).t !== q.timestamp ? "Quote and last bar have different timestamps; bar freshness is independent; quote is not appended to bars." : "",
   ].filter(Boolean).join(" ");
   return { line, move, stale, description };
 }

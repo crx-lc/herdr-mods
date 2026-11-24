@@ -36,22 +36,26 @@ export class ChartParts {
       .w(SPARK_WIDTH).h(SPARK_HEIGHT).tooltip(g.description).opacity(g.stale ? 0.5 : 1);
     const layer = (path, paint) => window.paint_path(path.build(), paint)
       .absolute().top(0).left(0).size_full();
+    // Established PathBuilder units: percentages local to this exact 56×22 box.
+    const xPercent = (x) => `${x / SPARK_WIDTH * 100}%`;
+    const yPercent = (y) => `${y / SPARK_HEIGHT * 100}%`;
     const stroke = (x, y, toX, toY, width = 1) => PathBuilder.stroke(width)
-      .move_to(x, y).line_to(toX, toY);
+      .move_to(xPercent(x), yPercent(y)).line_to(xPercent(toX), yPercent(toY));
     if (g.line.length === 1) {
       const [x, y] = g.line[0];
       box.child(layer(stroke(x - 1, y, x + 1, y, 2), t.muted));
     } else if (g.line.length > 1) {
       let path = PathBuilder.stroke(1.25);
-      g.line.forEach(([x, y], i) => { path = i ? path.line_to(x, y) : path.move_to(x, y); });
+      g.line.forEach(([x, y], i) => { path = i ? path.line_to(xPercent(x), yPercent(y)) : path.move_to(xPercent(x), yPercent(y)); });
       box.child(layer(path, t.muted));
     }
     if (g.move) {
       box.child(layer(stroke(2, 19, 54, 19), t.border))
-        .child(layer(stroke(g.move.from, 19, g.move.to, 19, 2.5), color))
-        .child(layer(stroke(28, 16, 28, 22), t.muted));
+        .child(layer(stroke(28, 16, 28, 21), t.muted));
+      // Paint nonzero cues above the tick so small signed moves stay visible.
+      if (g.move.percent !== 0) box.child(layer(stroke(g.move.from, 19, g.move.to, 19, 2.5), color));
       // A zero move has a visible center tick; a capped value has an end stop.
-      if (g.move.capped) box.child(layer(stroke(g.move.to, 16, g.move.to, 22), color));
+      if (g.move.capped) box.child(layer(stroke(g.move.to, 16, g.move.to, 21), color));
     }
     return box;
   }
