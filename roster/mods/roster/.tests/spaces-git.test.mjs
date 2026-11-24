@@ -41,7 +41,7 @@ test('probes run exactly the two read-only queries in the folder on its machine,
   assert.equal(p.ids.takeChanged(), true); assert.equal(p.ids.takeChanged(), false);
   // Identity is cached; the next request reads the checkout's state once, then nothing until stateMs.
   p.ids.request([{ machine: null, folder: '/r/main' }], p.after); for (let n = 0; n < 4; n++) await p.settle();
-  assert.deepEqual(p.calls.slice(4).map(c => [c[1], c[2].cwd, c[2].on]), [[[...GIT_STATUS], '/r/main', null], [[...GIT_COUNTS], '/r/main', null], [[...GIT_BRANCH], '/r/main', null]]);
+  assert.deepEqual(p.calls.slice(4).map(c => [c[1], c[2].cwd, c[2].on]), [[[...GIT_STATUS], '/r/main', null], [[...GIT_BRANCH], '/r/main', null], [[...GIT_COUNTS], '/r/main', null]]);
   p.ids.request([{ machine: null, folder: '/r/main' }], p.after); await p.settle();
   assert.equal(p.calls.length, 7);
 });
@@ -52,8 +52,12 @@ test('a hung probe times out to unsure on the host timer; at most N run at once;
   assert.equal(p.calls.length, 2, 'two places at once, one command each at a time');
   assert.equal(p.ids.lookup(null, '/c').status, 'probing', 'flat while probing');
   p.timers[0].fn(); await p.settle(); await p.settle();
-  assert.equal(p.ids.lookup(null, '/a').status, 'unsure');
-  assert.equal(p.calls.length, 3, 'the next place starts when one ends');
+  assert.equal(p.ids.lookup(null, '/a').status, 'unsure', 'Unknown at the deadline');
+  assert.equal(p.calls.length, 2, 'its native call is still out, so its slot is still taken');
+  // The native call ends (late): its answer is not used and nothing more is sent for /a.
+  p.pending.find(x => x.options.cwd === '/a').resolve({ code: 0, stdout: '/a\n', stderr: '' }); await p.settle(); await p.settle();
+  assert.equal(p.ids.lookup(null, '/a').status, 'unsure'); assert.equal(p.calls.filter(c => c[2].cwd === '/a').length, 1);
+  assert.equal(p.calls.length, 3, 'the next place starts when the native work has ended');
   // /b: Git says no repo (each command answers as it is asked).
   for (let n = 0; n < 4; n++) { p.pending.filter(x => x.options.cwd === '/b' && !x.done).forEach(x => { x.done = true; x.resolve({ code: 128, stdout: '', stderr: 'fatal: not a git repository' }); }); await p.settle(); await p.settle(); }
   assert.equal(p.ids.lookup(null, '/b').status, 'none');
@@ -61,7 +65,7 @@ test('a hung probe times out to unsure on the host timer; at most N run at once;
   p.ids.request([{ machine: null, folder: '/a' }, { machine: null, folder: '/b' }], p.after);
   assert.equal(p.calls.length, sent, 'nothing retried before retryMs');
   p.tick(1500); p.ids.request([{ machine: null, folder: '/a' }, { machine: null, folder: '/b' }], p.after);
-  assert.equal(p.calls.filter(c => c[2].cwd === '/a').length, 2, 'unsure asked again'); assert.equal(p.calls.filter(c => c[2].cwd === '/b').length, 2, 'none is remembered');
+  assert.equal(p.calls.filter(c => c[2].cwd === '/a').length, 2, 'unsure asked again'); assert.equal(p.calls.filter(c => c[2].cwd === '/b').length, 1, 'none is remembered (and was one command: no repo, nothing more to ask)');
   // A rejected exec (machine unreachable) is unsure too.
   const q = prober({ answer: () => null }); q.ids.request([{ machine: 'edge', folder: '/x' }], q.after);
   q.pending[0].reject(Error('unreachable')); await q.settle(); await q.settle();

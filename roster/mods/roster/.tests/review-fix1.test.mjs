@@ -42,7 +42,7 @@ test('D8 Git: not ready means no call; readiness is re-checked at dispatch; queu
   c.ids.cancel('edge'); c.state.ready = true;
   for (const p of c.pending) p.resolve(ok('/x\n')); await flush();
   for (const p of c.pending) p.resolve(ok('/x/.git\n')); await flush();
-  assert.equal(c.calls.length, 2, 'cancelled jobs never dispatch, even if the machine is ready again');
+  assert.equal(c.calls.length, 1, 'cancelled jobs, queued or running, never dispatch again, even if the machine is ready again');
   assert.equal(c.ids.queue.length, 0);
 });
 

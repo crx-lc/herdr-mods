@@ -66,11 +66,12 @@ test('a remote machine takes a typed path or a suggestion, checked on that machi
   assert.equal(textOf(byId(tree, 'new-space:suggest:0')), '/srv/repo');
   assert.equal(flatten(tree).some(e => /new-space:suggest/.test(e.attributes.id?.[0] ?? '') && textOf(e) === '/home/sample/other'), false, 'no folders from another machine');
   s.view.pathInput.set_value('  /srv/brand-new  '); s.click(tree, 'new-space:check'); await flush(s); tree = s.render();
-  assert.deepEqual(s.execs.map(e => [e[2].cwd, e[2].on]), [['/srv/brand-new', 'edge'], ['/srv/brand-new', 'edge']]);
+  // Git's "not a git repository" on the first command is the answer: the second is not sent.
+  assert.deepEqual(s.execs.map(e => [e[2].cwd, e[2].on]), [['/srv/brand-new', 'edge']]);
   assert.equal(textOf(byId(tree, 'new-space:folder')), 'Folder: /srv/brand-new', 'remote paths as typed, trimmed');
   // Enter in the field checks too.
   s.view.pathInput.handlers.submit({}, s.cx); await flush(s);
-  assert.equal(s.execs.length, 4);
+  assert.equal(s.execs.length, 2);
 });
 
 test('Not verified never creates on the first click: a separate explicit confirmation is required', async () => {

@@ -70,19 +70,19 @@ export function createRosterView(kit, app, options = {}) {
       // One gentle 1s timer: the Needs you arrival check, and the Spaces probes when there are any.
       if (ticking) cx.timer.every(1000, cx => { this.watchArrivals(cx); if (this.machineReady) this.pollGit(cx); });
     }
-    // Ask about Spaces' folders on ready machines; ask again on reconnect; redraw on answers.
+    // Watch readiness in every tab; ask about Spaces' folders on ready machines while Spaces
+    // is shown; redraw on answers.
     pollGit(cx) {
+      const host = this.controller.host, machines = host.machines() ?? [];
+      const ready = new Set(machines.filter(m => m?.layout === 'ready').map(m => m?.name ?? null));
+      // D8: a disconnect is observed whatever tab is shown, and a machine that was ready and
+      // is now not ready or missing from machines() counts as disconnected. Its queued and
+      // running Git work is dropped. Coming back does not trigger a retry; unknown values
+      // wait for the normal schedule.
+      for (const [name, was] of this.machineReady) if (was && !ready.has(name)) this.git?.cancel(name);
+      this.machineReady = new Map(machines.map(m => [m?.name ?? null, m?.layout === 'ready']));
       if (this.controller.state.view !== 'spaces') return;
-      const host = this.controller.host, machines = host.machines(), panes = host.panes();
-      const ready = new Set();
-      for (const m of machines) {
-        const name = m?.name ?? null, now = m?.layout === 'ready';
-        if (now) ready.add(name);
-        // D8: a machine that stopped being ready has nothing queued dispatched to it. Coming
-        // back does not trigger a retry; unknown values wait for the normal schedule.
-        if (!now && this.machineReady.get(name) === true) this.git?.cancel(name);
-        this.machineReady.set(name, now);
-      }
+      const panes = host.panes();
       const places = host.spaces().filter(sp => ready.has(sp?.machine ?? null))
         .map(sp => ({ machine: sp.machine ?? null, folder: spacePlace(sp, panes) }));
       const after = (ms, fn) => cx.timer.after(ms, fn);

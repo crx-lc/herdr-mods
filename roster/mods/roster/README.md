@@ -211,8 +211,11 @@ Roster reads another machine only while Herdr reports it ready, checks readiness
 from a fresh `machines()` immediately before each remote call (each individual Git
 command and each os-release read, one at a time) and again on the answer,
 skips stopped, disconnected or unknown machines, drops queued work for a machine that
-stops being ready, sends no further command once readiness is lost, and shows a failed
-or late answer as **Unknown**. Nothing is retried
+stops being ready (whichever tab is shown, including a machine that drops out of
+`machines()`), sends no further command once readiness is lost, a command fails or
+returns a malformed or unexpected result, or the job's deadline passes, and shows the
+whole answer as **Unknown**, never partial. Git's own "not a git repository", a detached
+HEAD and a branch with no upstream are known answers. Nothing is retried
 through a reconnect or another path; a later read waits for the normal schedule while
 the machine is ready. **Limitation:** this narrows the window, it does not close it. A
 Core can stop between the check and the call, and a read that reaches a stopped Core may

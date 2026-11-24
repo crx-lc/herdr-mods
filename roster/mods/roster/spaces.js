@@ -76,15 +76,55 @@ export function readyNow(isReady, machine) {
 }
 
 // Git commands one at a time, with D8 checked right before each one and on the last answer.
-// Readiness lost at any point rejects, so no further command is sent.
-export async function runEach(exec, isReady, machine, queries, options) {
+// Each result is checked before the next command is sent: accept(index, result) answers
+// 'ok' (go on), 'stop' (a complete, known answer: send nothing more) or 'fail'. A failed or
+// malformed result, readiness lost, or the job's deadline/cancel flag (live() false) stops
+// the chain and rejects: no further command is sent and the whole answer is unknown.
+const wellFormed = r => r !== null && typeof r === 'object' && Number.isInteger(r.code) && typeof r.stdout === 'string';
+export async function runEach(exec, isReady, machine, queries, options, { accept = (_i, r) => wellFormed(r) && r.code === 0 ? 'ok' : 'fail', live = () => true } = {}) {
   const answers = [];
-  for (const args of queries) {
+  for (const [index, args] of queries.entries()) {
+    if (!live()) throw Error('cancelled');
     if (!readyNow(isReady, machine)) throw Error('readiness-lost');
-    answers.push(await exec('git', [...args], options));
+    const result = await exec('git', [...args], options);
+    if (!live()) throw Error('cancelled');
+    const verdict = accept(index, result);
+    if (verdict === 'fail') throw Error('failed');
+    answers.push(result);
+    if (verdict === 'stop') break;
   }
   if (!readyNow(isReady, machine)) throw Error('readiness-lost');
   return answers;
+}
+// Identity (rev-parse --show-toplevel, then --git-common-dir): both must succeed. Git's own
+// "not a git repository" on the first is a known answer: stop there, the place has no repo.
+export function acceptIdentity(index, r) {
+  if (!wellFormed(r)) return 'fail';
+  if (r.code === 0) return 'ok';
+  return index === 0 && /not a git repository/i.test(r.stderr ?? '') ? 'stop' : 'fail';
+}
+// State (status, then branch, then ahead/behind): status must succeed. A detached HEAD is
+// symbolic-ref -q's exit 1, and a branch with no upstream makes rev-list say so; both are
+// known answers (no branch name, no arrows). Anything else fails the whole refresh.
+export function acceptState(index, r) {
+  if (!wellFormed(r)) return 'fail';
+  if (r.code === 0) return 'ok';
+  if (index === 1 && r.code === 1 && !r.stdout.trim()) return 'ok';
+  if (index === 2 && /no upstream|upstream branch/i.test(r.stderr ?? '')) return 'ok';
+  return 'fail';
+}
+// Races a chain against the host's timer (a request can hang; never a sleep). At the
+// deadline the shared flag goes down, so the chain sends nothing more, and the caller
+// shows Unknown at once; settled() reports when the native work has really ended.
+export function deadlined(start, after, ms) {
+  const token = { live: true };
+  const work = start(() => token.live);
+  const result = new Promise((resolve, reject) => {
+    let settled = false;
+    after(ms, () => { token.live = false; if (!settled) { settled = true; reject(Error('deadline')); } });
+    work.then(v => { if (!settled) { settled = true; resolve(v); } }, e => { if (!settled) { settled = true; reject(e); } });
+  });
+  return { token, result, settled: work.then(() => {}, () => {}) };
 }
 
 // The only Git Roster runs: the stock panel's two read-only queries, in the Space's
@@ -114,6 +154,8 @@ export class GitIdentities {
   constructor(host, { atOnce = 4, retryMs = 60000, deadlineMs = 12000, stateMs = 30000 } = {}) {
     Object.assign(this, { host, atOnce, retryMs, deadlineMs, stateMs });
     this.cache = new Map(); this.queue = []; this.running = 0; this.changed = false;
+    // Chains whose native work has not ended yet (a slot each until it really ends).
+    this.active = new Set();
   }
   lookup(machine, folder) { return folder ? this.cache.get(placeKey(machine, folder)) ?? null : null; }
   request(places, after) {
@@ -142,6 +184,8 @@ export class GitIdentities {
       this.drop(job, now);
       return false;
     });
+    // Running chains on that machine send nothing more; their answers are discarded.
+    for (const job of this.active) if (job.machine === m) job.token.live = false;
   }
   drop(job, now) {
     if (job.kind === 'identity') this.cache.set(job.key, { status: 'unsure', at: now });
@@ -154,15 +198,18 @@ export class GitIdentities {
       // D8: re-check right before the dispatch; a machine that is no longer ready is not asked.
       if (!readyNow(this.host.isReady, job.machine)) { this.drop(job, this.host.now()); continue; }
       this.running++;
-      const done = job.kind === 'identity'
-        ? this.ask(job, [GIT_TOP, GIT_COMMON], gitIdentity, after).then(
-          result => { this.cache.set(job.key, { ...result, at: this.host.now() }); },
-          () => { this.cache.set(job.key, { status: 'unsure', at: this.host.now() }); })
-        : this.ask(job, [GIT_STATUS, GIT_COUNTS, GIT_BRANCH], gitState, after).then(
-          state => this.settleState(job.key, state),
-          // No answer: hide the indicators rather than show stale or guessed ones.
-          () => this.settleState(job.key, { dirty: null, ahead: null, behind: null, branch: null }));
-      done.finally(() => { this.running--; this.changed = true; this.pump(after); });
+      const run = job.kind === 'identity'
+        ? this.ask(job, [GIT_TOP, GIT_COMMON], acceptIdentity, gitIdentity, after)
+        : this.ask(job, [GIT_STATUS, GIT_BRANCH, GIT_COUNTS], acceptState, (status, branch, counts) => gitState(status, counts, branch), after);
+      job.token = run.token; this.active.add(job);
+      run.result.then(
+        result => job.kind === 'identity' ? this.cache.set(job.key, { ...result, at: this.host.now() }) : this.settleState(job.key, result),
+        // Failed, late, cancelled or not ready: Unknown, never stale or partial.
+        () => job.kind === 'identity' ? this.cache.set(job.key, { status: 'unsure', at: this.host.now() })
+          : this.settleState(job.key, { dirty: null, ahead: null, behind: null, branch: null }))
+        .finally(() => { this.changed = true; });
+      // The slot frees only when the native work has ended, so the count stays true.
+      run.settled.then(() => { this.active.delete(job); this.running--; this.changed = true; this.pump(after); });
     }
   }
   settleState(key, state) {
@@ -172,15 +219,10 @@ export class GitIdentities {
   // The queries run one after another in the place's folder on its machine, with explicit
   // arguments; D8 is checked right before each command, so a machine that stops being ready
   // between two commands gets no further call and the whole answer is unknown.
-  ask({ machine, folder }, queries, parse, after) {
+  ask({ machine, folder }, queries, accept, parse, after) {
     const options = { cwd: folder, on: machine, timeout: this.deadlineMs };
-    const all = runEach(this.host.exec, this.host.isReady, machine, queries, options).then(answers => parse(...answers));
-    // A request can hang: race it against the host's timer, not a sleep.
-    return new Promise((resolve, reject) => {
-      let settled = false;
-      after(this.deadlineMs + 1000, () => { if (!settled) { settled = true; reject(Error('deadline')); } });
-      all.then(v => { if (!settled) { settled = true; resolve(v); } }, e => { if (!settled) { settled = true; reject(e); } });
-    });
+    return deadlined(live => runEach(this.host.exec, this.host.isReady, machine, queries, options, { accept, live })
+      .then(answers => parse(...answers)), after, this.deadlineMs + 1000);
   }
   // True once since the last call when an answer arrived.
   takeChanged() { const changed = this.changed; this.changed = false; return changed; }
@@ -331,10 +373,7 @@ export function matchingSpace(machine, top, spaces = [], panes = [], lookup = ()
 // not ready, or readiness lost at any point, is "Not verified" without another attempt.
 export function verifyFolder(exec, machine, folder, after, deadlineMs = 12000, isReady = null) {
   const options = { cwd: folder, on: machine ?? null, timeout: deadlineMs };
-  const both = runEach(exec, isReady, machine ?? null, [GIT_TOP, GIT_COMMON], options).then(([t, c]) => gitIdentity(t, c));
-  return new Promise(resolve => {
-    let settled = false;
-    after(deadlineMs + 1000, () => { if (!settled) { settled = true; resolve({ status: 'unsure' }); } });
-    both.then(v => { if (!settled) { settled = true; resolve(v); } }, () => { if (!settled) { settled = true; resolve({ status: 'unsure' }); } });
-  });
+  const run = deadlined(live => runEach(exec, isReady, machine ?? null, [GIT_TOP, GIT_COMMON], options, { accept: acceptIdentity, live })
+    .then(answers => gitIdentity(...answers)), after, deadlineMs + 1000);
+  return run.result.catch(() => ({ status: 'unsure' }));
 }

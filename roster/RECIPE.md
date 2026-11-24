@@ -97,8 +97,9 @@ independent process/Core/continuity proof; only local text reads are allowed wit
 bounded candidates/bytes, two native slots and `cx.timer.after` deadlines. The delegation reader stays local-only.
 Remote reads for Spaces (os-release, read-only git) follow D8: only while Herdr reports
 the machine ready, re-checked from a fresh machines() right before each call (each Git
-command, one at a time) and on the answer; queued work for a machine that stops being ready is dropped; a failure or a
-late answer is unknown; no retry through a reconnect. This narrows the window but is not a
+command, one at a time) and on the answer; queued and running work for a machine that stops being ready (in any tab,
+or missing from machines()) is dropped; a failed, malformed or late result stops the
+chain and the whole answer is unknown; no retry through a reconnect. This narrows the window but is not a
 no-wake guarantee until the host offers an attach-only read (herdrdev/herdr-app#1441).
 No experimental acquisition reader, runtime hc probe or network request is shipped.
 
