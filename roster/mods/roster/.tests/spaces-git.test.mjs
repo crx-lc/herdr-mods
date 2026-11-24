@@ -28,7 +28,9 @@ function prober({ atOnce = 2, answer, ready = () => true } = {}) {
 }
 
 test('probes run exactly the two read-only queries in the folder on its machine, cached and capped', async () => {
-  const p = prober({ answer: (args, o) => args.includes('--show-toplevel') ? ok(o.cwd + '\n') : ok('/r/main/.git\n') });
+  // Each query answers in its own real shape.
+  const p = prober({ answer: (args, o) => args.includes('--show-toplevel') ? ok(o.cwd + '\n') : args.includes('--git-common-dir') ? ok('/r/main/.git\n')
+    : args.includes('status') ? ok('') : args.includes('symbolic-ref') ? ok('main\n') : ok('0\t0\n') });
   p.ids.request([{ machine: null, folder: '/r/main' }, { machine: 'edge', folder: '/r/main' }, { machine: null, folder: '/r/main' }, { machine: null, folder: null }], p.after);
   for (let n = 0; n < 4; n++) await p.settle();
   // Each place asks its two commands one after the other (D8 is checked before each).

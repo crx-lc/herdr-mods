@@ -61,16 +61,67 @@ test('a failed or malformed status stops the refresh and the whole state is Unkn
   assert.deepEqual([e.dirty, e.ahead, e.behind, e.branch], [null, null, null, null]);
 });
 
-test('known answers still count: a detached HEAD and a branch with no upstream', async () => {
+test('known answers still count: a detached HEAD (Git\'s real responses) and a branch with no upstream', async () => {
+  // Detached HEAD, as real Git answers in a detached worktree: symbolic-ref -q exits 1 with
+  // no output. The upstream query (which would say "HEAD does not point to a branch") is
+  // not sent, and the dirty mark stays.
   const p = prober(); await repoAt(p);
   p.ids.request([{ machine: 'edge', folder: '/x' }], p.after); await flush();
   await answer(p, 2, ok(' M a\n'));
   assert.ok(same(p.calls.at(-1), GIT_BRANCH));
-  await answer(p, 3, { code: 1, stdout: '', stderr: '' });                     // detached HEAD (symbolic-ref -q)
-  assert.ok(same(p.calls.at(-1), GIT_COUNTS));
-  await answer(p, 4, fail(128, "fatal: no upstream configured for branch 'feature'"));
-  const e = p.ids.lookup('edge', '/x');
+  await answer(p, 3, { code: 1, stdout: '', stderr: '' });
+  assert.equal(p.calls.length, 4, 'no upstream query after a detached HEAD');
+  let e = p.ids.lookup('edge', '/x');
   assert.deepEqual([e.dirty, e.ahead, e.behind, e.branch], [true, null, null, null], 'dirty shown; no branch name, no arrows');
+  // A later refresh of the same detached checkout keeps a previously good dirty result.
+  const d = prober(); await repoAt(d);
+  d.ids.request([{ machine: 'edge', folder: '/x' }], d.after); await flush();
+  await answer(d, 2, ok('?? new\n')); await answer(d, 3, { code: 1, stdout: '', stderr: '' });
+  assert.equal(d.ids.lookup('edge', '/x').dirty, true);
+  // Even if the upstream query were answered with Git's detached message, it is a known answer.
+  const { acceptState } = await import('../spaces.js');
+  assert.equal(acceptState(2, fail(128, 'fatal: HEAD does not point to a branch')), 'ok');
+  // A branch with no upstream: branch name kept, no arrows.
+  const n = prober(); await repoAt(n);
+  n.ids.request([{ machine: 'edge', folder: '/x' }], n.after); await flush();
+  await answer(n, 2, ok('')); await answer(n, 3, ok('feature\n'));
+  assert.ok(same(n.calls.at(-1), GIT_COUNTS));
+  await answer(n, 4, fail(128, "fatal: no upstream configured for branch 'feature'"));
+  e = n.ids.lookup('edge', '/x');
+  assert.deepEqual([e.dirty, e.ahead, e.behind, e.branch], [false, null, null, 'feature']);
+});
+
+test('successful but malformed output stops the chain before the next command; the whole refresh is Unknown', async () => {
+  // Identity: an empty or multi-line show-toplevel never reaches git-common-dir.
+  for (const top of [ok(''), ok('\n'), ok('/x\n/y\n'), ok('/x\u0007\n')]) {
+    const p = prober();
+    p.ids.request([{ machine: 'edge', folder: '/x' }], p.after);
+    await answer(p, 0, top);
+    assert.equal(p.calls.length, 1, 'git-common-dir not sent after ' + JSON.stringify(top.stdout));
+    assert.equal(p.ids.lookup('edge', '/x').status, 'unsure');
+  }
+  // A malformed git-common-dir: unknown.
+  const c = prober(); c.ids.request([{ machine: 'edge', folder: '/x' }], c.after);
+  await answer(c, 0, ok('/x\n')); await answer(c, 1, ok('a\nb\n'));
+  assert.equal(c.ids.lookup('edge', '/x').status, 'unsure');
+  // State: each query malformed in turn.
+  const cases = [
+    { name: 'status not porcelain', answers: [ok('garbage\n')], sent: 3 },
+    { name: 'status with a control character', answers: [ok(' M a\u0007\n')], sent: 3 },
+    { name: 'branch on two lines', answers: [ok(' M a\n'), ok('feature\nextra\n')], sent: 4 },
+    { name: 'branch empty', answers: [ok(' M a\n'), ok('\n')], sent: 4 },
+    { name: 'counts not two numbers', answers: [ok(' M file\n'), ok('feature\n'), ok('garbage\n')], sent: 5 },
+    { name: 'counts with one number', answers: [ok(''), ok('feature\n'), ok('3\n')], sent: 5 },
+  ];
+  for (const { name, answers, sent } of cases) {
+    const p = prober(); await repoAt(p);
+    // A good refresh first, so a failure must clear it rather than leave it partly.
+    p.ids.request([{ machine: 'edge', folder: '/x' }], p.after); await flush();
+    for (const [i, a] of answers.entries()) await answer(p, 2 + i, a);
+    assert.equal(p.calls.length, sent, name + ': nothing sent after the malformed answer');
+    const e = p.ids.lookup('edge', '/x');
+    assert.deepEqual([e.dirty, e.ahead, e.behind, e.branch], [null, null, null, null], name + ': whole refresh Unknown');
+  }
 });
 
 test('a chain cancelled by a disconnect never uses its last answer, even if the machine is back', async () => {

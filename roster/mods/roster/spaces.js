@@ -98,20 +98,28 @@ export async function runEach(exec, isReady, machine, queries, options, { accept
 }
 // Identity (rev-parse --show-toplevel, then --git-common-dir): both must succeed. Git's own
 // "not a git repository" on the first is a known answer: stop there, the place has no repo.
+// A successful answer still counts only when its output parses, with the same parser
+// that later builds the value: both paths must be exactly one clean line.
 export function acceptIdentity(index, r) {
   if (!wellFormed(r)) return 'fail';
-  if (r.code === 0) return 'ok';
+  if (r.code === 0) return oneLine(r.stdout) ? 'ok' : 'fail';
   return index === 0 && /not a git repository/i.test(r.stderr ?? '') ? 'stop' : 'fail';
 }
-// State (status, then branch, then ahead/behind): status must succeed. A detached HEAD is
-// symbolic-ref -q's exit 1, and a branch with no upstream makes rev-list say so; both are
-// known answers (no branch name, no arrows). Anything else fails the whole refresh.
+// State: status, then branch, then ahead/behind, each parsed before the next is sent.
+// - status must succeed with porcelain lines only;
+// - branch: one clean line, or a detached HEAD (symbolic-ref -q exit 1, no output): then
+//   the upstream query is not sent, so the dirty mark stays without branch or arrows;
+// - ahead/behind: exactly two numbers, or Git saying there is no upstream (no arrows).
+// Anything else fails the whole refresh, which is then Unknown.
 export function acceptState(index, r) {
   if (!wellFormed(r)) return 'fail';
-  if (r.code === 0) return 'ok';
-  if (index === 1 && r.code === 1 && !r.stdout.trim()) return 'ok';
-  if (index === 2 && /no upstream|upstream branch/i.test(r.stderr ?? '')) return 'ok';
-  return 'fail';
+  if (index === 0) return r.code === 0 && parseStatus(r.stdout) !== null ? 'ok' : 'fail';
+  if (index === 1) {
+    if (r.code === 0) return oneLine(r.stdout) ? 'ok' : 'fail';
+    return r.code === 1 && !r.stdout.trim() ? 'stop' : 'fail';
+  }
+  if (r.code === 0) return parseCounts(r.stdout) ? 'ok' : 'fail';
+  return /no upstream|upstream branch|does not point to a branch/i.test(r.stderr ?? '') ? 'ok' : 'fail';
 }
 // Races a chain against the host's timer (a request can hang; never a sleep). At the
 // deadline the shared flag goes down, so the chain sends nothing more, and the caller
@@ -253,12 +261,27 @@ export function nestWorktrees(list, identityOf) {
 export const GIT_STATUS = Object.freeze(['--no-optional-locks', 'status', '--porcelain']);
 export const GIT_COUNTS = Object.freeze(['rev-list', '--left-right', '--count', 'HEAD...@{upstream}']);
 export const GIT_BRANCH = Object.freeze(['symbolic-ref', '-q', '--short', 'HEAD']);
-// Each answer is used only when its query succeeded; anything else hides that indicator.
+// The parsers shared by acceptState (before the next command) and gitState (the value).
+// git status --porcelain: "XY path" lines (paths with odd characters arrive quoted); an
+// empty answer is a clean checkout. Returns dirty true/false, or null when malformed.
+const STATUS_LINE = /^[ MTADRCU?!]{2} \S/;
+export function parseStatus(stdout) {
+  if (typeof stdout !== 'string') return null;
+  const lines = stdout.split('\n').map(line => line.replace(/\r$/, '')).filter(line => line.length);
+  return lines.every(line => STATUS_LINE.test(line) && !/[\x00-\x1f\x7f]/.test(line)) ? lines.length > 0 : null;
+}
+// rev-list --left-right --count: exactly "<ahead> <behind>".
+export function parseCounts(stdout) {
+  const m = typeof stdout === 'string' ? /^(\d+)\s+(\d+)\s*$/.exec(stdout) : null;
+  return m ? { ahead: Number(m[1]), behind: Number(m[2]) } : null;
+}
+// Each answer is used only when its query succeeded and parses; a skipped or "no upstream"
+// query leaves its indicator out.
 export function gitState(status, counts, branch) {
   const state = { dirty: null, ahead: null, behind: null, branch: null };
-  if (status?.code === 0 && typeof status.stdout === 'string') state.dirty = status.stdout.trim().length > 0;
-  const m = counts?.code === 0 && typeof counts.stdout === 'string' ? /^(\d+)\s+(\d+)\s*$/.exec(counts.stdout) : null;
-  if (m) { state.ahead = Number(m[1]); state.behind = Number(m[2]); }
+  if (status?.code === 0) state.dirty = parseStatus(status.stdout);
+  const c = counts?.code === 0 ? parseCounts(counts.stdout) : null;
+  if (c) { state.ahead = c.ahead; state.behind = c.behind; }
   if (branch?.code === 0) state.branch = oneLine(branch.stdout);
   return state;
 }
