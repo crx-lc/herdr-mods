@@ -52,6 +52,19 @@ Compared with Pulse at `99f70b2c`:
   ticker through the logo sources that can show it.
 
 **Panel and refresh**
+- The watchlist's 56×22 sparkline separates two scales: observed closes above, a daily-move rail
+  below. The rail runs from zero at the center toward −50% or +50%, with an end stop beyond those
+  limits; the adjacent signed percentage gives the exact magnitude. Stocks use the same previous
+  regular close as the headline; Binance pairs use their rolling 24h reference. It is a day-move
+  indicator, not an opening-gap path.
+- The upper line uses only observed bar closes and its own vertical scale. Time positions use the
+  reported regular session for stocks or the quote's rolling 24h window for pairs; blank time is
+  unobserved. Hover for bar times, observed price range, reference and freshness. No opening price
+  is inferred from a late first bar, and the headline quote is never appended to bars.
+- Missing or inconsistent references omit the rail. Missing session/times, mismatched cached
+  points or out-of-window bars omit the line; one bar is a dot. Old caches remain readable without
+  a schema migration. A stale/failed quote dims the sparkline; bar times remain independent of the
+  quote's fetch time, including retained Binance klines after a failed bar request.
 - A New York market clock under the title (`marketclock.js`, `clockview.js`): New York time, the
   US regular session's state (Open, Pre-market, After-hours, Closed, Weekend, Holiday) and its next
   open or close with a live countdown ("NY Tue Nov 17 15:42 · Open · Closes 16:00 · 18m"), early closes included.

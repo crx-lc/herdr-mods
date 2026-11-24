@@ -273,7 +273,7 @@ export default class Quotr extends View {
                 .child(div().font_semibold().truncate().child(symbol))
                 .when(Boolean(meta), (el) => el.child(div().text_size(11).text_color(t.dim).truncate().child(meta)))))
             .when(reordering, (el) => el.child(this.moveButtons(symbol, index, symbols.length, t)))
-            .when(Boolean(quote) && !reordering, (el) => el.child(this.chart(quote, color, t, { width: 56, height: 22 })))
+            .when(Boolean(quote) && !reordering, (el) => el.child(this.watchlistChart(quote, color, t, now, { failed: Boolean(failed) })))
             .child(v_flex().flex_none().w(108).gap(1)
               // The last value stays during a refresh; a small pulsing dot marks the update in flight.
               // "Waiting…" only when there has never been a quote for this row.

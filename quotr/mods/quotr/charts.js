@@ -4,6 +4,7 @@
 import { div, PathBuilder, Background } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { chartGeometry, formatPrice } from "./quotes.js";
+import { SPARK_WIDTH, SPARK_HEIGHT, watchlistSparkline } from "./sparkline.js";
 import { nearestIndex, readoutAt } from "./readout.js";
 import { SESSION_NAMES, sessionHours } from "./extended.js";
 
@@ -26,6 +27,33 @@ export class ChartParts {
 
   changeColor(t, change) {
     return change === null || change === undefined ? t.dim : change >= 0 ? t.ansi2 : t.ansi1;
+  }
+
+  // Compact row only. Separate the observed shape from the headline reference magnitude.
+  watchlistChart(quote, color, t, now, options) {
+    const g = watchlistSparkline(quote, now, options);
+    const box = div().id(`quotr-spark-${quote.symbol}`).relative().flex_none()
+      .w(SPARK_WIDTH).h(SPARK_HEIGHT).tooltip(g.description).opacity(g.stale ? 0.5 : 1);
+    const layer = (path, paint) => window.paint_path(path.build(), paint)
+      .absolute().top(0).left(0).size_full();
+    const stroke = (x, y, toX, toY, width = 1) => PathBuilder.stroke(width)
+      .move_to(x, y).line_to(toX, toY);
+    if (g.line.length === 1) {
+      const [x, y] = g.line[0];
+      box.child(layer(stroke(x - 1, y, x + 1, y, 2), t.muted));
+    } else if (g.line.length > 1) {
+      let path = PathBuilder.stroke(1.25);
+      g.line.forEach(([x, y], i) => { path = i ? path.line_to(x, y) : path.move_to(x, y); });
+      box.child(layer(path, t.muted));
+    }
+    if (g.move) {
+      box.child(layer(stroke(2, 19, 54, 19), t.border))
+        .child(layer(stroke(g.move.from, 19, g.move.to, 19, 2.5), color))
+        .child(layer(stroke(28, 16, 28, 22), t.muted));
+      // A zero move has a visible center tick; a capped value has an end stop.
+      if (g.move.capped) box.child(layer(stroke(g.move.to, 16, g.move.to, 22), color));
+    }
+    return box;
   }
 
   // The day's line, scaled to its box; the previous close is a dashed rule.
