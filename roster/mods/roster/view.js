@@ -46,6 +46,11 @@ export function createRosterView(kit, app, options = {}) {
       this.newSpace = null;
       this.pathInput = typeof InputState?.new === 'function' ? InputState.new({ placeholder: 'Folder on that machine' }) : null;
       this.pathInput?.on?.('submit', (_e, cx) => { if (this.newSpace) this.checkFolder(this.pathInput.value(), cx); });
+      // The dialog knows when its path field holds the keyboard, so the field keeps its keys.
+      this.pathInput?.on?.('focus', () => { this.inputFocused = true; if (this.newSpace) this.newSpaceCursor = 'new-space:path'; });
+      this.pathInput?.on?.('blur', () => { this.inputFocused = false; });
+      // D8: whether Herdr reports a machine ready right now, from a fresh machines().
+      this.isReady = machine => (this.controller.host.machines() ?? []).some(m => (m?.name ?? null) === machine && m?.layout === 'ready');
       if (!app.checking()) cx.spawn(async cx => {
         for (;;) { if (await app.nextCommand() === 'focus') this.focus(cx); }
       });
@@ -57,9 +62,9 @@ export function createRosterView(kit, app, options = {}) {
       const ticking = !app.checking() && typeof cx.timer?.every === 'function';
       if (ticking && (typeof exec === 'function' || typeof readTextFile === 'function')) {
         const now = () => this.controller.host.now();
-        if (typeof exec === 'function') this.git = new GitIdentities({ exec, now });
+        if (typeof exec === 'function') this.git = new GitIdentities({ exec, now, isReady: this.isReady });
         // Machine OS for the header icons: os-release through Herdr's read-only file API.
-        if (typeof readTextFile === 'function') this.os = new MachineOs({ readTextFile, now });
+        if (typeof readTextFile === 'function') this.os = new MachineOs({ readTextFile, now, isReady: this.isReady });
         this.machineReady = new Map();
       }
       // One gentle 1s timer: the Needs you arrival check, and the Spaces probes when there are any.
@@ -73,7 +78,9 @@ export function createRosterView(kit, app, options = {}) {
       for (const m of machines) {
         const name = m?.name ?? null, now = m?.layout === 'ready';
         if (now) ready.add(name);
-        if (now && this.machineReady.get(name) === false) { this.git?.retry(name); this.os?.retry(name); }
+        // D8: a machine that stopped being ready has nothing queued dispatched to it. Coming
+        // back does not trigger a retry; unknown values wait for the normal schedule.
+        if (!now && this.machineReady.get(name) === true) this.git?.cancel(name);
         this.machineReady.set(name, now);
       }
       const places = host.spaces().filter(sp => ready.has(sp?.machine ?? null))
@@ -125,9 +132,20 @@ export function createRosterView(kit, app, options = {}) {
       this.closeDetails(cx, false);
       this.newSpace = { machine: machine ?? null, folder: null, check: null, confirmUnverified: false };
       this.pathInput?.set_value?.('');
+      // The keyboard starts where the work starts: the path field on a remote machine,
+      // Choose folder… on this computer.
+      if (this.newSpace.machine && this.pathInput) { this.newSpaceCursor = 'new-space:path'; this.pathInput.focus?.(); }
+      else this.newSpaceCursor = 'new-space:pick';
       cx.notify();
     }
-    closeNewSpace(cx) { this.newSpace = null; cx.notify(); }
+    closeNewSpace(cx) { this.newSpace = null; this.newSpaceCursor = null; this.inputFocused = false; this.handle.focus(); cx.notify(); }
+    // Moves the dialog's keyboard cursor; the path field takes real keyboard focus.
+    placeNewSpace(control, cx) {
+      this.newSpaceCursor = control.key;
+      if (control.input) this.pathInput?.focus?.();
+      else { this.inputFocused = false; this.handle.focus(); }
+      cx.notify();
+    }
     // This computer: Herdr's native folder picker.
     async chooseLocalFolder(cx) {
       const pick = options.pickFolder ?? app.pickFolder;
@@ -144,7 +162,7 @@ export function createRosterView(kit, app, options = {}) {
       const exec = options.exec ?? app.exec;
       if (typeof exec !== 'function') { ns.check = { status: 'unsure' }; return; }
       cx.spawn(async cx => {
-        const result = await verifyFolder(exec, ns.machine, target, (ms, fn) => cx.timer.after(ms, fn));
+        const result = await verifyFolder(exec, ns.machine, target, (ms, fn) => cx.timer.after(ms, fn), 12000, this.isReady);
         if (this.newSpace === ns && ns.folder === target) { ns.check = result; cx.notify(); }
       });
     }
@@ -185,7 +203,22 @@ export function createRosterView(kit, app, options = {}) {
     key(event, cx) {
       const chord = event.keystroke;
       if (this.newSpace) {
-        if (chord === 'escape') { cx.stop_propagation(); this.closeNewSpace(cx); }
+        // The dialog has its own order: Tab, Shift-Tab and the arrows move through its
+        // controls (the path field is one stop), Enter or Space activates, Esc closes.
+        // While the path field holds the keyboard it keeps its own keys (editing, arrows,
+        // Enter submits through its own handler); only Tab and Shift-Tab leave it.
+        if (chord === 'escape') { cx.stop_propagation(); this.closeNewSpace(cx); return; }
+        const controls = this.readerControls, at = controls.findIndex(k => k.key === this.newSpaceCursor);
+        const back = ['shift-tab', 'up', 'left'].includes(chord), forward = ['tab', 'down', 'right'].includes(chord);
+        if (this.inputFocused && chord !== 'tab' && chord !== 'shift-tab') return;
+        if ((back || forward) && controls.length) {
+          cx.stop_propagation();
+          const step = back ? -1 : 1, next = at < 0 ? (back ? controls.length - 1 : 0) : (at + step + controls.length) % controls.length;
+          this.placeNewSpace(controls[next], cx);
+        } else if ((chord === 'enter' || chord === 'space') && at >= 0) {
+          cx.stop_propagation();
+          controls[at].activate(cx);
+        }
         return;
       }
       // Details left over from a changed view are dropped here, in the event, not in render.
@@ -299,8 +332,9 @@ export function createRosterView(kit, app, options = {}) {
       const control = (key, label, text, activate, color = fg) => {
         this.readerControls.push({ key, label, activate });
         return h().id(key).h(22).flex_none().px(6).rounded(4).accessibility_label(label).tooltip(label).cursor_pointer()
-          .bg(theme.raised ?? theme.surface).hover(el => el.bg(theme.hover ?? theme.selected ?? theme.surface))
-          .on_click((_e, cx) => { cx.stop_propagation(); activate(cx); }).child(labelText(text, 12, color));
+          .bg(this.newSpaceCursor === key && !this.inputFocused ? theme.selected ?? theme.hover ?? theme.surface : theme.raised ?? theme.surface)
+          .hover(el => el.bg(theme.hover ?? theme.selected ?? theme.surface))
+          .on_click((_e, cx) => { cx.stop_propagation(); this.newSpaceCursor = key; activate(cx); }).child(labelText(text, 12, color));
       };
       const machineLabel = ns.machine ?? 'This computer';
       const shown = folder => ns.machine ? folder : homeRelative(folder, typeof app.home === 'function' ? app.home() : null, true);
@@ -313,6 +347,7 @@ export function createRosterView(kit, app, options = {}) {
       if (!ns.machine) box.child(control('new-space:pick', 'Choose a folder on this computer', 'Choose folder…', cx => { this.chooseLocalFolder(cx); }));
       else {
         // A typed path on that machine, or one of the folders Herdr already reports there.
+        if (this.pathInput) this.readerControls.push({ key: 'new-space:path', label: 'Folder on ' + machineLabel, input: true, activate: () => this.pathInput.focus?.() });
         if (this.pathInput) box.child(h().flex_none().gap(4).child(Input.new(this.pathInput).id('new-space:path').h(24).flex_1().text_size(12))
           .child(control('new-space:check', 'Check this folder on ' + machineLabel, 'Check', cx => this.checkFolder(this.pathInput.value(), cx))));
         const tops = [...(this.git?.cache ?? new Map()).entries()].filter(([key, e]) => JSON.parse(key)[0] === ns.machine && e.status === 'repo').map(([, e]) => e.top);
@@ -517,6 +552,10 @@ export function createRosterView(kit, app, options = {}) {
       // view, drawn only while something is pending. Its rows scroll on their own past three.
       const PINNED = { row: 44, gap: 3, shown: 3 };
       const pinnedCount = projection.instances.filter(i => i.pinned && i.kind === 'terminal').length;
+      // Sessions already pending when Roster first draws never pulse; one that arrives
+      // after this (even before the first timer tick) does. Recording the baseline asks
+      // for no redraw, so render stays free of updates.
+      if (this.arrivals && this.arrivals.seen === null) this.arrivals.take(projection.instances.filter(i => i.pinned && i.kind === 'terminal').map(i => i.identity));
       const shown = Math.min(pinnedCount, PINNED.shown);
       const pinnedRows = v().id('roster-needs-rows').flex_none().gap(PINNED.gap).overflow_y_scrollbar().track_scroll(this.pinnedScroll)
         .h(shown * PINNED.row + Math.max(0, shown - 1) * PINNED.gap);

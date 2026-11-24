@@ -60,6 +60,21 @@ export function spacePlace(space, panes = []) {
 }
 export const placeKey = (machine, folder) => JSON.stringify([machine ?? null, folder]);
 
+// Remote reads follow the owner's D8 rule (crx-lc/herdr-agents#141): a remote machine is
+// asked only while Herdr reports it ready, checked again right before each dispatch and
+// again on the answer; anything else (not ready, a throw, no answer) counts as not ready,
+// and the value is shown as unknown. Nothing is retried through a reconnect or another
+// path; a later read waits for the normal schedule while the machine is ready.
+// Limitation: this narrows the window, it does not close it. A Core can stop between the
+// check and the call, and a read that reaches a stopped Core may start it. Until the host
+// offers an attach-only read (herdrdev/herdr-app#1441) this is not a no-wake guarantee.
+// This computer (machine null) needs no remote Core and is always ready.
+export function readyNow(isReady, machine) {
+  if ((machine ?? null) === null) return true;
+  if (typeof isReady !== 'function') return false;
+  try { return isReady(machine) === true; } catch { return false; }
+}
+
 // The only Git Roster runs: the stock panel's two read-only queries, in the Space's
 // folder on the Space's machine, through Herdr's exec with explicit arguments.
 export const GIT_TOP = Object.freeze(['rev-parse', '--show-toplevel']);
@@ -80,8 +95,9 @@ export function gitIdentity(top, common) {
 }
 
 // Background probe cache keyed by machine and folder. Identity is asked once (retried
-// when unsure); a verified repository's state is refreshed at most every stateMs. The host
-// supplies exec, a deadline timer and the clock; nothing is ever written to Git or Herdr.
+// when unsure, on the normal schedule); a verified repository's state is refreshed at most
+// every stateMs. The host supplies exec, isReady (D8, above), a deadline timer and the
+// clock; nothing is ever written to Git or Herdr.
 export class GitIdentities {
   constructor(host, { atOnce = 4, retryMs = 60000, deadlineMs = 12000, stateMs = 30000 } = {}) {
     Object.assign(this, { host, atOnce, retryMs, deadlineMs, stateMs });
@@ -105,11 +121,27 @@ export class GitIdentities {
     }
     this.pump(after);
   }
-  // A machine that came back: its unsure answers are asked again.
-  retry(machine) { for (const [key, entry] of this.cache) if (JSON.parse(key)[0] === (machine ?? null) && entry.status === 'unsure') entry.at = -Infinity; }
+  // A machine that is no longer ready: nothing queued for it is dispatched; its waiting
+  // answers become unknown until a later scheduled probe while it is ready again.
+  cancel(machine) {
+    const m = machine ?? null, now = this.host.now();
+    this.queue = this.queue.filter(job => {
+      if (job.machine !== m) return true;
+      this.drop(job, now);
+      return false;
+    });
+  }
+  drop(job, now) {
+    if (job.kind === 'identity') this.cache.set(job.key, { status: 'unsure', at: now });
+    else this.settleState(job.key, { dirty: null, ahead: null, behind: null, branch: null });
+    this.changed = true;
+  }
   pump(after) {
     while (this.running < this.atOnce && this.queue.length) {
-      const job = this.queue.shift(); this.running++;
+      const job = this.queue.shift();
+      // D8: re-check right before the dispatch; a machine that is no longer ready is not asked.
+      if (!readyNow(this.host.isReady, job.machine)) { this.drop(job, this.host.now()); continue; }
+      this.running++;
       const done = job.kind === 'identity'
         ? this.ask(job, [GIT_TOP, GIT_COMMON], gitIdentity, after).then(
           result => { this.cache.set(job.key, { ...result, at: this.host.now() }); },
@@ -128,7 +160,11 @@ export class GitIdentities {
   // The queries run together in the place's folder on its machine, with explicit arguments.
   ask({ machine, folder }, queries, parse, after) {
     const options = { cwd: folder, on: machine, timeout: this.deadlineMs };
-    const all = Promise.all(queries.map(args => this.host.exec('git', [...args], options))).then(answers => parse(...answers));
+    const all = Promise.all(queries.map(args => this.host.exec('git', [...args], options))).then(answers => {
+      // D8: answers that arrive after readiness was lost are discarded.
+      if (!readyNow(this.host.isReady, machine)) throw Error('readiness-lost');
+      return parse(...answers);
+    });
     // A request can hang: race it against the host's timer, not a sleep.
     return new Promise((resolve, reject) => {
       let settled = false;
@@ -226,8 +262,9 @@ export function machineOs({ platform = null, release = null } = {}) {
     ?? (Object.hasOwn(OS_ID_ICONS, (fields.ID ?? '').toLowerCase()) ? OS_ID_ICONS[fields.ID.toLowerCase()] : null) ?? 'os-linux';
   return { icon, tooltip: fields.PRETTY_NAME ?? fields.NAME ?? 'Linux' };
 }
-// Per-machine cache of os-release reads; ready machines only, deadline-raced, retried
-// when unsure. A missing file means the OS is unknown, so the generic icon stays.
+// Per-machine cache of os-release reads; ready machines only (D8, above), deadline-raced,
+// one read per scheduled attempt, retried only after retryMs. A missing file, a failed
+// read or lost readiness means the OS is unknown, so the generic icon stays.
 export class MachineOs {
   constructor(host, { retryMs = 60000, deadlineMs = 8000 } = {}) {
     Object.assign(this, { host, retryMs, deadlineMs });
@@ -239,6 +276,7 @@ export class MachineOs {
     for (const machine of machines) {
       const key = machine ?? null, entry = this.cache.get(key);
       if (entry && (entry.status !== 'unsure' || now - entry.at < this.retryMs)) continue;
+      if (!readyNow(this.host.isReady, key)) continue;
       if (key === null && platform !== 'linux') {
         const os = machineOs({ platform });
         this.cache.set(key, os ? { status: 'known', os, at: now } : { status: 'unknown', at: now });
@@ -248,12 +286,18 @@ export class MachineOs {
       let settled = false;
       const finish = entry => { if (settled) return; settled = true; this.cache.set(key, { ...entry, at: this.host.now() }); this.changed = true; };
       after(this.deadlineMs, () => finish({ status: 'unsure' }));
-      Promise.resolve().then(() => this.host.readTextFile(OS_RELEASE, { on: key })).then(
-        text => { const os = typeof text === 'string' ? machineOs({ release: text }) : null; finish(os ? { status: 'known', os } : { status: 'unknown' }); },
+      Promise.resolve().then(() => {
+        // D8: checked again as close to the read as the API allows.
+        if (!readyNow(this.host.isReady, key)) throw Error('not-ready');
+        return this.host.readTextFile(OS_RELEASE, { on: key });
+      }).then(
+        text => {
+          if (!readyNow(this.host.isReady, key)) { finish({ status: 'unsure' }); return; }
+          const os = typeof text === 'string' ? machineOs({ release: text }) : null; finish(os ? { status: 'known', os } : { status: 'unknown' });
+        },
         () => finish({ status: 'unsure' }));
     }
   }
-  retry(machine) { const e = this.cache.get(machine ?? null); if (e?.status === 'unsure') e.at = -Infinity; }
   takeChanged() { const changed = this.changed; this.changed = false; return changed; }
 }
 
@@ -273,9 +317,13 @@ export function matchingSpace(machine, top, spaces = [], panes = [], lookup = ()
     && lookup(s.machine ?? null, spacePlace(s, panes))?.status === 'repo' && lookup(s.machine ?? null, spacePlace(s, panes)).top === top) ?? null;
 }
 // Verify one folder with the two read-only identity queries, raced against a deadline.
-export function verifyFolder(exec, machine, folder, after, deadlineMs = 12000) {
+// On a remote machine, D8 (above): not ready, or readiness lost before the answer, is
+// "Not verified" without a second attempt.
+export function verifyFolder(exec, machine, folder, after, deadlineMs = 12000, isReady = null) {
+  if (!readyNow(isReady, machine)) return Promise.resolve({ status: 'unsure' });
   const options = { cwd: folder, on: machine ?? null, timeout: deadlineMs };
-  const both = Promise.all([exec('git', [...GIT_TOP], options), exec('git', [...GIT_COMMON], options)]).then(([t, c]) => gitIdentity(t, c));
+  const both = Promise.all([exec('git', [...GIT_TOP], options), exec('git', [...GIT_COMMON], options)])
+    .then(([t, c]) => readyNow(isReady, machine) ? gitIdentity(t, c) : { status: 'unsure' });
   return new Promise(resolve => {
     let settled = false;
     after(deadlineMs + 1000, () => { if (!settled) { settled = true; resolve({ status: 'unsure' }); } });

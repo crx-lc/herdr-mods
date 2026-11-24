@@ -16,10 +16,10 @@ test('identity is verified only from two clean answers; Git\'s own "no" is none,
     assert.deepEqual(gitIdentity(top, common), { status: 'unsure' });
 });
 
-function prober({ atOnce = 2, answer } = {}) {
+function prober({ atOnce = 2, answer, ready = () => true } = {}) {
   const calls = [], timers = [], pending = [];
   let now = 0;
-  const host = { now: () => now, exec: (cmd, args, options) => { calls.push([cmd, args, options]);
+  const host = { now: () => now, isReady: machine => ready(machine), exec: (cmd, args, options) => { calls.push([cmd, args, options]);
     const r = answer?.(args, options); if (r) return Promise.resolve(r);
     return new Promise((resolve, reject) => pending.push({ resolve, reject, args, options })); } };
   const ids = new GitIdentities(host, { atOnce, retryMs: 1000, deadlineMs: 50 });
@@ -65,8 +65,9 @@ test('a hung probe times out to unsure on the host timer; at most N run at once;
   const q = prober({ answer: () => null }); q.ids.request([{ machine: 'edge', folder: '/x' }], q.after);
   q.pending[0].reject(Error('unreachable')); await q.settle(); await q.settle();
   assert.equal(q.ids.lookup('edge', '/x').status, 'unsure');
-  q.ids.retry(null); q.ids.request([{ machine: 'edge', folder: '/x' }], q.after); assert.equal(q.calls.length, 2, 'another machine reconnecting does not retry edge');
-  q.ids.retry('edge'); q.ids.request([{ machine: 'edge', folder: '/x' }], q.after); assert.equal(q.calls.length, 4, 'edge reconnecting retries edge');
+  // D8: no retry through a reconnect; the unsure answer is asked again only on the schedule.
+  q.ids.request([{ machine: 'edge', folder: '/x' }], q.after); assert.equal(q.calls.length, 2, 'not before retryMs');
+  q.tick(1500); q.ids.request([{ machine: 'edge', folder: '/x' }], q.after); assert.equal(q.calls.length, 4, 'asked again after retryMs');
 });
 
 const sp = (id, name, extra = {}) => ({ id, name, machine: null, active: false, branch: null, tabs: [{ id: 'tab-' + id }], ...extra });

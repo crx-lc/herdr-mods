@@ -26,9 +26,9 @@ test('LOGO is only a key into the bundled map, then ID; ID_LIKE never picks the 
   assert.equal(machineOs({}), null);
 });
 
-function cache(read) {
+function cache(read, ready = () => true) {
   const reads = [], timers = []; let now = 0;
-  const os = new MachineOs({ now: () => now, readTextFile: (path, options) => { reads.push([path, options.on]); return read(path, options); } }, { retryMs: 1000, deadlineMs: 50 });
+  const os = new MachineOs({ now: () => now, isReady: machine => ready(machine), readTextFile: (path, options) => { reads.push([path, options.on]); return read(path, options); } }, { retryMs: 1000, deadlineMs: 50 });
   return { os, reads, timers, after: (ms, fn) => timers.push(fn), tick: ms => { now += ms; } };
 }
 const settle = () => new Promise(r => setTimeout(r, 0));
@@ -46,12 +46,12 @@ test('reads os-release once per machine, ready machines only; this computer uses
   const mac = cache(() => Promise.resolve(UBUNTU)); mac.os.request([null], 'macos', mac.after); assert.deepEqual(mac.reads, []); assert.equal(mac.os.lookup(null), null);
 });
 
-test('a refused, failing or hung read keeps the machine icon and is retried later or on reconnect', async () => {
+test('a refused, failing or hung read keeps the machine icon and is retried only after retryMs, never on reconnect', async () => {
   const hung = cache(() => new Promise(() => {}));
   hung.os.request(['edge'], 'windows', hung.after); hung.timers[0](); await settle();
   assert.equal(hung.os.lookup('edge'), null);
   hung.os.request(['edge'], 'windows', hung.after); await settle(); assert.equal(hung.reads.length, 1, 'not before retryMs');
-  hung.os.retry('edge'); hung.os.request(['edge'], 'windows', hung.after); await settle(); assert.equal(hung.reads.length, 2, 'reconnect retries');
+  hung.tick(1500); hung.os.request(['edge'], 'windows', hung.after); await settle(); assert.equal(hung.reads.length, 2, 'retried on the schedule');
   const thrown = cache(() => { throw Error('refused'); }); thrown.os.request(['edge'], 'windows', thrown.after); await settle();
   assert.equal(thrown.os.lookup('edge'), null);
   thrown.tick(1500); thrown.os.request(['edge'], 'windows', thrown.after); await settle(); assert.equal(thrown.reads.length, 2, 'retried after retryMs');
