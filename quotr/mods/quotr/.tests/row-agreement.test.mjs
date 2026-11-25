@@ -163,3 +163,71 @@ test("a trail restored from a cache without trading times is not drawn across it
   assert.equal(await strokeCount(restored, now), g.runs.length);
   for (const run of g.runs) assert.ok(run.length > 1);
 });
+
+// Holes come from which bars exist (quotes.js isHole), never from minutes between prices.
+const dots = (tree) => walk(tree).filter((n) => n.kind === "paint")
+  .map((n) => n.calls.find((c) => c[0] === "path")[1].calls).filter((calls) => calls.some((c) => c[0] === "stroke" && c[1] === 2)).length;
+
+test("stocks without a trail: a missing finished bar right before the quote breaks the line", async () => {
+  const start = sessions(WED).regular[0];
+  // Bars at +0, +5, +10; the +15 bar is missing; the +20 bar is still forming; the quote at +21.
+  const points = [0, 5, 10, 20].map((m) => ({ t: start + m * M, close: 100 }));
+  const now = start + 21 * M;
+  const q = { symbol: "SAMPLE", price: 100, previousClose: 99, changePercent: 1 / 99 * 100, currency: "USD",
+    timestamp: now, fetchedAt: now, session: sessions(WED).regular, points, series: points.map((p) => p.close) };
+  const g = watchlistSparkline(q, now);
+  assert.deepEqual(g.runs.map((r) => r.length), [3, 1], "the quote stands alone after the missing bar");
+  const { ChartParts } = await views();
+  const tree = new ChartParts().watchlistChart(q, theme.ansi2, theme, now);
+  assert.equal(strokes(tree).length, 1); assert.equal(dots(tree), 1);
+  // The same quote with the +15 bar present joins the line.
+  const whole = { ...q, points: [0, 5, 10, 15, 20].map((m) => ({ t: start + m * M, close: 100 })) };
+  assert.deepEqual(watchlistSparkline(whole, now).runs.map((r) => r.length), [5]);
+});
+
+test("crypto: a missing finished kline right before the quote breaks the line (through Watchlist.crypto)", async () => {
+  const forming = Date.UTC(2026, 10, 25, 15, 15);
+  const now = forming + M; // the quote, one minute into the forming kline
+  const response = (body) => ({ ok: true, status: 200, text: async () => JSON.stringify(body) });
+  const klines = (skipLastFinished) => Array.from({ length: 96 }, (_, i) => forming - (95 - i) * KLINE)
+    .filter((t) => !(skipLastFinished && t === forming - KLINE)).map((t) => [t, "100", "0", "0", "100"]);
+  const run = async (skip) => {
+    const w = new Watchlist({ load: () => ({ version: 1, symbols: ["COIN/USDT"], paused: false }), now: () => now, changed: () => {},
+      fetch: async (url) => url.includes("klines") ? response(klines(skip))
+        : response({ symbol: "COINUSDT", lastPrice: "100", openPrice: "99", openTime: now - DAY, closeTime: now }) });
+    await w.crypto(["COIN/USDT"], () => true);
+    return watchlistSparkline(w.quotes["COIN/USDT"], now);
+  };
+  const missing = await run(true);
+  assert.equal(missing.runs.length, 2);
+  assert.equal(missing.runs.at(-1).length, 1, "the quote alone after the missing kline");
+  assert.equal((await run(false)).runs.length, 1);
+});
+
+test("stocks: the trail's quote between bar boundaries joins only an adjacent bar", () => {
+  const now = WED + 18 * H + 21 * M; // 13:21 EST, no live bar in the answer
+  const missing = WED + 18 * H + 10 * M; // the 13:10 bar is absent
+  const price = (d, s) => (d === TUE ? 100 : 95);
+  const q = answer({ days: [TUE, WED], now, price, drop: (t) => t === missing || t >= WED + 18 * H + 15 * M });
+  const g = watchlistSparkline(q, now);
+  // ... 13:05 | 13:10 missing | 13:15 absent too: the quote at 13:21 belongs to 13:20–13:25.
+  assert.equal(g.runs.length, 2);
+  assert.equal(g.runs.at(-1).length, 1);
+  const joined = answer({ days: [TUE, WED], now, price, drop: (t) => t >= WED + 18 * H + 20 * M });
+  assert.equal(watchlistSparkline(joined, now).runs.length, 1, "13:15 bar present, quote at 13:21: one line");
+});
+
+// The owner's decision: a scheduled closure is not missing data; the line runs on across it.
+test("the line stays continuous across overnight and weekend closures", async () => {
+  const price = (d, s) => (d === TUE ? 100 : s === "pre" ? 97 : 95);
+  const overnight = answer({ days: [TUE, WED], now: WED + 18 * H, price });
+  assert.equal(watchlistSparkline(overnight, WED + 18 * H).runs.length, 1);
+  assert.equal(await strokeCount(overnight, WED + 18 * H), 1, "Tuesday 20:00 to Wednesday 04:00: one stroke");
+  const FRI = Date.UTC(2026, 10, 27), MON = Date.UTC(2026, 10, 30);
+  const weekend = answer({ days: [FRI, MON], now: MON + 18 * H, price: (d, s) => (d === FRI ? 100 : s === "pre" ? 97 : 95) });
+  assert.equal(watchlistSparkline(weekend, MON + 18 * H).runs.length, 1);
+  assert.equal(await strokeCount(weekend, MON + 18 * H), 1, "Friday 20:00 to Monday 04:00: one stroke");
+  // A market without extended hours: the close, then the next session, also one line.
+  const index = answer({ days: [TUE, WED], now: WED + 18 * H, price, extended: false });
+  assert.equal(watchlistSparkline(index, WED + 18 * H).runs.length, 1);
+});

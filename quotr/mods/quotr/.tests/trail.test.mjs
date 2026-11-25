@@ -21,7 +21,7 @@ test("during the session: from Tuesday's close through its after hours, Wednesda
   const q = answer({ days: [TUE, WED], now, price: gap });
   const tr = q.trail;
   assert.equal(tr.reference, 100); assert.equal(tr.start, TUE + 21 * H);
-  assert.deepEqual(tr.points[0], { t: TUE + 21 * H, close: 100, session: "close", slot: 0, gap: false });
+  assert.deepEqual(tr.points[0], { t: TUE + 21 * H, close: 100, session: "close", slot: 0 });
   assert.equal(tr.closeAt, TUE + 21 * H);
   const sessionsSeen = [...new Set(tr.points.map((p) => p.session))];
   assert.deepEqual(sessionsSeen, ["close", "post", "pre", "regular"]);

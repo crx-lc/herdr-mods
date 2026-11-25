@@ -101,11 +101,14 @@ function sessionOf(t, periods) {
 export const STOCK_BAR_MS = 300_000;
 export const CRYPTO_BAR_MS = 900_000;
 /**
- * Whether two consecutive points of a line with bars of `bar` ms have a hole between them: more
- * than one and a half bars apart, so a single missing bar is a hole while a quote a few seconds
- * past a bar's end is not.
+ * Holes come from which bars exist, never from a time threshold. Each price on a line belongs to
+ * one bar interval of the bar grid (index = start / bar): a bar's open and close to that bar, a
+ * quote to the interval it falls in, (start, end]. Two neighbouring prices have a hole between
+ * them when an interval between theirs has no price at all.
  */
-export const isHole = (from, to, bar) => to - from > bar * 1.5;
+export const barOf = (start, bar) => Math.floor(start / bar);
+export const quoteBarOf = (t, bar) => Math.ceil(t / bar) - 1;
+export const isHole = (fromBar, toBar) => toBar - fromBar > 1;
 
 /** Trading time (inside any session) between `from` and `to`, in ms: closed hours count zero. */
 function tradingTime(from, to, periods) {
@@ -125,7 +128,7 @@ function tradingTime(from, to, periods) {
  * (`regularMarketPrice`, final by then). The line starts with that close at its time when both
  * are known, then every bar after it in its session. Each point's `slot` is the trading time since
  * the start, so closed hours take no room and missing bars leave room; `gap` marks a point after
- * a hole (isHole: any missing bar). The row's price is the latest trade, whether or not a reference is
+ * a hole (any missing bar, see isHole). The row's price is the latest trade, whether or not a reference is
  * known (`changePercent` is then null). null without a regular session.
  */
 export function yahooTrail(meta, bars, regular, now, reference = null) {
@@ -151,13 +154,10 @@ export function yahooTrail(meta, bars, regular, now, reference = null) {
     : { price: meta.regularMarketPrice, t: regularTime, session: "regular" };
   // The regular quote is the latest trade: it ends the line (replacing a bar at the same time).
   if (!extended && regularTime >= start && (!last || regularTime >= last.t)) {
-    const end = { t: regularTime, close: meta.regularMarketPrice, session: "regular" };
+    const end = { t: regularTime, close: meta.regularMarketPrice, session: "regular", quote: true };
     if (last && last.t === regularTime && last.session !== "close") points[points.length - 1] = end; else points.push(end);
   }
-  points.forEach((p, i) => {
-    p.slot = tradingTime(start, p.t, periods);
-    p.gap = i > 0 && isHole(points[i - 1].slot, p.slot, STOCK_BAR_MS);
-  });
+  for (const p of points) p.slot = tradingTime(start, p.t, periods);
   return { reference: ref, closeAt, start, points, ...shown,
     changePercent: ref !== null ? (shown.price - ref) / ref * 100 : null };
 }

@@ -6,7 +6,7 @@
 // ago); the line is drawn against it, in the percentage's color. Only observed prices are
 // drawn, each at its own time: bar closes, the first bar's open and the quote itself. Gaps in
 // the data stay blank; nothing is interpolated or inferred.
-import { formatPrice, isCryptoPair, shownQuote, isHole, STOCK_BAR_MS, CRYPTO_BAR_MS } from "./quotes.js";
+import { formatPrice, isCryptoPair, shownQuote, isHole, barOf, quoteBarOf, STOCK_BAR_MS, CRYPTO_BAR_MS } from "./quotes.js";
 import { zoneAt, formatPointTime } from "./readout.js";
 
 export const SPARK_WIDTH = 56;
@@ -50,15 +50,16 @@ export function sparkWindow(quote, observed) {
 export function observedPrices(quote) {
   const q = quote ?? {};
   const bar = isCryptoPair(q.symbol ?? "") ? CRYPTO_BAR_MS : STOCK_BAR_MS;
-  const shown = positive(q.price) && positive(q.timestamp) ? { t: q.timestamp, price: q.price } : null;
+  // `k`: the bar interval each price belongs to (quotes.js, isHole).
+  const shown = positive(q.price) && positive(q.timestamp) ? { t: q.timestamp, price: q.price, k: quoteBarOf(q.timestamp, bar) } : null;
   const until = shown?.t ?? Infinity;
   const points = Array.isArray(q.points) ? q.points.filter((p) => positive(p?.t) && positive(p?.close)) : [];
   const out = [];
   if (positive(q.firstOpen?.t) && positive(q.firstOpen?.price) && q.firstOpen.t <= until
     && (!points.length || q.firstOpen.t <= points[0].t)) {
-    out.push({ t: q.firstOpen.t, price: q.firstOpen.price });
+    out.push({ t: q.firstOpen.t, price: q.firstOpen.price, k: barOf(q.firstOpen.t, bar) });
   }
-  for (const p of points) if (p.t + bar <= until) out.push({ t: p.t + bar, price: p.close });
+  for (const p of points) if (p.t + bar <= until) out.push({ t: p.t + bar, price: p.close, k: barOf(p.t, bar) });
   out.sort((a, b) => a.t - b.t);
   if (shown) out.push(shown);
   // One price per time: the later entry (the quote, at the end) wins.
@@ -155,8 +156,7 @@ export function watchlistSparkline(quote, now, { failed = false } = {}) {
     const y = scale(values, reference);
     const x = (t) => SPARK_LEFT + (SPARK_RIGHT - SPARK_LEFT) * Math.min(1, (t - window[0]) / (window[1] - window[0]));
     line = observed.map((p) => [x(p.t), y(p.price)]);
-    const bar = crypto ? CRYPTO_BAR_MS : STOCK_BAR_MS;
-    runs = splitRuns(line.length, (i) => isHole(observed[i - 1].t, observed[i].t, bar)).map((r) => r.map((i) => line[i]));
+    runs = splitRuns(line.length, (i) => isHole(observed[i - 1].k, observed[i].k)).map((r) => r.map((i) => line[i]));
     referenceY = reference !== null ? y(reference) : null;
   } else if (reference !== null) {
     referenceY = (SPARK_TOP + SPARK_BOTTOM) / 2;
@@ -170,7 +170,8 @@ const isStale = (q, now, failed) => failed || !positive(q.fetchedAt) || !Number.
 
 /**
  * Spaced by trading time (closed hours take no room); a missing bar keeps its room and breaks
- * the line, judged from the slots themselves.
+ * the line, judged from the slots themselves. A scheduled closure is not missing data: the line
+ * runs on across nights and weekends (the owner's decision).
  */
 function trailSparkline(q, points, now, failed) {
   const reference = positive(q.previousClose) ? q.previousClose : null;
@@ -181,7 +182,9 @@ function trailSparkline(q, points, now, failed) {
   const span = SPARK_RIGHT - SPARK_LEFT;
   const xs = points.map((p) => (last > first ? SPARK_LEFT + span * (p.slot - first) / (last - first) : SPARK_RIGHT));
   const line = points.map((p, i) => [xs[i], y(p.close)]);
-  const runs = splitRuns(n, (i) => isHole(points[i - 1].slot, points[i].slot, STOCK_BAR_MS)).map((r) => r.map((i) => line[i]));
+  // The trading-time bar grid: the close ends the bar before slot 0, the appended quote falls in an interval.
+  const k = (p) => (p.session === "close" ? -1 : p.quote ? quoteBarOf(p.slot, STOCK_BAR_MS) : barOf(p.slot, STOCK_BAR_MS));
+  const runs = splitRuns(n, (i) => isHole(k(points[i - 1]), k(points[i]))).map((r) => r.map((i) => line[i]));
   const half = last > first ? span * STOCK_BAR_MS / 2 / (last - first) : 0;
   const price = (value) => formatPrice({ price: value, currency: q.currency ?? null });
   const when = (t) => formatPointTime(t, q.timeZone, { now }) ?? "the last session";
