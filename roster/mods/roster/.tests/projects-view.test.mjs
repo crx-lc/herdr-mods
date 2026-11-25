@@ -335,3 +335,22 @@ test('native fix (B4): on keyboard focus the footer starts with the full status,
   assert.ok(flatten(byId(s.render(), 'roster-focus-tooltip')).some(e => e.attributes.truncate && /^Status: /.test(textOf(e))));
   assert.ok(pilot);
 });
+
+test('native fix 2 (C3): on keyboard focus the footer of an issue entry starts with its exact time, so no width cuts it off', async () => {
+  const repos = { 'crx-lc/pilot-app': { issues: 1, prs: 0, list: [issue(3, 12, 'A long title that fills the footer of a narrow sidebar well before its end')], board: { 3: 'Ready' } },
+    'crx-lc/pilot-docs': { issues: 1, prs: 0, list: [issue(4, 30, 'Write the guide')], board: {} }, 'crx-lc/pilot-site': { issues: 0, prs: 0, list: [], board: {} } };
+  const s = await setup(world({ repos }), { narrow: true });
+  await s.poll(); s.render();
+  const pilot = registered(s.view, 'pilot');
+  s.view.place('project-issues:' + pilot.key); press(s, 'enter'); await settle(); s.render();
+  const footer = () => byId(s.render(), 'roster-focus-tooltip');
+  s.view.place('project:issue:crx-lc/pilot-app#3');
+  assert.equal(textOf(footer()), 'Opened 2026-11-13 12:00 UTC · crx-lc/pilot-app#3 A long title that fills the footer of a narrow sidebar well before its end · Ready · opened 12 days ago');
+  // The leading text is what the footer keeps when it truncates.
+  assert.ok(flatten(footer()).some(e => e.attributes.truncate && /^Opened 2026-11-13 12:00 UTC · /.test(textOf(e))));
+  s.view.place('project:issue:crx-lc/pilot-docs#4');
+  assert.equal(textOf(footer()), 'Opened 2026-10-26 12:00 UTC · crx-lc/pilot-docs#4 Write the guide · not on board · opened 30 days ago');
+  // Hover and the accessible label are unchanged: the exact time on hover, the whole entry for a screen reader.
+  assert.equal(byId(s.render(), 'project:issue:crx-lc/pilot-docs#4').attributes.tooltip[0].split('\n')[0], 'Opened 2026-10-26 12:00 UTC');
+  assert.equal(footer().attributes.accessibility_label[0], 'crx-lc/pilot-docs#4 Write the guide · not on board · opened 30 days ago · Opened 2026-10-26 12:00 UTC');
+});

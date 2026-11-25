@@ -208,3 +208,73 @@ test('a partial issue list names the repository it is missing; ages read in days
   assert.equal(utcStamp(Date.parse('2026-01-02T03:04:05Z')), '2026-01-02 03:04 UTC');
 });
 import { projectRepositories } from '../project-totals.js';
+
+// Review 4: a deadline is a time read at the moment of use, not only by the 1 s poll. In these tests the clock moves
+// and the answer lands with no tick() in between (s.t.now is set directly; s.t.advance would tick).
+const COUNTS = (issues, prs) => ({ code: 0, stdout: JSON.stringify({ data: { repository: { issues: { totalCount: issues }, pullRequests: { totalCount: prs } } } }), stderr: '' });
+const PAGE = (nodes, next) => ({ code: 0, stdout: JSON.stringify({ data: { repository: { issues: { totalCount: 250, pageInfo: { hasNextPage: next !== null, endCursor: next }, nodes } } } }), stderr: '' });
+const entryOf = (map, key) => { const e = map.get(key); return [e.status, e.reason, e.value, e.okAt]; };
+
+test('review 4 (deadline at use): an answer between two polls, after its deadline, is no answer in time; expired queued work never starts', async () => {
+  const s = setup({}, { modes: { 'sample-org/a': 'hang', 'sample-org/b': 'hang', 'sample-org/c': 'hang' } });
+  const start = s.t.now;
+  s.data.wantCounts(['sample-org/a', 'sample-org/b', 'sample-org/c']); await settle();
+  assert.deepEqual([s.data.running, s.data.queue.length, s.gh.calls.length], [2, 1, 2]);
+  // An ordinary poll just before the deadline (start + 25 s) ends nothing.
+  s.t.now = start + 24499; s.data.tick();
+  assert.deepEqual(['a', 'b', 'c'].map(n => s.data.counts.get('sample-org/' + n).status), ['loading', 'loading', 'loading']);
+  // 1 ms past the deadline, before the next poll, the first call answers.
+  s.t.now = start + 25001;
+  s.gh.hung[0].resolve(COUNTS(42, 7)); await settle();
+  assert.deepEqual(entryOf(s.data.counts, 'sample-org/a'), ['error', 'timeout', null, null], 'not a fresh ok with a new success time');
+  assert.deepEqual(entryOf(s.data.counts, 'sample-org/c'), ['error', 'timeout', null, null], 'the queued job had expired too');
+  assert.deepEqual([s.gh.calls.length, s.data.queue.length], [2, 0], 'and was not started with a new deadline in the freed slot');
+  assert.equal(s.data.running, 1, 'the call still running keeps its slot');
+  assert.equal(projectTotals(group(['sample-org/a']), s.data, s.t.now).issues.label, 'Open issues unavailable: sample-org/a (no answer in time)');
+  // The next poll ends the one still running; its slot frees only when it really ends, and a late answer changes nothing.
+  s.t.now += 999; s.data.tick();
+  assert.deepEqual([entryOf(s.data.counts, 'sample-org/b'), s.data.running], [['error', 'timeout', null, null], 1]);
+  s.gh.hung[1].resolve(COUNTS(1, 1)); await settle();
+  assert.deepEqual([entryOf(s.data.counts, 'sample-org/b'), s.data.running], [['error', 'timeout', null, null], 0]);
+});
+
+test('review 4 (deadline at use): after a delayed poll an answer one hour late is refused; one just inside the deadline is taken', async () => {
+  const s = setup({}, { modes: { counts: 'hang' } });
+  const start = s.t.now;
+  s.data.wantCounts(['sample-org/a', 'sample-org/b']); await settle();
+  // No poll at all (the app was paused): the clock is an hour on when the answer comes.
+  s.t.now = start + 3600000;
+  s.gh.hung[0].resolve(COUNTS(42, 7)); await settle();
+  assert.deepEqual(entryOf(s.data.counts, 'sample-org/a'), ['error', 'timeout', null, null]);
+  s.data.tick();
+  assert.deepEqual(entryOf(s.data.counts, 'sample-org/a'), ['error', 'timeout', null, null], 'and the next poll finds it ended, not fresh');
+  assert.deepEqual([entryOf(s.data.counts, 'sample-org/b'), s.data.running], [['error', 'timeout', null, null], 1]);
+  s.gh.hung[1].resolve(COUNTS(1, 1)); await settle();
+  // The boundary: the last millisecond before the deadline is in time, with no poll needed either.
+  s.t.now += 300000; s.data.wantCounts(['sample-org/a']); await settle();
+  const again = s.t.now;
+  s.t.now = again + 24999;
+  s.gh.hung[2].resolve(COUNTS(42, 7)); await settle();
+  assert.deepEqual(entryOf(s.data.counts, 'sample-org/a'), ['ok', null, { issues: 42, prs: 7 }, again + 24999]);
+});
+
+test('review 4 (deadline at use): a list asks for no further page once its deadline has passed', async () => {
+  const s = setup({}, { modes: { list: 'hang' } });
+  const start = s.t.now, node = issue(1, 3);
+  s.data.wantList(['sample-org/big', 'sample-org/slow'], null); await settle();
+  assert.equal(s.gh.calls.length, 2);
+  // In time: the next page is asked.
+  s.t.now = start + 1000;
+  s.gh.hung[0].resolve(PAGE([node], 'cursor1')); await settle();
+  assert.deepEqual(s.gh.calls.map(c => [c.name, c.after]), [['big', undefined], ['slow', undefined], ['big', 'cursor1']]);
+  // 1 ms past the list's deadline (5 calls of 20 s + 5 s), before any poll: the page that arrives starts no other.
+  s.t.now = start + 105001;
+  s.gh.hung[2].resolve(PAGE([issue(2, 2)], 'cursor2')); await settle();
+  assert.equal(s.gh.calls.length, 3, 'no page after the deadline');
+  assert.deepEqual(entryOf(s.data.lists, 'sample-org/big'), ['error', 'timeout', null, null]);
+  // The same for a first page that arrives late.
+  s.gh.hung[1].resolve(PAGE([node], 'cursor1')); await settle();
+  assert.equal(s.gh.calls.length, 3);
+  assert.deepEqual(entryOf(s.data.lists, 'sample-org/slow'), ['error', 'timeout', null, null]);
+  assert.deepEqual([s.data.running, s.data.queue.length], [0, 0], 'both slots are free once the calls really ended');
+});

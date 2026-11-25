@@ -155,3 +155,34 @@ test('native fix (A6): a catalog that goes missing keeps its projects, flagged, 
   assert.deepEqual(none.sources.map(s => [s.status, s.current]), [['missing', true], ['ok', true]]);
   assert.equal(catalogNotice(none.sources), null);
 });
+
+test('review 4 (deadline at use): a read that answers after its deadline, before any poll, is a timeout and moves no revision', async () => {
+  const t = clock(), answers = { local: catalogText(null, [pilot()], 4) };
+  const { host, reads, hung } = catalogHost({ answers, machines: [{ name: null, layout: 'ready' }], now: () => t.now });
+  const source = new CatalogSource(host);
+  source.refresh(); await settle();
+  assert.deepEqual(source.sources().map(s => [s.status, s.current, s.result.revision]), [['ok', true, 4]]);
+  // The next read hangs. The clock passes its 5 s deadline with no tick(), then the read answers revision 9.
+  answers.local = 'hang';
+  t.now += 60000; source.refresh(); await settle();
+  t.now += 5001;
+  hung[0].resolve(catalogText(null, [pilot(), entry('notes', { mode: 'manual' })], 9)); await settle();
+  const [late] = source.sources();
+  assert.deepEqual([late.status, late.why, late.current, late.result.revision], ['unavailable', 'timeout', false, 4], 'not accepted as current; the last catalog is kept as stale');
+  assert.equal(source.revisions.get(null), 4, 'the revision high-water did not move');
+  assert.equal(catalogMembership(source.sources(), registeredGroups(source.sources()))(row('t1', 'pilot')), null, 'no membership through it');
+  source.tick();
+  assert.deepEqual([source.sources()[0].status, source.sources()[0].why], ['unavailable', 'timeout'], 'the next poll finds it ended');
+  // Revision 5 is therefore still a step forward (it would be "backwards" had 9 been taken), read in the freed slot.
+  answers.local = catalogText(null, [pilot()], 5);
+  t.now += 60000; source.refresh(); await settle();
+  assert.equal(reads.length, 3);
+  assert.deepEqual(source.sources().map(s => [s.status, s.why, s.current, s.result.revision]), [['ok', null, true, 5]]);
+  // The boundary: the last millisecond before the deadline is in time, with no poll needed.
+  answers.local = 'hang';
+  t.now += 60000; source.refresh(); await settle();
+  t.now += 4999;
+  hung[1].resolve(catalogText(null, [pilot()], 6)); await settle();
+  assert.deepEqual(source.sources().map(s => [s.status, s.current, s.result.revision]), [['ok', true, 6]]);
+  assert.equal(source.revisions.get(null), 6);
+});

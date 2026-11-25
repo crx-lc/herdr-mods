@@ -4,6 +4,8 @@
 //   host: { readTextFile(path, { on }), machines(), terminals(), home(), platform(), now() }
 //   refresh(force)   starts the reads that are due; tick() ends a read that passed its deadline (Roster's 1 s timer
 //                    calls it). No timer is kept from a caller: a click handler's timer dies when it returns.
+//                    The deadline is a time read when a read's answer is taken (finish, in read()), so an answer
+//                    that lands after it is refused whether or not a tick came first.
 //   sources()        [{ machine, status, why, result, current, at, path }] for project-groups.js
 //
 // This computer: the fixed path for its platform. Another machine: only while Herdr reports it ready, with the
@@ -60,10 +62,11 @@ export class CatalogSource {
     for (const machine of machines) this.read(machine);
     return true;
   }
-  // A read past its deadline is unavailable ('timeout'); its slot stays taken until the read really ends.
+  // A read past its deadline is unavailable ('timeout'); its slot stays taken until the read really ends. Only the
+  // sweep for a read that has not answered: finish itself reads the clock, so nothing depends on this having run.
   tick() {
     const now = this.host.now();
-    for (const [machine, d] of [...this.deadlines]) if (now >= d.at) { this.deadlines.delete(machine); d.finish({ status: 'unavailable', why: 'timeout' }); }
+    for (const d of [...this.deadlines.values()]) if (now >= d.at) d.finish({ status: 'unavailable', why: 'timeout' });
   }
   settle(machine, next) {
     const before = this.entries.get(machine);
@@ -85,9 +88,18 @@ export class CatalogSource {
     if (!path) { this.settle(machine, { status: 'unavailable', why: 'no-location' }); return; }
     if (!before) { this.entries.set(machine, { machine, status: 'reading', why: null, path, result: null, current: false, at: this.host.now(), okAt: null }); this.changed = true; }
     this.busy.add(machine);
+    // The one deadline rule (as in github.js): the clock is read at the moment an answer is taken. Whatever arrives at
+    // or after the deadline is 'timeout', and only an accepted catalog moves the revision high-water: both happen
+    // here and nowhere else. One read per machine and no second request, so there is nothing else to dispatch.
+    const deadline = this.host.now() + this.deadlineMs;
     let settled = false;
-    const finish = next => { if (settled) return; settled = true; this.deadlines.delete(machine); this.settle(machine, { ...next, path }); };
-    this.deadlines.set(machine, { at: this.host.now() + this.deadlineMs, finish });
+    const finish = next => {
+      if (settled) return; settled = true; this.deadlines.delete(machine);
+      if (this.host.now() >= deadline) next = { status: 'unavailable', why: 'timeout' };
+      if (next.status === 'ok') this.revisions.set(machine, Math.max(this.revisions.get(machine) ?? 0, next.result.revision));
+      this.settle(machine, { ...next, path });
+    };
+    this.deadlines.set(machine, { at: deadline, finish });
     const work = machine === null
       ? Promise.resolve().then(() => this.host.readTextFile(path, { on: null })).then(text => ({ state: 'available', text, local: true }), () => ({ state: 'unavailable', reason: 'read-failed' }))
       : remoteCatalogRead({ machine, isReady: () => this.ready(machine), read: () => this.host.readTextFile(path, { on: machine }) });
@@ -97,7 +109,6 @@ export class CatalogSource {
       if (outcome.local && outcome.text === null) { finish({ status: 'missing', why: 'no-file' }); return; }
       const result = assessCatalog({ text: outcome.text, lastRevision: this.revisions.get(machine) ?? null });
       if (result.status !== 'ok') { finish({ status: 'unknown', why: result.why }); return; }
-      if (!settled) this.revisions.set(machine, Math.max(this.revisions.get(machine) ?? 0, result.revision));
       finish({ status: 'ok', result });
     }, () => finish({ status: 'unavailable', why: 'read-failed' })).finally(() => { this.busy.delete(machine); this.changed = true; });
   }

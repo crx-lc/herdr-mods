@@ -56,11 +56,13 @@ as an issue. **Partial** totals read "≥12 issues", counting only repositories 
 missing repository and why, and any stale count with its time (a stale count is never added to that lower bound); **stale**
 ones are muted with "as of HH:MM UTC"; **unavailable** ones read "– issues" with the reason (no `gh`, not logged in,
 access refused, no answer in time, an error status, an answer Roster could not read). Only an answer from every
-repository shows a confirmed 0.
+repository shows a confirmed 0. A total's label is its hover text and accessible name; on keyboard focus the footer
+shows its start (the state and the count), and a long list of repositories is cut there.
 
 The issues total opens the **open-issue list** inline below the header (the list stays visible): repository and
 number, title (opens GitHub), the issue's Status on the project's monitored board, and its age ("opened 12 days
-ago"), with the exact creation time (UTC) on hover and in the footer on keyboard focus. Oldest first, all open
+ago"), with the exact creation time (UTC) on hover and, on keyboard focus, at the start of the footer ("Opened
+2026-11-13 12:00 UTC · …"), so a narrow sidebar never cuts it. Oldest first, all open
 issues by default; filters for the board's own statuses, **No board status** (an issue not on the board, or on it
 with no Status: never counted as Backlog) and **Status unknown** (board data that could not be read). Notes name each
 repository whose list or board data is missing, including any registered repository Roster does not read (not a
@@ -75,7 +77,8 @@ shared Needs you timer says who arrived, and the echo adds no timer or sound of 
 label, and on keyboard focus the footer starts with it ("Status: Working · …"), so a narrow sidebar never cuts it. The leading runtime icon is unchanged.
 
 When no catalog can be read, a single focusable line, "Project catalog unavailable · showing Spaces", heads the
-list (each machine's state in its label; Enter reads again, at most every 10 s), and the groups are as before.
+list (each machine's state in its hover text and accessible label; on keyboard focus the footer repeats the line;
+Enter reads again, at most every 10 s), and the groups are as before.
 
 **Details**, **Options** and **Open folder as Space** share one disclosure state:
 opening one closes the other. Click the same trigger again to close it. These are
@@ -411,7 +414,9 @@ the folder check in "Open folder as Space…". The delegation reader below stays
 Herdr reports it ready, under the D8 rule above (ready before the one read and again after it, never retried), at
 `~/.local/share/herdr-agents/published/projects.v1.json`. On either, a watcher's `herdr.projects` label names the
 path instead when exactly one valid absolute path is on that machine's live terminals. One read per machine every
-60 s, each ended after 5 s (a deadline checked by Roster's 1 s timer); a hung read is never started twice. At most 1 MiB (Herdr's read limit).
+60 s, each ended after 5 s; a hung read is never started twice. The deadline is a time, read again when the answer
+arrives: a catalog that arrives after it is not accepted and moves no revision, whether or not Roster's 1 s timer
+ran in between. At most 1 MiB (Herdr's read limit).
 No other file, folder scan, `hc` call or repository or board discovery: repositories and boards are only what the
 catalog names. Catalog icons are written to the mod's hidden `.cache/icons/<sha256>.svg` (the only file Roster writes
 for this, under Herdr's home).
@@ -420,9 +425,12 @@ for this, under Herdr's home).
 this computer, directly with arguments (no shell), with the person's own `gh` login; values are passed with `-f`
 (raw strings) and only the board number with `-F`. Nothing about credentials is read, stored or logged; only `gh`'s
 exit code, output and error text are read, and an error is kept as a short code. The calls, each with a 20 s timeout
-and at most two at once. No call waits on a timer kept from a click or key: each job's deadline is a time checked
-by Roster's 1 s timer, so work waiting for a slot ends as "no answer in time" after 25 s, a running job after its
-calls' time plus 5 s, and a job that cannot start fails at once and frees its slot:
+and at most two at once. No call waits on a timer kept from a click or key: each job's deadline is a time, so work
+waiting for a slot ends as "no answer in time" after 25 s, a running job after its calls' time plus 5 s, and a job
+that cannot start fails at once and frees its slot. That time is read at every use, not only by Roster's 1 s timer:
+an answer that arrives after it is not taken (even between two timer runs, or after the timer was late), work whose
+wait has passed it is not started, and a list asks for no further page; a call still running keeps its slot until
+it really ends:
 
 | Call | When |
 |---|---|

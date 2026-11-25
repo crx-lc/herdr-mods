@@ -6,7 +6,8 @@
 // The only program run is `gh api graphql`, directly with arguments (never a shell), locally. Values go in with -f
 // (raw strings: never read as @file); only a board number, checked as a positive integer, goes with -F. Nothing
 // about credentials is read, stored or logged: only gh's exit code, stdout and stderr are parsed, and an error is
-// kept as a short code. Each job has a deadline checked by tick(); a hung call keeps its slot until it really ends.
+// kept as a short code. Each job has a deadline, a time checked at every use (late()); a hung call keeps its slot
+// until it really ends.
 export const GH = 'gh';
 export const REPOSITORY = /^([A-Za-z0-9](?:[A-Za-z0-9-]{0,38}))\/([A-Za-z0-9_.-]{1,100})$/;
 const CURSOR = /^[A-Za-z0-9+/=_-]{1,256}$/;
@@ -163,11 +164,17 @@ export class GitHubData {
     if (board !== undefined) this.wantList(repositories, board, true);
     return true;
   }
-  // No timer of its own and no caller's timer: a deadline is a time, checked by tick() (Roster's 1 s timer calls it,
-  // and every want* call does). A timer kept from a click or key handler stops working once that handler returns, and
-  // a job whose deadline depended on it never started and kept its slot for good (the native check of 7d58e32).
-  // Queued work waits at most callMs + graceMs; a running job at most its calls' time + graceMs. At its deadline a
-  // job shows "no answer in time"; a running one keeps its slot until its native call really ends.
+  // No timer of its own and no caller's timer: a deadline is a time. A timer kept from a click or key handler stops
+  // working once that handler returns, and a job whose deadline depended on it never started and kept its slot for
+  // good (the native check of 7d58e32).
+  // Queued work waits at most callMs + graceMs; a running job at most its calls' time + graceMs.
+  //
+  // The one deadline rule: late(job) reads the clock at the moment of use, and nothing uses a job without asking it.
+  // That is every place a job moves on: finish (an answer is taken), pump (queued work starts) and call (a request,
+  // so every page of a list, starts). tick() is only the sweep that shows "no answer in time" while nothing else
+  // happens (Roster's 1 s timer calls it); no path waits for it, so an answer that lands between two ticks, or after
+  // a late or missed one, is still refused. A job past its deadline keeps its slot until its native call really ends.
+  late(job) { return this.host.now() >= job.deadline; }
   enqueue(job) {
     const before = job.map.get(job.key);
     job.map.set(job.key, { ...(before ?? { value: null, okAt: null, reason: null }), status: 'loading', at: this.host.now(), cached: before?.cached ?? false, previous: before?.status ?? null });
@@ -180,17 +187,20 @@ export class GitHubData {
     this.changed = true;
   }
   tick() {
-    const now = this.host.now();
-    for (const job of this.queue.filter(job => now >= job.deadline)) { this.queue.splice(this.queue.indexOf(job), 1); this.fail(job, 'timeout'); }
-    for (const job of this.active) if (now >= job.deadline) job.finish({ ok: false, reason: 'timeout' });
+    for (const job of this.queue.filter(job => this.late(job))) { this.queue.splice(this.queue.indexOf(job), 1); this.fail(job, 'timeout'); }
+    for (const job of [...this.active]) if (this.late(job)) job.finish({ ok: false, reason: 'timeout' });
     this.pump();
   }
   pump() {
     while (this.running < this.limits.atOnce && this.queue.length) {
       const job = this.queue.shift();
+      // Waited past its deadline: never started, and never given a running deadline.
+      if (this.late(job)) { this.fail(job, 'timeout'); continue; }
       let settled = false;
       job.finish = outcome => {
         if (settled) return; settled = true;
+        // Whatever arrives at or after the deadline is no answer in time, whether or not a tick has said so yet.
+        if (this.late(job)) outcome = { ok: false, reason: 'timeout' };
         const before = job.map.get(job.key) ?? {};
         job.map.set(job.key, outcome.ok
           ? { status: 'ok', reason: null, at: this.host.now(), okAt: this.host.now(), value: outcome.value, cached: false }
@@ -202,14 +212,15 @@ export class GitHubData {
       job.deadline = this.host.now() + this.limits.callMs * calls + this.limits.graceMs;
       // A job that cannot even start fails at once and gives its slot back.
       let work;
-      try { work = this.run(job, () => !settled); } catch { job.finish({ ok: false, reason: 'gh-unavailable' }); continue; }
+      try { work = this.run(job, () => !settled && !this.late(job)); } catch { job.finish({ ok: false, reason: 'gh-unavailable' }); continue; }
       this.running++; this.active.add(job);
       Promise.resolve(work).then(job.finish, () => job.finish({ ok: false, reason: 'gh-unavailable' }))
         .finally(() => { this.active.delete(job); this.running--; this.changed = true; this.pump(); this.persist(); });
     }
   }
+  // One request. A job that has ended or is past its deadline starts no request (so no further page of a list).
   async call(args, live) {
-    if (!live()) throw Error('cancelled');
+    if (!live()) return { ok: false, reason: 'timeout' };
     let result;
     try { result = await this.host.exec(GH, args, { timeout: this.limits.callMs }); }
     catch { return { ok: false, reason: 'gh-unavailable' }; }

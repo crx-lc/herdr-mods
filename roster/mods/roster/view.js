@@ -186,7 +186,8 @@ export function createRosterView(kit, app, options = {}) {
       for (const group of groups) if (group.presentation?.icon) this.projectIcons?.ensure(group.presentation.icon);
     }
     // Read the catalog (every 60 s), keep the totals of every registered project fresh (every 5 min) and the open
-    // issue list fresh while its panel is open. Deadlines are times checked here every second, never a kept cx.
+    // issue list fresh while its panel is open. Deadlines are times, never a kept cx: swept here every second, and read
+    // by both modules themselves whenever an answer is taken or more work starts.
     pollProjects(cx) {
       this.catalogSource?.refresh();
       const changed = (this.catalogSource?.takeChanged() ?? false) | (this.projectIcons?.takeChanged() ?? false);
@@ -789,7 +790,8 @@ export function createRosterView(kit, app, options = {}) {
           append(row);
         }
         for (const item of list.items) {
-          const label = item.repo + '#' + item.number + ' ' + item.title + ' · ' + (item.statusText || 'no board') + ' · ' + item.age + ' · ' + item.exact;
+          const facts = item.repo + '#' + item.number + ' ' + item.title + ' · ' + (item.statusText || 'no board') + ' · ' + item.age;
+          const label = facts + ' · ' + item.exact;
           const line = h().min_w(0).flex_1().gap(5)
             .child(div().flex_none().text_size(10.5).text_color(muted).child(item.short + '#' + item.number))
             .child(div().min_w(0).flex_1().truncate().text_size(11.5).text_color(theme.accent ?? fg).child(item.title));
@@ -797,7 +799,9 @@ export function createRosterView(kit, app, options = {}) {
           line.child(div().flex_none().text_size(10.5).text_color(muted).child(item.age.replace('opened ', '')));
           const el = link('project:issue:' + item.key, label, line, item.url);
           el.tooltip(item.exact + '\n' + item.repo + '#' + item.number + ' ' + item.title);
-          this.controls.at(-1).hover = item.exact;
+          // On keyboard focus the footer shows one line, cut at the sidebar's width: the exact time comes first so it
+          // always shows (#25), then what the entry already draws. The label keeps its order for screen readers.
+          Object.assign(this.controls.at(-1), { hover: item.exact, detail: item.exact + ' · ' + facts });
           append(el);
         }
         if (list.state !== 'loading' && !list.items.length && list.total > 0) append(text('No open issue has this status', 11, muted));
