@@ -287,7 +287,8 @@ export default class Quotr extends View {
                 .child(this.primary(symbol, `quotr-symbol-${symbol}`, policy, true).font_semibold())
                 .when(Boolean(meta), (el) => el.child(div().text_size(11).text_color(t.dim).truncate().child(meta)))))
             .when(reordering, (el) => el.child(this.moveButtons(symbol, index, symbols.length, t)))
-            .when(Boolean(quote) && !reordering && row.chart, (el) => el.child(this.chart(quote, color, t, { width: 56, height: 22 }).id(`quotr-chart-${symbol}`)))
+            // Charts only from the 340px stage (responsive.js); the two-channel sparkline names itself quotr-spark-<symbol>.
+            .when(Boolean(quote) && !reordering && row.chart, (el) => el.child(this.watchlistChart(quote, color, t, now, { failed: Boolean(failed) })))
             .child((row.stack ? h_flex().w_full().flex_wrap().gap(8) : v_flex().flex_none().w(108).gap(1)).id(`quotr-values-${symbol}`).min_w(0)
               // The last value stays during a refresh; a small pulsing dot marks the update in flight.
               // "Waiting…" only when there has never been a quote for this row.

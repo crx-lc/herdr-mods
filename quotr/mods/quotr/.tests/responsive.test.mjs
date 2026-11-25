@@ -180,8 +180,8 @@ test('ordinary default retains secondary information; long primary text adapts p
     const tree = f.resize(width);
     const ordinary = byId(tree, 'quotr-layout-Q');
     assert.equal(ordinary.kind, width >= 300 ? 'h' : 'v');
-    assert.equal(Boolean(byId(tree, 'quotr-chart-Q')), width >= 340);
-    assert.equal(Boolean(byId(tree, 'quotr-chart-MISSING')), false);
+    assert.equal(Boolean(byId(tree, 'quotr-spark-Q')), width >= 340);
+    assert.equal(Boolean(byId(tree, 'quotr-spark-MISSING')), false);
     assert.equal(flatten(ordinary).some(e => e.attrs.w?.[0] === 31.5), width >= 300);
     assert.equal(byId(tree, `quotr-layout-${symbols[1]}`).kind, 'v', 'long symbol uses full row');
     assert.equal(textOf(byId(tree, 'quotr-price-Q')), '230.10 USD');

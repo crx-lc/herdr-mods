@@ -31,6 +31,8 @@ const api = {
   View: class {}, div: () => builder('div'), image: path => builder('image').source(path),
   h_flex: () => builder('h'), v_flex: () => builder('v'),
   InputState: input, Input: { new: state => builder('input').placeholder(state.placeholder ?? 'Add a ticker') },
+  // The sparkline card (charts.js); drawn only after a hover rest, which these fixtures never do.
+  Popup: { new: (id, trigger) => builder('popup').popup(id).child(trigger) },
   PathBuilder: { stroke: () => builder('path'), fill: () => builder('path') }, Background: { solid: () => builder('paint') },
   checking: () => isChecking, props: () => ({}), theme: () => colors, settings: () => ({ dark: true }),
   shared: () => null, setShared: forbidden('setShared'), nextCommand: () => new Promise(() => {}),
@@ -44,7 +46,7 @@ globalThis.window = { paint_path: (path, paint) => builder("path-layer").child(p
 const exportsFor = names => url(names.map(name => `export const ${name} = globalThis.${key}.${name};`).join('\n'));
 const bare = {
   'gpui-kit': exportsFor(['View', 'div', 'image', 'PathBuilder', 'Background']),
-  'gpui-base': exportsFor(['h_flex', 'v_flex', 'InputState', 'Input']),
+  'gpui-base': exportsFor(['h_flex', 'v_flex', 'InputState', 'Input', 'Popup']),
   herdr: exportsFor(['nextCommand', 'openOverlay', 'closeOverlay', 'props', 'shared', 'setShared', 'theme', 'checking', 'exec', 'settings', 'appHome', 'window', 'run']),
   'fs/promises': exportsFor(['readFile', 'writeFile', 'exists', 'mkdir', 'unlink']),
 };

@@ -52,6 +52,27 @@ Compared with Pulse at `99f70b2c`:
   ticker through the logo sources that can show it.
 
 **Panel and refresh**
+- The watchlist's 56×22 sparkline separates two scales: observed closes above, a daily-move rail
+  below. The rail runs from zero at the center toward −50% or +50%, with an end stop beyond those
+  limits. Nonzero moves have a 3px visibility minimum (not literal linear magnitude below
+  that length), painted above the zero tick; the adjacent signed percentage gives the exact magnitude.
+  Stocks use the same previous regular close as the headline; Binance pairs use their rolling 24h reference. It is a day-move
+  indicator, not an opening-gap path.
+- The upper line uses only observed bar closes and its own vertical scale: the total span is at
+  least 1% of their midpoint, with 16% padding for larger ranges. Thus 0.03% noise stays almost
+  flat (0.33px), an ordinary 1% trend remains legible, and a 20% swing spans about 9.48px.
+  This price-relative scale is independent of the daily rail. Time positions use the
+  reported regular session for stocks or the quote's rolling 24h window for pairs; blank time is
+  unobserved. Rest the pointer on it for a wrapped card with bar times, formatted observed price range and reference (with the headline’s
+  supported currency/precision), scale rules and freshness. The card opens beside the sparkline (left of it, or right when the
+  window has no room there), never over it, so leaving or clicking the sparkline closes it on any row. No opening price is inferred from a late first bar, and the headline quote is never appended to bars.
+- Missing or inconsistent references omit the rail. Missing session/times, mismatched cached
+  points omit the line; one bar is a dot. Stocks with out-of-session bars omit the line.
+  For crypto, the entire cache must first have paired, ordered, positive finite values; then only
+  bars outside the quote’s rolling window are clipped. Surviving bars keep actual time positions
+  and blank coverage, including when the ticker advances before klines. Old caches remain readable
+  without a schema migration. A stale/failed quote dims the sparkline; bar times remain independent of the
+  quote's fetch time, including retained Binance klines after a failed bar request.
 - A New York market clock under the title (`marketclock.js`, `clockview.js`): New York time, the
   US regular session's state (Open, Pre-market, After-hours, Closed, Weekend, Holiday) and its next
   open or close with a live countdown ("NY Tue Nov 17 15:42 · Open · Closes 16:00 · 18m"), early closes included.
@@ -188,7 +209,8 @@ Before acceptance/merge, whichever Quotr PR (#32 or #33) merges second requires 
 semantic rebase/resolution and fresh independent review, CI and required native evidence at the
 integrated head. Recheck actual chart calls/wiring, availability, row budgets, responsive behavior
 and tests against the actual integrated 56×22 channel. Textual conflict resolution alone is
-insufficient. This same-issue gate is pending; this PR does not combine the candidates.
+insufficient. #32 merged first and is now merged into this PR; the review, CI and native-evidence
+gate at this integrated head is still pending.
 
 ## Data sources and limits
 
