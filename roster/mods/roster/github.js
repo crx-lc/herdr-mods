@@ -6,7 +6,7 @@
 // The only program run is `gh api graphql`, directly with arguments (never a shell), locally. Values go in with -f
 // (raw strings: never read as @file); only a board number, checked as a positive integer, goes with -F. Nothing
 // about credentials is read, stored or logged: only gh's exit code, stdout and stderr are parsed, and an error is
-// kept as a short code. Each call races the host timer; a hung call keeps its slot until it really ends.
+// kept as a short code. Each job has a deadline checked by tick(); a hung call keeps its slot until it really ends.
 export const GH = 'gh';
 export const REPOSITORY = /^([A-Za-z0-9](?:[A-Za-z0-9-]{0,38}))\/([A-Za-z0-9_.-]{1,100})$/;
 const CURSOR = /^[A-Za-z0-9+/=_-]{1,256}$/;
@@ -124,7 +124,7 @@ export class GitHubData {
   constructor(host, limits = {}) {
     this.host = host; this.limits = { ...LIMITS, ...limits };
     this.counts = new Map(); this.lists = new Map(); this.boards = new Map(); this.fields = new Map();
-    this.queue = []; this.running = 0; this.changed = false; this.manualAt = -Infinity; this.dirty = false; this.saving = false;
+    this.queue = []; this.running = 0; this.active = new Set(); this.changed = false; this.manualAt = -Infinity; this.dirty = false; this.saving = false;
   }
   entry(map, key) { return map.get(key) ?? null; }
   due(map, key, ms, force) {
@@ -133,56 +133,63 @@ export class GitHubData {
     return force || !e || e.cached || this.host.now() - e.at >= ms;
   }
   // Totals for these repositories, on the bounded interval.
-  wantCounts(repositories, after, force = false) {
+  wantCounts(repositories, force = false) {
+    this.tick();
     for (const name of repositories.filter(validRepository).slice(0, this.limits.maxRepositories)) {
       const key = repoKey(name);
-      if (this.due(this.counts, key, this.limits.countMs, force)) this.enqueue({ map: this.counts, key, name, kind: 'counts' }, after);
+      if (this.due(this.counts, key, this.limits.countMs, force)) this.enqueue({ map: this.counts, key, name, kind: 'counts' });
     }
-    this.pump(after);
+    this.pump();
   }
   // The issue list of one project (its repositories, and its board when it has a known GitHub board).
-  wantList(repositories, board, after, force = false) {
+  wantList(repositories, board, force = false) {
+    this.tick();
     for (const name of repositories.filter(validRepository).slice(0, this.limits.maxRepositories)) {
       const key = repoKey(name);
-      if (this.due(this.lists, key, this.limits.listMs, force)) this.enqueue({ map: this.lists, key, name, kind: 'list' }, after);
+      if (this.due(this.lists, key, this.limits.listMs, force)) this.enqueue({ map: this.lists, key, name, kind: 'list' });
       if (board) {
         const bkey = boardKey(board) + ' ' + key;
-        if (this.due(this.boards, bkey, this.limits.listMs, force)) this.enqueue({ map: this.boards, key: bkey, name, board, kind: 'board' }, after);
+        if (this.due(this.boards, bkey, this.limits.listMs, force)) this.enqueue({ map: this.boards, key: bkey, name, board, kind: 'board' });
       }
     }
-    if (board && this.due(this.fields, boardKey(board), force ? 0 : this.limits.boardMs, force)) this.enqueue({ map: this.fields, key: boardKey(board), board, kind: 'fields' }, after);
-    this.pump(after);
+    if (board && this.due(this.fields, boardKey(board), force ? 0 : this.limits.boardMs, force)) this.enqueue({ map: this.fields, key: boardKey(board), board, kind: 'fields' });
+    this.pump();
   }
   // A person's explicit refresh: at most once per manualMs.
-  refreshNow(repositories, board, after) {
+  refreshNow(repositories, board) {
     if (this.host.now() - this.manualAt < this.limits.manualMs) return false;
     this.manualAt = this.host.now();
-    this.wantCounts(repositories, after, true);
-    if (board !== undefined) this.wantList(repositories, board, after, true);
+    this.wantCounts(repositories, true);
+    if (board !== undefined) this.wantList(repositories, board, true);
     return true;
   }
-  // Queued work has a deadline too: while every slot is held by a call that has not ended (a hung gh), waiting in
-  // the queue ends as a timeout and the job is dropped; the running calls keep their slots until they really end, and
-  // the next scheduled interval asks again.
-  enqueue(job, after) {
+  // No timer of its own and no caller's timer: a deadline is a time, checked by tick() (Roster's 1 s timer calls it,
+  // and every want* call does). A timer kept from a click or key handler stops working once that handler returns, and
+  // a job whose deadline depended on it never started and kept its slot for good (the native check of 7d58e32).
+  // Queued work waits at most callMs + graceMs; a running job at most its calls' time + graceMs. At its deadline a
+  // job shows "no answer in time"; a running one keeps its slot until its native call really ends.
+  enqueue(job) {
     const before = job.map.get(job.key);
     job.map.set(job.key, { ...(before ?? { value: null, okAt: null, reason: null }), status: 'loading', at: this.host.now(), cached: before?.cached ?? false, previous: before?.status ?? null });
+    job.deadline = this.host.now() + this.limits.callMs + this.limits.graceMs;
     this.queue.push(job); this.changed = true;
-    if (typeof after === 'function') after(this.limits.callMs + this.limits.graceMs, () => {
-      const at = this.queue.indexOf(job);
-      if (at < 0) return;
-      this.queue.splice(at, 1);
-      const now = job.map.get(job.key) ?? {};
-      job.map.set(job.key, { status: 'error', reason: 'timeout', at: this.host.now(), okAt: now.okAt ?? null, value: now.value ?? null, cached: now.cached ?? false });
-      this.changed = true;
-    });
   }
-  pump(after) {
+  fail(job, reason) {
+    const now = job.map.get(job.key) ?? {};
+    job.map.set(job.key, { status: 'error', reason, at: this.host.now(), okAt: now.okAt ?? null, value: now.value ?? null, cached: now.cached ?? false });
+    this.changed = true;
+  }
+  tick() {
+    const now = this.host.now();
+    for (const job of this.queue.filter(job => now >= job.deadline)) { this.queue.splice(this.queue.indexOf(job), 1); this.fail(job, 'timeout'); }
+    for (const job of this.active) if (now >= job.deadline) job.finish({ ok: false, reason: 'timeout' });
+    this.pump();
+  }
+  pump() {
     while (this.running < this.limits.atOnce && this.queue.length) {
       const job = this.queue.shift();
-      this.running++;
       let settled = false;
-      const finish = outcome => {
+      job.finish = outcome => {
         if (settled) return; settled = true;
         const before = job.map.get(job.key) ?? {};
         job.map.set(job.key, outcome.ok
@@ -192,9 +199,13 @@ export class GitHubData {
       };
       // One call for totals and board fields; up to maxPages calls one after another for a list.
       const calls = job.kind === 'list' || job.kind === 'board' ? this.limits.maxPages : 1;
-      after(this.limits.callMs * calls + this.limits.graceMs, () => finish({ ok: false, reason: 'timeout' }));
-      this.run(job, () => !settled).then(finish, () => finish({ ok: false, reason: 'gh-unavailable' }))
-        .finally(() => { this.running--; this.changed = true; this.pump(after); this.persist(); });
+      job.deadline = this.host.now() + this.limits.callMs * calls + this.limits.graceMs;
+      // A job that cannot even start fails at once and gives its slot back.
+      let work;
+      try { work = this.run(job, () => !settled); } catch { job.finish({ ok: false, reason: 'gh-unavailable' }); continue; }
+      this.running++; this.active.add(job);
+      Promise.resolve(work).then(job.finish, () => job.finish({ ok: false, reason: 'gh-unavailable' }))
+        .finally(() => { this.active.delete(job); this.running--; this.changed = true; this.pump(); this.persist(); });
     }
   }
   async call(args, live) {

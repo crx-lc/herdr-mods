@@ -75,3 +75,13 @@ export const flatten = e => e instanceof Element ? [e, ...e.children.flatMap(fla
 export const textOf = e => e instanceof Element ? e.children.map(textOf).join(' ') : String(e ?? '');
 export const appOf = host => ({ ...host, theme: () => ({ surface: '#111111', raised: '#222222', foreground: '#eeeeee' }), props: () => ({}), checking: () => false, nextCommand: () => new Promise(() => {}) });
 export const layoutHostUnused = new Proxy({}, { get: (_t, p) => () => { throw Error(`unexpected layout ${String(p)}`); } });
+// Like Herdr: an event handler's cx is its own and works only while the handler runs ("Never keep a cx and use it
+// later"). eventCx(cx) gives such a cx; end() is the handler returning, after which every use throws.
+export function eventCx(cx) {
+  let alive = true;
+  const guard = (name, fn) => (...args) => { if (!alive) throw Error(`cx.${name} used after its callback returned`); return fn(...args); };
+  const child = { ...cx, timer: { ...cx.timer }, end() { alive = false; } };
+  for (const key of ['notify', 'spawn', 'stop_propagation', 'focus_handle', 'open_url']) if (typeof cx[key] === 'function') child[key] = guard(key, cx[key]);
+  for (const key of ['after', 'every']) if (typeof cx.timer?.[key] === 'function') child.timer[key] = guard('timer.' + key, cx.timer[key]);
+  return child;
+}

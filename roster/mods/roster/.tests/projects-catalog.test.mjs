@@ -12,7 +12,8 @@ const pilot = (overrides = {}) => entry('pilot', { primary: 'sample-org/pilot-ap
 async function read(answers, { machines = both, terminals = [] } = {}) {
   const t = clock(), { host, reads, hung } = catalogHost({ answers, machines, terminals, now: () => t.now });
   const source = new CatalogSource(host);
-  source.refresh(t.after); await settle();
+  const advance = t.advance; t.advance = ms => { advance(ms); source.tick(); };
+  source.refresh(); await settle();
   return { source, reads, hung, t, sources: source.sources() };
 }
 const row = (address, token, extra = {}) => ({ address, core: { alias: address.includes('/') ? address.split('/')[0] : '' }, labels: token ? { 'herdr.project': token } : {}, invalidLabels: [], metadataConflict: false, ...extra });
@@ -23,8 +24,8 @@ test('this computer at its fixed path; another machine only while ready, checked
   assert.deepEqual(r.reads, [['/home/sample/.local/share/herdr-agents/published/projects.v1.json', null], ['~/.local/share/herdr-agents/published/projects.v1.json', 'edge']]);
   assert.deepEqual(r.sources.map(s => [s.machine, s.status, s.why]), [[null, 'ok', null], ['edge', 'ok', null], ['away', 'unavailable', 'not-ready']]);
   // Read again only after the interval.
-  r.t.advance(30000); r.source.refresh(r.t.after); await settle(); assert.equal(r.reads.length, 2);
-  r.t.advance(30000); r.source.refresh(r.t.after); await settle(); assert.equal(r.reads.length, 4);
+  r.t.advance(30000); r.source.refresh(); await settle(); assert.equal(r.reads.length, 2);
+  r.t.advance(30000); r.source.refresh(); await settle(); assert.equal(r.reads.length, 4);
 });
 
 test('one project across repositories and Cores is one group by stable ID; duplicates by name are never merged', async () => {
@@ -67,15 +68,16 @@ test('a hung read ends at the host timer, a refused or malformed one is unavaila
   const t = clock(), answers = { local: catalogText(null, [pilot()]), edge: catalogText('edge', [pilot()], 4) };
   const { host, reads, hung } = catalogHost({ answers, machines: both, now: () => t.now });
   const source = new CatalogSource(host);
-  source.refresh(t.after); await settle();
+  const advance = t.advance; t.advance = ms => { advance(ms); source.tick(); };
+  source.refresh(); await settle();
   answers.edge = 'hang'; answers.local = Error('EACCES');
-  t.advance(60000); source.refresh(t.after); await settle();
+  t.advance(60000); source.refresh(); await settle();
   assert.deepEqual(source.sources().map(s => [s.status, s.why, s.current, s.result?.revision]), [['unavailable', 'read-failed', false, 20], ['ok', null, true, 4]]);
   t.advance(5000); await settle();
   assert.deepEqual(source.sources().map(s => [s.status, s.why]), [['unavailable', 'read-failed'], ['unavailable', 'timeout']]);
   // Still hung: not read twice.
   answers.local = '{not json';
-  t.advance(60000); source.refresh(t.after); await settle();
+  t.advance(60000); source.refresh(); await settle();
   assert.equal(reads.filter(r => r[1] === 'edge').length, 2, 'the hung read is never started twice');
   assert.deepEqual(source.sources()[0], { ...source.sources()[0], status: 'unknown', why: 'unreadable', current: false });
   // A late answer from the hung read is discarded.
@@ -84,7 +86,7 @@ test('a hung read ends at the host timer, a refused or malformed one is unavaila
   assert.equal(catalogNotice(source.sources()).kind, 'partial');
   // A revision that goes backwards is unknown; the same one again is accepted.
   answers.local = catalogText(null, [pilot()], 2); answers.edge = catalogText('edge', [pilot()], 4);
-  t.advance(60000); source.refresh(t.after); await settle();
+  t.advance(60000); source.refresh(); await settle();
   assert.deepEqual(source.sources().map(s => [s.status, s.why]), [['unknown', 'revision-backwards'], ['ok', null]]);
 });
 
@@ -95,7 +97,7 @@ test('notices: loading, unavailable (Spaces only) and partial; a machine without
   none.t.advance(5000); await settle();
   const off = catalogNotice(none.source.sources());
   assert.equal(off.kind, 'unavailable'); assert.equal(off.text, 'Project catalog unavailable · showing Spaces');
-  assert.match(off.detail, /This computer: read failed\nedge: no answer in time/);
+  assert.match(off.detail, /This computer: read failed; its projects are not known until its catalog is read\nedge: no answer in time;/);
   const quiet = await read({ local: catalogText(null, [pilot()]) });
   assert.deepEqual(quiet.sources.map(s => s.status), ['ok', 'unavailable']);
   assert.equal(catalogNotice(quiet.sources).kind, 'partial', 'a ready machine whose read failed');
@@ -123,4 +125,33 @@ test('catalog icons: written once to the hidden cache, read back and compared be
   const broken = new ProjectIcons({ dir: '/d', rel: 'r', mkdir: async () => {}, readTextFile: async () => '<svg/>', writeTextFile: async () => {} });
   broken.ensure(icon); await settle();
   assert.equal(broken.lookup(icon), null);
+});
+
+test('native fix (A6): a catalog that goes missing keeps its projects, flagged, with no membership; an unread machine is named', async () => {
+  const t = clock(), answers = { local: catalogText(null, [pilot(), entry('notes', { mode: 'manual' })]), edge: catalogText('edge', [entry('atlas', { primary: 'sample-org/atlas-web' })]) };
+  const { host } = catalogHost({ answers, machines: both, now: () => t.now });
+  const source = new CatalogSource(host);
+  source.refresh(); await settle();
+  // This computer's file is moved away: same treatment as a remote machine that cannot be read.
+  delete answers.local;
+  t.now += 60000; source.refresh(); await settle();
+  const sources = source.sources(), groups = registeredGroups(sources);
+  assert.deepEqual(sources.map(s => [s.machine, s.status, s.current]), [[null, 'missing', false], ['edge', 'ok', true]]);
+  assert.deepEqual(groups.map(g => [g.id, g.stale]), [['atlas', false], ['notes', true], ['pilot', true]], 'still listed, flagged stale');
+  assert.equal(catalogMembership(sources, groups)(row('t1', 'pilot')), null, 'no membership through it');
+  const notice = catalogNotice(sources);
+  assert.equal(notice.kind, 'partial'); assert.equal(notice.text, 'Project catalog: This computer unavailable');
+  assert.match(notice.detail, /This computer: no catalog published \(showing its last catalog, revision 20\)/);
+  // After a restart Roster has no memory of a catalog it has not read in this run: a machine not connected since the
+  // start is named, and its projects are not listed (none are known).
+  const fresh = await read({ local: catalogText(null, [pilot()]) }, { machines: [{ name: null, layout: 'ready' }, { name: 'edge', layout: 'unavailable' }] });
+  assert.deepEqual(registeredGroups(fresh.sources).map(g => g.id), ['pilot']);
+  const named = catalogNotice(fresh.sources);
+  assert.equal(named.text, 'Project catalog: edge unavailable');
+  assert.match(named.detail, /edge: not connected; its projects are not known until its catalog is read/);
+  // This computer without a catalog file in this run is not an error (no registered project here). Another machine's
+  // absent file reads as a failed read (the contract's remote reader cannot tell them apart), so it is named.
+  const none = await read({ edge: catalogText('edge', [pilot()]) });
+  assert.deepEqual(none.sources.map(s => [s.status, s.current]), [['missing', true], ['ok', true]]);
+  assert.equal(catalogNotice(none.sources), null);
 });

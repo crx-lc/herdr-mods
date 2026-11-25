@@ -81,7 +81,8 @@ export function sourceText(source) {
   const where = machineLabel(source.machine);
   if (source.status === 'reading') return where + ': reading';
   if (source.status === 'ok') return where + ': read' + (source.result ? ', revision ' + source.result.revision : '');
-  return where + ': ' + whyText(source.why) + (source.result ? ' (showing its last catalog, revision ' + source.result.revision + ')' : '');
+  return where + ': ' + whyText(source.why) + (source.result ? ' (showing its last catalog, revision ' + source.result.revision + ')'
+    : source.status === 'missing' ? '' : '; its projects are not known until its catalog is read');
 }
 
 export function catalogNotice(sources = []) {
@@ -92,8 +93,9 @@ export function catalogNotice(sources = []) {
     if (sources.some(s => s.status === 'reading')) return { kind: 'loading', text: 'Reading project catalog…', detail };
     return { kind: 'unavailable', text: 'Project catalog unavailable · showing Spaces', detail: 'No project catalog could be read; sessions are grouped by Space.\n' + detail };
   }
-  // A machine without a published catalog is normal (no registered project there); a failed or unknown read is not.
-  const failed = sources.filter(s => !['ok', 'missing', 'reading'].includes(s.status) && !(s.status === 'unavailable' && s.why === 'not-ready' && !s.result));
+  // A machine that never had a published catalog in this run is normal (no registered project there). A catalog that
+  // went missing, a failed or unknown read, and a listed machine not connected (its projects unknown) are not.
+  const failed = sources.filter(s => !['ok', 'reading'].includes(s.status) && !(s.status === 'missing' && !s.result));
   if (!failed.length) return null;
   const names = failed.map(s => machineLabel(s.machine));
   return { kind: 'partial', text: 'Project catalog: ' + (names.length === 1 ? names[0] : names.length + ' machines') + ' unavailable',

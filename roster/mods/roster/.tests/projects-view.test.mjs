@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { createRosterView } from '../view.js';
 import { CatalogSource } from '../catalog-source.js';
 import { GitHubData } from '../github.js';
-import { fakeHost, terminal, kit, context, appOf, flatten, textOf, layoutHostUnused } from './sidebar-fixtures.mjs';
+import { fakeHost, terminal, kit, context, appOf, flatten, textOf, layoutHostUnused, eventCx } from './sidebar-fixtures.mjs';
 import { entry, catalogText, catalogHost, clock, settle, pilotFixture, fakeGh } from './projects-fixtures.mjs';
 
 const NOW = Date.parse('2026-11-25T12:00:00Z'), DAY = 86400000;
@@ -45,7 +45,7 @@ async function setup(w, { narrow = false, storage = null, app = {} } = {}) {
   // Panels ask for data with the host timer; here it is the test's clock.
   c.cx.timer.after = (ms, fn) => w.t.after(ms, fn);
   if (narrow) view.measureList({ height: 200, width: 240 }, c.cx);
-  const poll = async () => { view.pollProjects(c.cx, w.t.after); await settle(); view.pollProjects(c.cx, w.t.after); };
+  const poll = async () => { view.pollProjects(c.cx); await settle(); view.pollProjects(c.cx); };
   await poll();
   return { ...w, view, ...c, poll, render: () => view.render(c.cx) };
 }
@@ -105,7 +105,7 @@ test('#30: an unavailable catalog in a narrow sidebar: one truncated, focusable 
   assert.ok(byId(tree, 'catalog-notice-text').attributes.truncate, 'truncated, never wrapped over the list');
   assert.equal(notice.attributes.h[0], 20);
   const control = s.view.controls.find(c => c.key === 'catalog:notice');
-  assert.match(control.label, /This computer: read failed\nedge: read failed/, 'every machine\'s state in its label');
+  assert.match(control.label, /This computer: read failed; [^\n]*\nedge: read failed/, 'every machine\'s state in its label');
   assert.deepEqual(sections(s.view).filter(i => i.depth === 0).map(i => [i.label, !!i.registered, !!i.subordinate]), [['Work', false, false], ['Work', false, false]]);
   assert.equal(byId(tree, 'fallback-caption'), undefined);
   // Keyboard reaches it first in the list, before the groups.
@@ -153,7 +153,7 @@ async function copiesOf(w, { storage = null } = {}) {
   const Type = createRosterView(kit, { ...appOf(w.f.host), window: () => ({ active: true }) }, { host: w.f.host, layoutHost: layoutHostUnused,
     initialView: 'projects', collapseUnassigned: false, catalogSource: w.catalogSource, github: w.github, projectIcons: w.projectIcons, storage,
     playSound: sound => played.push(sound) });
-  w.catalogSource.refresh(w.t.after); await settle();
+  w.catalogSource.refresh(); await settle();
   const copies = [0, 1].map(() => {
     const c = context(), every = [];
     c.cx.timer.every = (ms, fn) => every.push(fn); c.cx.timer.after = () => {};
@@ -271,4 +271,67 @@ test('fix1 (finding 4): the project palette follows the selected theme’s own l
   assert.equal(await bgOf({ settings: () => ({ theme: 'sample-light', zoom: 1 }), themes }), pal.light.background);
   // No theme entry: a dark theme background still picks the dark pair.
   assert.equal(await bgOf({ settings: () => ({}), theme: () => ({ surface: '#111111', background: '#101418', foreground: '#eeeeee' }) }), pal.dark.background);
+});
+
+test('native fix: a list opened from a click keeps working after the handler returns; every job ends and timed refreshes run', async () => {
+  const repos = { 'crx-lc/pilot-app': { issues: 2, prs: 0, list: [issue(3, 12)], board: { 3: 'Ready' } },
+    'crx-lc/pilot-docs': { issues: 1, prs: 0, list: [issue(4, 30)], board: { 4: null } }, 'crx-lc/pilot-site': { issues: 1, prs: 0, list: [issue(2, 20)], board: {} }, 'sample-org/notes': { issues: 0, prs: 0 } };
+  const s = await setup(world({ repos }));
+  await s.poll(); s.render();
+  const pilot = registered(s.view, 'pilot');
+  // A pointer click on the issues total: its cx dies when the handler returns, as Herdr's does.
+  const before = s.gh.calls.length, click = eventCx(s.cx);
+  byId(s.render(), 'project-issues:' + pilot.key).attributes.on_click[0]({}, click);
+  click.end(); await settle(); await settle();
+  // Three lists, three board reads and the board's fields: all seven ran and answered; nothing is left loading.
+  assert.equal(s.gh.calls.length - before, 7);
+  assert.deepEqual(['crx-lc/pilot-app', 'crx-lc/pilot-docs', 'crx-lc/pilot-site'].map(n => s.github.lists.get(n)?.status), ['ok', 'ok', 'ok']);
+  assert.deepEqual([...s.github.boards, ...s.github.lists, ...s.github.counts, ...s.github.fields].filter(([, e]) => e.status === 'loading').map(([k]) => k), []);
+  let tree = s.render();
+  assert.equal(textOf(byId(tree, 'project-issues:summary')), '3 open, oldest first');
+  // The 5-minute refresh from Roster's own timer still runs: counts and the open list are asked again.
+  const mark = s.gh.calls.length;
+  s.t.now += 300000; await s.poll(); await settle();
+  assert.ok(s.gh.calls.slice(mark).some(c => c.kind === 'counts'), 'the counts refresh ran');
+  assert.ok(s.gh.calls.slice(mark).some(c => c.kind === 'list'), 'the open list refreshed');
+  assert.equal([...s.github.lists.values(), ...s.github.counts.values()].filter(e => e.status !== 'ok').length, 0);
+  // So does the panel's Refresh from a key press, with its own short-lived cx.
+  s.t.now += 31000; const key = eventCx(s.cx), mark2 = s.gh.calls.length;
+  s.view.controls.find(c => c.key === 'project:refresh').activate(key); key.end(); await settle(); await settle();
+  assert.equal(s.gh.calls.length - mark2, 3 + 7, 'three counts, then the list, boards and fields');
+  assert.equal([...s.github.lists.values(), ...s.github.counts.values(), ...s.github.boards.values()].filter(e => e.status !== 'ok').length, 0);
+});
+
+test('native fix: loading has a cap even when a job can never start', async () => {
+  const w = world({ repos: { 'crx-lc/pilot-app': { list: [] } } });
+  const s = await setup(w); await settle(); s.render();
+  // A host whose exec throws before any promise exists: the job fails at once and frees its slot.
+  s.github.host.exec = () => { throw Error('cannot start'); };
+  s.github.wantCounts(['crx-lc/pilot-app', 'crx-lc/pilot-docs', 'crx-lc/pilot-site'], true); await settle();
+  assert.equal(s.github.running, 0);
+  assert.deepEqual(['crx-lc/pilot-app', 'crx-lc/pilot-docs', 'crx-lc/pilot-site'].map(n => [s.github.counts.get(n).status, s.github.counts.get(n).reason]),
+    [['error', 'gh-unavailable'], ['error', 'gh-unavailable'], ['error', 'gh-unavailable']]);
+  // A call that never answers: loading ends at its deadline on the next tick, never later.
+  s.github.host.exec = () => new Promise(() => {});
+  s.github.wantList(['crx-lc/pilot-app', 'crx-lc/pilot-docs', 'crx-lc/pilot-site'], null, true); await settle();
+  s.t.now += 25000; s.github.tick();
+  assert.deepEqual(['crx-lc/pilot-app', 'crx-lc/pilot-docs', 'crx-lc/pilot-site'].map(n => s.github.lists.get(n).status), ['loading', 'loading', 'error'], 'the queued one ends at 25 s; the two running ones have longer');
+  assert.equal(s.github.lists.get('crx-lc/pilot-site').reason, 'timeout');
+  s.t.now += 80000; s.github.tick();
+  assert.equal([...s.github.lists.values()].filter(e => e.status === 'loading').length, 0, 'running: its calls\' time');
+});
+
+test('native fix (B4): on keyboard focus the footer starts with the full status, so a narrow sidebar never cuts it off', async () => {
+  const w = world(); w.f.values.terminals.push(terminal('t9', 'blocked', { created_ms: 109, labels: { 'herdr.role': 'developer', 'herdr.project': 'pilot' } }));
+  w.f.values.panes.push({ pane: 'p9', terminal: 't9', tab: 'tab' });
+  const s = await setup(w, { narrow: true }); s.render();
+  const pilot = registered(s.view, 'pilot');
+  const footer = () => textOf(byId(s.render(), 'roster-focus-tooltip'));
+  const at = address => rowsIn(s.view, registered(s.view, 'pilot')).find(i => i.row.address === address).key;
+  s.view.place(at('t1')); assert.match(footer(), /^Status: Working · Name: /);
+  s.view.place(at('edge/t2')); assert.match(footer(), /^Status: Idle · /);
+  s.view.place(at('t9')); assert.match(footer(), /^Status: Needs you: listed in Needs you above · /, 'the echo');
+  // The leading text is what the footer keeps when it truncates.
+  assert.ok(flatten(byId(s.render(), 'roster-focus-tooltip')).some(e => e.attributes.truncate && /^Status: /.test(textOf(e))));
+  assert.ok(pilot);
 });

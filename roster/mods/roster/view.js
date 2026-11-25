@@ -186,24 +186,24 @@ export function createRosterView(kit, app, options = {}) {
       for (const group of groups) if (group.presentation?.icon) this.projectIcons?.ensure(group.presentation.icon);
     }
     // Read the catalog (every 60 s), keep the totals of every registered project fresh (every 5 min) and the open
-    // issue list fresh while its panel is open. `after` races each read (cx.timer.after; a request can hang).
-    pollProjects(cx, after = (ms, fn) => cx.timer.after(ms, fn)) {
-      this.catalogSource?.refresh(after);
+    // issue list fresh while its panel is open. Deadlines are times checked here every second, never a kept cx.
+    pollProjects(cx) {
+      this.catalogSource?.refresh();
       const changed = (this.catalogSource?.takeChanged() ?? false) | (this.projectIcons?.takeChanged() ?? false);
       if (changed) this.applyProjects();
       if (this.github) {
         const names = [...new Set(this.projectState.groups.flatMap(projectRepositories))];
-        this.github.wantCounts(names, after);
+        this.github.tick();
+        this.github.wantCounts(names);
         const open = this.projectPanel && this.projectState.groups.find(g => g.key === this.projectPanel.groupKey);
-        if (open && this.projectPanel.tab === 'issues') this.github.wantList(projectRepositories(open), open.board.state === 'known' ? open.board.board : null, after);
+        if (open && this.projectPanel.tab === 'issues') this.github.wantList(projectRepositories(open), open.board.state === 'known' ? open.board.board : null);
       }
       if (changed | (this.github?.takeChanged() ?? false)) cx.notify();
     }
     // The panel's Refresh: catalog and this project's totals and list now, at most once per 30 s (github.js).
     refreshProject(group, cx) {
-      const after = (ms, fn) => cx.timer.after(ms, fn);
-      this.catalogSource?.refresh(after, this.controller.host.now() - (this.catalogSource.last ?? -Infinity) >= 10000);
-      const ok = this.github?.refreshNow(projectRepositories(group), this.projectPanel?.tab === 'issues' ? (group.board.state === 'known' ? group.board.board : null) : undefined, after);
+      this.catalogSource?.refresh(this.controller.host.now() - (this.catalogSource.last ?? -Infinity) >= 10000);
+      const ok = this.github?.refreshNow(projectRepositories(group), this.projectPanel?.tab === 'issues' ? (group.board.state === 'known' ? group.board.board : null) : undefined);
       this.message = ok ? 'Refreshing ' + group.displayName : this.github ? 'Refreshed less than 30 s ago' : 'GitHub data unavailable here';
       cx.notify();
     }
@@ -216,7 +216,7 @@ export function createRosterView(kit, app, options = {}) {
       this.readerCursor = 'project:close'; this.place('project:close'); this.readerControls = [];
       if (tab === 'issues' && this.github) {
         const group = this.projectState.groups.find(g => g.key === groupKey);
-        this.github.wantList(projectRepositories(group), group.board.state === 'known' ? group.board.board : null, (ms, fn) => cx.timer.after(ms, fn));
+        this.github.wantList(projectRepositories(group), group.board.state === 'known' ? group.board.board : null);
       }
       cx.notify();
     }
@@ -1051,7 +1051,7 @@ export function createRosterView(kit, app, options = {}) {
       // machine's state in its label; Enter reads the catalog again (at most every 10 s).
       const notice = viewMode === 'projects' ? this.projectState.notice : null;
       if (notice) {
-        body.child(click('catalog:notice', notice.detail, cx => { this.catalogSource?.refresh((ms, fn) => cx.timer.after(ms, fn), c.host.now() - (this.catalogSource.last ?? -Infinity) >= 10000); cx.notify(); })
+        body.child(click('catalog:notice', notice.detail, cx => { this.catalogSource?.refresh(c.host.now() - (this.catalogSource.last ?? -Infinity) >= 10000); cx.notify(); })
           .h(20).flex_none().gap(5).tooltip(notice.detail).child(icon(notice.kind === 'loading' ? 'clock' : 'help-circle', 12).text_color(dim))
           .child(labelText(notice.text, 11, muted).id('catalog-notice-text').flex_1()));
         Object.assign(this.controls.at(-1), { rowIndex: bodyAt, detail: notice.text, hover: notice.detail }); bodyAt++;
@@ -1106,6 +1106,11 @@ export function createRosterView(kit, app, options = {}) {
         const status = waiting ? i.display.compact ? '◈ Waiting' : i.display.label : i.display.error ?? i.status;
         const provider = row.providerBadge?.accessibleName;
         const context = rowContext(i), label = detailLabel(i), explanation = actionReason(i);
+        // On keyboard focus the footer shows this line, cut at the sidebar's width: the full status comes first so it
+        // always shows (#30), then the row's facts.
+        const fullStatus = i.echo ? 'Needs you: listed in Needs you above' : i.pinned ? 'Needs you'
+          : waiting ? i.display.detail ?? 'Waiting for delegate' : i.display.error ?? i.status;
+        const focusLine = 'Status: ' + fullStatus + ' · ' + label;
         // Hover is short and pre-wrapped; the full label stays for screen readers and Info.
         const hover = hoverText(i, waiting ? i.display.detail ?? 'Waiting' : status);
         // One compact line per agent: name, machine, known context, badges. Everything
@@ -1124,7 +1129,7 @@ export function createRosterView(kit, app, options = {}) {
         element.hover(el => el.bg(theme.hover ?? theme.raised));
         if (c.cursor !== i.key && c.feed.snapshot?.focused?.terminal === row.address) element.bg(theme.raised);
         const selected = this.controls.at(-1), at = slot(i);
-        Object.assign(selected, { ...at, instance: i, anchor: rowAnchor(i, c.feed.snapshot), detail: label, hover,
+        Object.assign(selected, { ...at, instance: i, anchor: rowAnchor(i, c.feed.snapshot), detail: focusLine, hover,
           disabledReason: i.navigation.enabled ? null : explanation });
         // One leading icon: what runs there, from Herdr's program table only (runtime.js),
         // never a tab title or role. A neutral terminal when nothing is known.
@@ -1208,13 +1213,13 @@ export function createRosterView(kit, app, options = {}) {
           .child(labelText(infoShown ? 'ⓘ' : '', 12, muted).id('info-glyph:' + i.key))
           : div().id('info-unavailable:' + i.key).text_size(10).text_color(muted)
             .child('Details unavailable: ambiguous instance');
-        if (selected.anchor) Object.assign(this.controls.at(-1), { ...at, instance: i, anchor: rowAnchor(i, c.feed.snapshot), detail: label, hover, disabledReason: selected.disabledReason });
+        if (selected.anchor) Object.assign(this.controls.at(-1), { ...at, instance: i, anchor: rowAnchor(i, c.feed.snapshot), detail: focusLine, hover, disabledReason: selected.disabledReason });
         line.child(info);
         if (parents.has(row.associationKey)) {
           const collapsed = c.state.folds[i.key] ?? false;
           line.child(button('fold:' + i.key, collapsed ? 'Show children' : 'Hide children',
             change({ type: 'fold', key: i.key, collapsed: !collapsed }), { text: collapsed ? '▸' : '▾' }).px(0).w(18));
-          Object.assign(this.controls.at(-1), { ...at, instance: i, anchor: rowAnchor(i, c.feed.snapshot), detail: label, hover, disabledReason: selected.disabledReason });
+          Object.assign(this.controls.at(-1), { ...at, instance: i, anchor: rowAnchor(i, c.feed.snapshot), detail: focusLine, hover, disabledReason: selected.disabledReason });
         }
         if (!i.alert) { place(i, line); continue; }
         // The first line is the verified agent, Space and machine. The second carries only
@@ -1234,7 +1239,7 @@ export function createRosterView(kit, app, options = {}) {
             else { this.message = reasonText(plan.reason); this.openMessage = true; }
             cx?.notify?.();
           }, { text: 'Open ' + a.recipient.title }).h(20));
-          Object.assign(this.controls.at(-1), { ...at, instance: i, anchor: rowAnchor(i, c.feed.snapshot), detail: label, hover: details });
+          Object.assign(this.controls.at(-1), { ...at, instance: i, anchor: rowAnchor(i, c.feed.snapshot), detail: focusLine, hover: details });
         }
         // What was not reported, when no recipient button takes the place.
         if (a.missing.length && !a.recipient) {

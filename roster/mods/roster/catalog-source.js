@@ -2,7 +2,8 @@
 // Pure: Herdr's APIs come in as a host object, so the tests drive every answer, hang and failure.
 //
 //   host: { readTextFile(path, { on }), machines(), terminals(), home(), platform(), now() }
-//   refresh(after)   after(ms, fn) is the host timer (cx.timer.after): each read races it.
+//   refresh(force)   starts the reads that are due; tick() ends a read that passed its deadline (Roster's 1 s timer
+//                    calls it). No timer is kept from a caller: a click handler's timer dies when it returns.
 //   sources()        [{ machine, status, why, result, current, at, path }] for project-groups.js
 //
 // This computer: the fixed path for its platform. Another machine: only while Herdr reports it ready, with the
@@ -30,7 +31,7 @@ export function labelPath(terminals, machine) {
 export class CatalogSource {
   constructor(host, { refreshMs = 60000, deadlineMs = 5000 } = {}) {
     Object.assign(this, { host, refreshMs, deadlineMs });
-    this.entries = new Map(); this.revisions = new Map(); this.busy = new Set(); this.last = -Infinity; this.changed = false;
+    this.entries = new Map(); this.revisions = new Map(); this.busy = new Set(); this.deadlines = new Map(); this.last = -Infinity; this.changed = false;
   }
   // The machines to read: this computer, and every machine Herdr lists (ready ones are read, the rest are noted).
   machines() {
@@ -48,26 +49,35 @@ export class CatalogSource {
     try { return catalogPath(this.host.platform(), this.host.home()); } catch { return null; }
   }
   // Starts a read of each machine whose previous read has ended, at most once per refreshMs. true when started.
-  refresh(after, force = false) {
+  refresh(force = false) {
+    this.tick();
     const now = this.host.now();
     if (!force && now - this.last < this.refreshMs) return false;
     this.last = now;
     const machines = this.machines();
     // A machine Herdr no longer lists is forgotten; its revision high-water stays for when it comes back.
     for (const machine of [...this.entries.keys()]) if (!machines.includes(machine)) { this.entries.delete(machine); this.changed = true; }
-    for (const machine of machines) this.read(machine, after);
+    for (const machine of machines) this.read(machine);
     return true;
+  }
+  // A read past its deadline is unavailable ('timeout'); its slot stays taken until the read really ends.
+  tick() {
+    const now = this.host.now();
+    for (const [machine, d] of [...this.deadlines]) if (now >= d.at) { this.deadlines.delete(machine); d.finish({ status: 'unavailable', why: 'timeout' }); }
   }
   settle(machine, next) {
     const before = this.entries.get(machine);
     // A failed or unknown read keeps the last accepted catalog, marked not current: it still lists that machine's
     // projects, but no terminal joins a project through it.
-    const kept = next.status === 'ok' ? next.result : next.status === 'missing' ? null : before?.result ?? null;
+    // A failed, unknown or now missing read keeps the last accepted catalog, marked not current: its projects stay
+    // listed (flagged) but no terminal joins a project through it. A file that was never there (no catalog read from
+    // this machine in this run) is simply no catalog: nothing to keep.
+    const kept = next.status === 'ok' ? next.result : before?.result ?? null;
     this.entries.set(machine, { machine, status: next.status, why: next.why ?? null, path: next.path ?? before?.path ?? null,
-      result: kept, current: next.status === 'ok' || next.status === 'missing', at: this.host.now(), okAt: next.status === 'ok' ? this.host.now() : before?.okAt ?? null });
+      result: kept, current: next.status === 'ok' || (next.status === 'missing' && !kept), at: this.host.now(), okAt: next.status === 'ok' ? this.host.now() : before?.okAt ?? null });
     this.changed = true;
   }
-  read(machine, after) {
+  read(machine) {
     if (this.busy.has(machine)) return;
     const before = this.entries.get(machine);
     if (machine !== null && !this.ready(machine)) { this.settle(machine, { status: 'unavailable', why: 'not-ready' }); return; }
@@ -76,8 +86,8 @@ export class CatalogSource {
     if (!before) { this.entries.set(machine, { machine, status: 'reading', why: null, path, result: null, current: false, at: this.host.now(), okAt: null }); this.changed = true; }
     this.busy.add(machine);
     let settled = false;
-    const finish = next => { if (settled) return; settled = true; this.settle(machine, { ...next, path }); };
-    after(this.deadlineMs, () => finish({ status: 'unavailable', why: 'timeout' }));
+    const finish = next => { if (settled) return; settled = true; this.deadlines.delete(machine); this.settle(machine, { ...next, path }); };
+    this.deadlines.set(machine, { at: this.host.now() + this.deadlineMs, finish });
     const work = machine === null
       ? Promise.resolve().then(() => this.host.readTextFile(path, { on: null })).then(text => ({ state: 'available', text, local: true }), () => ({ state: 'unavailable', reason: 'read-failed' }))
       : remoteCatalogRead({ machine, isReady: () => this.ready(machine), read: () => this.host.readTextFile(path, { on: machine }) });

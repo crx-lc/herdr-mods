@@ -31,8 +31,14 @@ When a project catalog (`herdr-agents/projects` v1, published by herdr-agents) c
 when a project spans several repositories or Cores. Two entries are never merged because a Space or display name
 matches; an ID registered with two primaries is two flagged groups. A session joins a project only when its own
 machine's catalog was read successfully at the last attempt and exactly one entry there carries the session's
-`herdr.project` token. A stale, failed or absent catalog lists its projects (marked with a quiet `!`) but places no
-session in them. Everything else keeps today's fallback groups (repository, Space, Infrastructure, Other,
+`herdr.project` token. A catalog read earlier in this run that now fails, is unknown or has gone missing (this
+computer's file moved away included) keeps its projects listed, marked with a quiet `!`, and places no session in
+them; a line above the list names the machine. **After a restart** Roster knows only the catalogs it has read since:
+it keeps no copy of a catalog between runs (a remembered catalog could list projects that were unregistered
+meanwhile, and could never place a session anyway). A machine Herdr lists that has not been read in this run (not
+connected since the start, or its read failed) is named in that line with "its projects are not known until its
+catalog is read", and its projects are not shown until then. This computer without a catalog file in this run is
+not an error: no project is registered here. Everything else keeps today's fallback groups (repository, Space, Infrastructure, Other,
 Unidentified), drawn below the caption "Not in a registered project" in a smaller, muted header. Two Spaces with the
 same name stay two groups, each named as a Space on its machine.
 
@@ -66,7 +72,7 @@ Working turns (still when motion is reduced), Done, Idle, Offline, Stale and Unk
 Unknown mark in the blocked color, and a session pending in Needs you shows the bell, which pulses once together
 with the pinned bell for a new arrival (in every open copy) and never on a refresh or a 2-minute reminder; the
 shared Needs you timer says who arrived, and the echo adds no timer or sound of its own. The full status is the icon's tooltip and accessible
-label and part of the row's label for keyboard focus. The leading runtime icon is unchanged.
+label, and on keyboard focus the footer starts with it ("Status: Working · …"), so a narrow sidebar never cuts it. The leading runtime icon is unchanged.
 
 When no catalog can be read, a single focusable line, "Project catalog unavailable · showing Spaces", heads the
 list (each machine's state in its label; Enter reads again, at most every 10 s), and the groups are as before.
@@ -405,7 +411,7 @@ the folder check in "Open folder as Space…". The delegation reader below stays
 Herdr reports it ready, under the D8 rule above (ready before the one read and again after it, never retried), at
 `~/.local/share/herdr-agents/published/projects.v1.json`. On either, a watcher's `herdr.projects` label names the
 path instead when exactly one valid absolute path is on that machine's live terminals. One read per machine every
-60 s, each raced against a 5 s host timer; a hung read is never started twice. At most 1 MiB (Herdr's read limit).
+60 s, each ended after 5 s (a deadline checked by Roster's 1 s timer); a hung read is never started twice. At most 1 MiB (Herdr's read limit).
 No other file, folder scan, `hc` call or repository or board discovery: repositories and boards are only what the
 catalog names. Catalog icons are written to the mod's hidden `.cache/icons/<sha256>.svg` (the only file Roster writes
 for this, under Herdr's home).
@@ -414,7 +420,9 @@ for this, under Herdr's home).
 this computer, directly with arguments (no shell), with the person's own `gh` login; values are passed with `-f`
 (raw strings) and only the board number with `-F`. Nothing about credentials is read, stored or logged; only `gh`'s
 exit code, output and error text are read, and an error is kept as a short code. The calls, each with a 20 s timeout
-and at most two at once (work waiting for a slot ends as "no answer in time" after 25 s):
+and at most two at once. No call waits on a timer kept from a click or key: each job's deadline is a time checked
+by Roster's 1 s timer, so work waiting for a slot ends as "no answer in time" after 25 s, a running job after its
+calls' time plus 5 s, and a job that cannot start fails at once and frees its slot:
 
 | Call | When |
 |---|---|

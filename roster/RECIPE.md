@@ -119,6 +119,10 @@ is permitted. Native commands own the final machine/path validation.
 
 ## Watch out
 
+A click or key handler's cx dies when the handler returns: never hand its timer to work that outlives it. The
+GitHub provider and catalog reader keep deadlines as times checked by the 1 s timer (a kept cx stopped all GitHub
+work after a click in the native check of 7d58e32).
+
 Herdr starts a cx.spawn task at once: one started in render runs inside render until its
 first await, where cx.notify() throws and aborts the rest. Await once before post-render
 reveals, redraws or focus requests. Herdr's Tab binding fires before on_key_down, so
