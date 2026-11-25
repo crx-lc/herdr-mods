@@ -3,7 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { shownQuote, yahooUrl } from "../quotes.js";
-import { watchlistSparkline, trailPrices, SPARK_LEFT, SPARK_RIGHT } from "../sparkline.js";
+import { watchlistSparkline, SPARK_TOP, SPARK_BOTTOM } from "../sparkline.js";
 import { createTickMemory, primeTicks, takeTicks } from "../ticks.js";
 import { views, walk, element, theme } from "./helpers/view-harness.mjs";
 
@@ -21,7 +21,7 @@ test("during the session: from Tuesday's close through its after hours, Wednesda
   const q = answer({ days: [TUE, WED], now, price: gap });
   const tr = q.trail;
   assert.equal(tr.reference, 100); assert.equal(tr.start, TUE + 21 * H);
-  assert.deepEqual(tr.points[0], { t: TUE + 21 * H, close: 100, session: "close", slot: 0 });
+  assert.deepEqual(tr.points[0], { t: TUE + 21 * H, close: 100, session: "close" });
   assert.equal(tr.closeAt, TUE + 21 * H);
   const sessionsSeen = [...new Set(tr.points.map((p) => p.session))];
   assert.deepEqual(sessionsSeen, ["close", "post", "pre", "regular"]);
@@ -86,30 +86,31 @@ test("a cached quote without a trail, or a trail without a price or time, falls 
   }
 });
 
-test("the row chart: bar-spaced from the close, ending on the shown price, on the shown side of the reference", () => {
-  const now = WED + 18 * H + 22 * M;
-  const q = answer({ days: [TUE, WED], now, price: gap });
-  const points = trailPrices(q);
-  assert.equal(points.at(-1).close, shownQuote(q).price);
-  const g = watchlistSparkline(q, now);
-  assert.equal(g.line.length, points.length);
-  assert.equal(g.line[0][0], SPARK_LEFT); assert.equal(g.line.at(-1)[0], SPARK_RIGHT);
-  // Spaced by trading time: the closed night between Tuesday 20:00 and Wednesday 04:00 takes no room.
-  const last = points.at(-1).slot;
-  g.line.forEach(([x], i) => assert.ok(Math.abs(x - (SPARK_LEFT + (SPARK_RIGHT - SPARK_LEFT) * points[i].slot / last)) < 1e-9));
-  const night = points.findIndex((p) => p.session === "pre");
-  assert.ok(g.line[night][0] - g.line[night - 1][0] < 0.5, "the night is not drawn as time");
-  assert.equal(g.runs.length, 1, "no hole in the data, one run");
-  assert.equal(g.line[0][1], g.reference, "the line starts on the dotted close");
-  assert.ok(g.line.at(-1)[1] - g.reference > 14, "an 8% drop sits well below it");
-  // After hours and pre-market are shaded, the session isn't.
-  assert.deepEqual(g.bands.map((b) => b.session), ["post", "pre"]);
-  for (const b of g.bands) assert.ok(b.from >= SPARK_LEFT && b.to <= SPARK_RIGHT && b.to > b.from);
-  assert.match(g.label, /^Since the close of 100\.00 USD · Tue, Nov 24, 16:00 EST$/);
-  // A gain mirrors it.
-  const up = answer({ days: [TUE, WED], now, price: (d, s) => d === TUE ? 100 : 104 });
-  const gu = watchlistSparkline(up, now);
-  assert.ok(gu.reference - gu.line.at(-1)[1] > 10);
+test("the row chart stays on the regular session; the dashed line is the close the row's change uses", () => {
+  // After hours: the row shows the after-hours trade against Tuesday's close, the chart Wednesday's session.
+  const evening = WED + 22 * H + 30 * M;
+  const q = answer({ days: [TUE, WED], now: evening, price: gap, regularClose: 91.9 });
+  const g = watchlistSparkline(q, evening);
+  const regular = sessions(WED).regular;
+  assert.ok(q.points.every((p) => p.t >= regular[0] && p.t < regular[1]), "only the regular session is drawn");
+  assert.equal(g.runs.length, 1);
+  assert.equal(shownQuote(q).previousClose, 100);
+  assert.ok(Math.abs(g.reference - SPARK_TOP) < 1e-9, "the dashed close (100) above an 8% lower session");
+  assert.ok(g.line.every(([, y]) => y - g.reference > 14));
+  assert.match(g.label, /^Regular 09:30–16:00 EST · vs prev close 100.00 USD$/);
+  // Thursday's first pre-market trade: the row measures against Wednesday's close, the dashed line too.
+  const morning = THU + 10 * H;
+  const next = answer({ days: [WED, THU], now: morning, previousClose: 100, regularClose: 91.9,
+    price: (d, s) => d === WED ? (s === "post" ? 91 : 91.88) : 92.5 });
+  const gn = watchlistSparkline(next, morning);
+  assert.equal(shownQuote(next).previousClose, 91.9);
+  assert.match(gn.label, /vs close 91.90 USD$/);
+  assert.ok(gn.reference > SPARK_TOP && gn.reference < SPARK_BOTTOM, "the line ends near its own close, the dashed line");
+  // During the session nothing changes: the regular quote, the previous close.
+  const day = WED + 18 * H + 22 * M;
+  const live = answer({ days: [TUE, WED], now: day, price: gap });
+  assert.equal(shownQuote(live).price, live.price);
+  assert.match(watchlistSparkline(live, day).label, /vs prev close 100.00 USD$/);
 });
 
 test("ticks follow the price the row shows", () => {
@@ -122,7 +123,7 @@ test("ticks follow the price the row shows", () => {
   assert.deepEqual(takeTicks(memory, { SAMPLE: later }, ["SAMPLE"]).map((x) => x.dir), ["up"]);
 });
 
-test("the real panel row shows the latest trade, its session and the band; the dialog gets the stored quote", async () => {
+test("the real panel row shows the latest trade and its session; the chart has no session bands", async () => {
   const now = WED + 22 * H + 30 * M;
   const q = answer({ days: [TUE, WED], now, price: gap, regularClose: 91.9 });
   q.fetchedAt = Date.now();
@@ -138,6 +139,6 @@ test("the real panel row shows the latest trade, its session and the band; the d
   const spark = nodes.find((n) => n.calls?.some((c) => c[0] === "id" && c[1] === "quotr-spark-SAMPLE"));
   const paints = walk(spark).filter((n) => n.kind === "paint");
   const fills = paints.filter((n) => n.calls.find((c) => c[0] === "path")[1].calls.some((c) => c[0] === "fill"));
-  assert.equal(fills.length, 4, "Tuesday after hours, Wednesday pre-market and after hours, then the line's fill");
+  assert.equal(fills.length, 1, "only the line's fill: the chart is the regular session");
   assert.equal(paints.at(-1).calls.find((c) => c[0] === "paint")[1], theme.ansi1);
 });

@@ -58,26 +58,24 @@ Compared with Pulse at `99f70b2c`:
   24h open). The reference is part of the vertical scale, so an opening gap reads as the line sitting
   well above or below it even when the session then trades flat; the scale spans at least 1% of the
   reference, so small moves stay small.
-- A stock's row shows every trade since the last regular close: the line starts on the dashed
-  close and runs through that evening's after hours, the next pre-market and session, and its after
-  hours, placed by trading time: closed hours take no room, while trading time without a bar
-  (even one missing 5-minute bar, as when nothing traded) stays blank. A scheduled closure (night,
-  weekend, holiday) is not missing data: the line runs on across it, on purpose. Pre-market and after hours are shaded. The price and percentage beside it are the latest of those trades against that close,
-  with `Pre-market` or `After hours` under the name when the latest trade is one. The close moves
-  on when the next day's first pre-market trade arrives, so evenings and weekends keep the whole
-  last day. Markets without extended hours show their session after the close. Without a previous
-  close the row still shows the latest trade, with `—` for the change and no dashed line. The dialog is
+- A stock's chart is its latest regular session, placed by time across the session (a
+  half-finished day fills part of the width). The price and percentage beside it are the latest
+  trade, pre-market and after hours included, with `Pre-market` or `After hours` under the name
+  when it is one; the dashed line is always the close that percentage is measured against: the
+  previous regular close, and from the next day's first pre-market trade on, the session's own
+  close (where its line ends), so evenings and weekends keep the last day. Without a previous close
+  the row shows the latest trade with `—` for the change and no dashed line. The dialog is
   unchanged: the regular session and its own extended-hours section.
-- A pair's row spans its rolling 24h by time: the first kline's open, every finished kline's close
-  at its end, and the quote. Only observed prices are drawn; a missing kline stays blank.
-- Holes come from which bars exist, not from minutes between prices: each price belongs to a bar
-  interval (a quote to the one it falls in), and an interval with no price between two others is a
-  hole, including a missing finished bar just before the quote.
+- A pair's chart spans its rolling 24h by time: the first kline's open, every finished kline's
+  close at its end, and the quote.
+- Only observed prices are drawn, and consecutive ones are joined: a stretch with no trade (a quiet
+  stock, a missing kline) is a straight segment from one trade to the next, not a blank. That is the
+  owner's choice for the row; thin tickers would otherwise break into dots.
 - The displayed quote always ends the line. A bar or kline still forming at the quote's time is
   left out: its close was read at another moment, so it could end the line on the wrong side of
-  the dashed reference. Missing reference: no
-  dashed line, the line in `dim`. One price: a dot. A stale or failed quote dims the chart.
-- Resting on the chart shows one line, for example `Since the close of 354.07 USD · Tue, Nov 24, 16:00 EST`
+  the dashed reference. Missing reference: no dashed line, the line in `dim`. One price: a dot. A
+  stale or failed quote dims the chart.
+- Resting on the chart shows one line, for example `Regular 09:30–16:00 EST · vs prev close 354.07 USD`
   or `Last 24h · vs 60,115.22 USDT 24h ago`. Clicking it opens the dialog like the rest of the row.
 - A New York market clock under the title (`marketclock.js`, `clockview.js`): New York time, the
   US regular session's state (Open, Pre-market, After-hours, Closed, Weekend, Holiday) and its next

@@ -29,9 +29,9 @@ export class ChartParts {
     return change === null || change === undefined ? t.dim : change >= 0 ? t.ansi2 : t.ansi1;
   }
 
-  // The watchlist row's chart, a small 1D chart (sparkline.js): the line in the percentage's color
-  // over a faint fill, the dashed reference the percentage is measured against, pre-market and
-  // after-hours shading, and a one-line hover. `quote` is the stored quote, `color` the row's.
+  // The watchlist row's chart, a small 1D chart (sparkline.js): the regular session's line in the
+  // row percentage's color over a faint fill, the dashed reference that percentage is measured
+  // against, and a one-line hover. `quote` is the stored quote, `color` the row's.
   watchlistChart(quote, color, t, now, options) {
     const g = watchlistSparkline(quote, now, options);
     const box = div().id(`quotr-spark-${quote.symbol}`).relative().flex_none()
@@ -41,12 +41,7 @@ export class ChartParts {
     // PathBuilder coordinates are percentages of this 56×22 box.
     const x = (v) => `${v / SPARK_WIDTH * 100}%`;
     const y = (v) => `${v / SPARK_HEIGHT * 100}%`;
-    // Pre-market and after hours shaded as in the dialog's 1D chart.
-    for (const b of g.bands) {
-      box.child(layer(PathBuilder.fill().move_to(x(b.from), "0%").line_to(x(b.to), "0%").line_to(x(b.to), "100%")
-        .line_to(x(b.from), "100%").close(), Background.solid(this.sessionColor(t, b.session)).opacity(0.13)));
-    }
-    // One fill and one stroke per run: where data is missing the chart stays blank.
+    // One fill and one stroke per run (the line is one run: prices are joined).
     for (const run of g.runs) {
       if (run.length < 2) continue;
       let area = PathBuilder.fill().move_to(x(run[0][0]), y(SPARK_HEIGHT));

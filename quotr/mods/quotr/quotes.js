@@ -100,36 +100,15 @@ function sessionOf(t, periods) {
 // Bar lengths: Yahoo's 5-minute bars, Binance's 15-minute klines.
 export const STOCK_BAR_MS = 300_000;
 export const CRYPTO_BAR_MS = 900_000;
-/**
- * Holes come from which bars exist, never from a time threshold. Each price on a line belongs to
- * one bar interval of the bar grid (index = start / bar): a bar's open and close to that bar, a
- * quote to the interval it falls in, (start, end]. Two neighbouring prices have a hole between
- * them when an interval between theirs has no price at all.
- */
-export const barOf = (start, bar) => Math.floor(start / bar);
-export const quoteBarOf = (t, bar) => Math.ceil(t / bar) - 1;
-export const isHole = (fromBar, toBar) => toBar - fromBar > 1;
-
-/** Trading time (inside any session) between `from` and `to`, in ms: closed hours count zero. */
-function tradingTime(from, to, periods) {
-  const all = [...periods.pre, ...periods.regular, ...periods.post].sort((x, y) => x[0] - y[0]);
-  let total = 0, reached = from;
-  for (const [a, b] of all) {
-    const lo = Math.max(a, reached), hi = Math.min(b, to);
-    if (hi > lo) { total += hi - lo; reached = hi; }
-  }
-  return total;
-}
 
 /**
- * Every trade since the last regular close, for the watchlist row (issue #37).
+ * Every trade since the last regular close, for the watchlist row's price and change (issue #37).
  * The close is the previous regular close (`reference`, as decoded for the quote); once the next
  * trading day's first pre-market trade arrives, it is the latest regular session's own close
- * (`regularMarketPrice`, final by then). The line starts with that close at its time when both
- * are known, then every bar after it in its session. Each point's `slot` is the trading time since
- * the start, so closed hours take no room and missing bars leave room; `gap` marks a point after
- * a hole (any missing bar, see isHole). The row's price is the latest trade, whether or not a reference is
- * known (`changePercent` is then null). null without a regular session.
+ * (`regularMarketPrice`, final by then). `points` are that close (when its time is known) and
+ * every bar after it in its session; the row shows the latest trade, pre-market and after hours
+ * included, whether or not a reference is known (`changePercent` is then null). null without a
+ * regular session.
  */
 export function yahooTrail(meta, bars, regular, now, reference = null) {
   const periods = tradingPeriods(meta);
@@ -154,10 +133,9 @@ export function yahooTrail(meta, bars, regular, now, reference = null) {
     : { price: meta.regularMarketPrice, t: regularTime, session: "regular" };
   // The regular quote is the latest trade: it ends the line (replacing a bar at the same time).
   if (!extended && regularTime >= start && (!last || regularTime >= last.t)) {
-    const end = { t: regularTime, close: meta.regularMarketPrice, session: "regular", quote: true };
+    const end = { t: regularTime, close: meta.regularMarketPrice, session: "regular" };
     if (last && last.t === regularTime && last.session !== "close") points[points.length - 1] = end; else points.push(end);
   }
-  for (const p of points) p.slot = tradingTime(start, p.t, periods);
   return { reference: ref, closeAt, start, points, ...shown,
     changePercent: ref !== null ? (shown.price - ref) / ref * 100 : null };
 }
@@ -170,9 +148,6 @@ export function yahooTrail(meta, bars, regular, now, reference = null) {
 export function shownQuote(quote) {
   const tr = quote?.trail;
   if (!tr || !positive(tr.price) || !positive(tr.t)) return quote;
-  // A trail cached before points carried their trading time can't show its holes: unused until
-  // the next refresh replaces it.
-  if (!Array.isArray(tr.points) || !tr.points.length || !tr.points.every((p) => Number.isFinite(p?.slot))) return quote;
   // No reference: the latest trade still shows, with no change rather than a wrong one.
   const known = positive(tr.reference) && Number.isFinite(tr.changePercent);
   return { ...quote, price: tr.price, changePercent: known ? tr.changePercent : null,

@@ -1,13 +1,13 @@
 // The watchlist row's chart: a small version of the dialog's 1D chart. No Herdr imports.
 //
-// One rule ties it to the row's numbers: the line, its color and the dashed reference all come
-// from the same quote as the price and percentage beside it. The reference is what the
-// percentage is measured against (a stock's previous regular close, a pair's price 24 hours
-// ago); the line is drawn against it, in the percentage's color. Only observed prices are
-// drawn, each at its own time: bar closes, the first bar's open and the quote itself. Gaps in
-// the data stay blank; nothing is interpolated or inferred.
-import { formatPrice, isCryptoPair, shownQuote, isHole, barOf, quoteBarOf, STOCK_BAR_MS, CRYPTO_BAR_MS } from "./quotes.js";
-import { zoneAt, formatPointTime } from "./readout.js";
+// The line is a stock's latest regular session (a pair's rolling 24h), against a dashed line at
+// the price the row's percentage is measured against, in that percentage's color. For a stock the
+// row may show a newer pre-market or after-hours trade (quotes.js shownQuote); the chart stays on
+// the regular session, and the dashed line is still the close that trade is measured against.
+// Only observed prices are drawn, each at its own time; consecutive prices are joined, so a
+// stretch with no trade is a straight segment, never a blank (the owner's decision, issue #37).
+import { formatPrice, isCryptoPair, shownQuote, STOCK_BAR_MS, CRYPTO_BAR_MS } from "./quotes.js";
+import { zoneAt } from "./readout.js";
 
 export const SPARK_WIDTH = 56;
 export const SPARK_HEIGHT = 22;
@@ -50,16 +50,15 @@ export function sparkWindow(quote, observed) {
 export function observedPrices(quote) {
   const q = quote ?? {};
   const bar = isCryptoPair(q.symbol ?? "") ? CRYPTO_BAR_MS : STOCK_BAR_MS;
-  // `k`: the bar interval each price belongs to (quotes.js, isHole).
-  const shown = positive(q.price) && positive(q.timestamp) ? { t: q.timestamp, price: q.price, k: quoteBarOf(q.timestamp, bar) } : null;
+  const shown = positive(q.price) && positive(q.timestamp) ? { t: q.timestamp, price: q.price } : null;
   const until = shown?.t ?? Infinity;
   const points = Array.isArray(q.points) ? q.points.filter((p) => positive(p?.t) && positive(p?.close)) : [];
   const out = [];
   if (positive(q.firstOpen?.t) && positive(q.firstOpen?.price) && q.firstOpen.t <= until
     && (!points.length || q.firstOpen.t <= points[0].t)) {
-    out.push({ t: q.firstOpen.t, price: q.firstOpen.price, k: barOf(q.firstOpen.t, bar) });
+    out.push({ t: q.firstOpen.t, price: q.firstOpen.price });
   }
-  for (const p of points) if (p.t + bar <= until) out.push({ t: p.t + bar, price: p.close, k: barOf(p.t, bar) });
+  for (const p of points) if (p.t + bar <= until) out.push({ t: p.t + bar, price: p.close });
   out.sort((a, b) => a.t - b.t);
   if (shown) out.push(shown);
   // One price per time: the later entry (the quote, at the end) wins.
@@ -71,18 +70,12 @@ export function observedPrices(quote) {
   return unique;
 }
 
-/** Index runs of consecutive points with no hole between them: [[0, 1, 2], [3, 4]]. */
-export function splitRuns(count, isGap) {
-  const runs = [];
-  for (let i = 0; i < count; i++) {
-    if (i === 0 || isGap(i)) runs.push([i]); else runs.at(-1).push(i);
-  }
-  return runs;
-}
-
-/** The reference, only when the displayed percentage really is measured against it. */
+/**
+ * The reference, only when the displayed percentage really is measured against it. For a stock
+ * that is the row's shown quote (its latest trade, extended hours included).
+ */
 export function sparkReference(quote) {
-  const q = quote ?? {};
+  const q = shownQuote(quote ?? {}) ?? {};
   if (!positive(q.price) || !positive(q.previousClose) || !Number.isFinite(q.changePercent)) return null;
   const computed = (q.price - q.previousClose) / q.previousClose * 100;
   return Math.abs(computed - q.changePercent) < 1e-6 ? q.previousClose : null;
@@ -102,44 +95,11 @@ function scale(values, basis) {
 }
 
 /**
- * A stock's trail (quotes.js, yahooTrail): the last regular close when known, then every trade
- * after it, ending on the price the row shows. null when the quote has none.
- */
-export function trailPrices(quote) {
-  const q = shownQuote(quote ?? {});
-  const tr = q?.trail;
-  if (!tr || q === quote || !Array.isArray(tr.points)) return null;
-  // shownQuote only uses trails whose points all carry their trading time (`slot`).
-  const points = tr.points.filter((p) => positive(p?.t) && positive(p?.close) && Number.isFinite(p.slot));
-  return points.length ? points : null;
-}
-
-/**
- * Pre-market and after-hours runs as [{ session, from, to }] in pixels, each widened by `half`
- * pixels either side, as the dialog shades them.
- */
-export function trailBands(points, xs, half) {
-  const bands = [];
-  for (let i = 0; i < points.length;) {
-    let j = i;
-    while (j + 1 < points.length && points[j + 1].session === points[i].session) j++;
-    if (points[i].session === "pre" || points[i].session === "post") {
-      bands.push({ session: points[i].session, from: Math.max(SPARK_LEFT, xs[i] - half), to: Math.min(SPARK_RIGHT, xs[j] + half) });
-    }
-    i = j + 1;
-  }
-  return points.length > 1 ? bands : [];
-}
-
-/**
- * The 56×22 geometry, in pixels: `line` [[x, y]], `runs` (`line` split where data is missing),
- * `reference` (y or null), `bands`, `stale`,
- * `label` (the one-line hover) and `description` (for screen readers).
- * `quote` is the stored quote; the row's own numbers come from shownQuote(quote).
+ * The 56×22 geometry, in pixels: `line` [[x, y]], `runs` (the line's drawn pieces: one, joined),
+ * `reference` (y or null), `stale`, `label` (the one-line hover) and `description`
+ * (for screen readers). `quote` is the stored quote: its regular session is drawn.
  */
 export function watchlistSparkline(quote, now, { failed = false } = {}) {
-  const trail = trailPrices(quote);
-  if (trail) return trailSparkline(shownQuote(quote), trail, now, failed);
   const q = quote ?? {};
   const crypto = isCryptoPair(q.symbol ?? "");
   const all = observedPrices(q);
@@ -156,44 +116,19 @@ export function watchlistSparkline(quote, now, { failed = false } = {}) {
     const y = scale(values, reference);
     const x = (t) => SPARK_LEFT + (SPARK_RIGHT - SPARK_LEFT) * Math.min(1, (t - window[0]) / (window[1] - window[0]));
     line = observed.map((p) => [x(p.t), y(p.price)]);
-    runs = splitRuns(line.length, (i) => isHole(observed[i - 1].k, observed[i].k)).map((r) => r.map((i) => line[i]));
+    // Joined, never broken: no trade in a while is a straight segment (the owner's decision).
+    runs = [line];
     referenceY = reference !== null ? y(reference) : null;
   } else if (reference !== null) {
     referenceY = (SPARK_TOP + SPARK_BOTTOM) / 2;
   }
-  const label = sparkLabel(q, observed, reference, crypto);
-  return { line, runs, reference: referenceY, bands: [], stale: isStale(q, now, failed), label, description: `Chart: ${label}` };
+  // After the next day's first pre-market trade the reference is this session's own close.
+  const label = sparkLabel(q, observed, reference, crypto, reference !== null && reference !== q.previousClose);
+  return { line, runs, reference: referenceY, stale: isStale(q, now, failed), label, description: `Chart: ${label}` };
 }
 
 const isStale = (q, now, failed) => failed || !positive(q.fetchedAt) || !Number.isFinite(now) || now < q.fetchedAt
   || now - q.fetchedAt > STALE_AFTER_MS;
-
-/**
- * Spaced by trading time (closed hours take no room); a missing bar keeps its room and breaks
- * the line, judged from the slots themselves. A scheduled closure is not missing data: the line
- * runs on across nights and weekends (the owner's decision).
- */
-function trailSparkline(q, points, now, failed) {
-  const reference = positive(q.previousClose) ? q.previousClose : null;
-  const y = scale(reference === null ? points.map((p) => p.close) : [...points.map((p) => p.close), reference], reference);
-  const n = points.length;
-  const first = points[0].slot;
-  const last = points.at(-1).slot;
-  const span = SPARK_RIGHT - SPARK_LEFT;
-  const xs = points.map((p) => (last > first ? SPARK_LEFT + span * (p.slot - first) / (last - first) : SPARK_RIGHT));
-  const line = points.map((p, i) => [xs[i], y(p.close)]);
-  // The trading-time bar grid: the close ends the bar before slot 0, the appended quote falls in an interval.
-  const k = (p) => (p.session === "close" ? -1 : p.quote ? quoteBarOf(p.slot, STOCK_BAR_MS) : barOf(p.slot, STOCK_BAR_MS));
-  const runs = splitRuns(n, (i) => isHole(k(points[i - 1]), k(points[i]))).map((r) => r.map((i) => line[i]));
-  const half = last > first ? span * STOCK_BAR_MS / 2 / (last - first) : 0;
-  const price = (value) => formatPrice({ price: value, currency: q.currency ?? null });
-  const when = (t) => formatPointTime(t, q.timeZone, { now }) ?? "the last session";
-  const closeAt = q.trail?.closeAt;
-  const label = reference !== null && positive(closeAt) ? `Since the close of ${price(reference)} · ${when(closeAt)}`
-    : `Since ${when(points[0].t)} · ${reference !== null ? `vs prev close ${price(reference)}` : "no reference"}`;
-  return { line, runs, reference: reference === null ? null : y(reference), bands: trailBands(points, xs, half),
-    stale: isStale(q, now, failed), label, description: `Chart: ${label}` };
-}
 
 function clock(t, zone) {
   const z = zoneAt(t, zone);
@@ -202,10 +137,10 @@ function clock(t, zone) {
 }
 
 /** One short line: what the line covers and what it is measured against. */
-export function sparkLabel(q, observed, reference, crypto) {
+export function sparkLabel(q, observed, reference, crypto, ownClose = false) {
   const price = (value) => formatPrice({ price: value, currency: q.currency ?? null });
   const against = reference === null ? "no reference"
-    : crypto ? `vs ${price(reference)} 24h ago` : `vs prev close ${price(reference)}`;
+    : crypto ? `vs ${price(reference)} 24h ago` : `vs ${ownClose ? "close" : "prev close"} ${price(reference)}`;
   if (!observed.length) return `No bars yet · ${against}`;
   if (crypto) return `Last 24h · ${against}`;
   const from = clock(observed[0].t, q.timeZone);
