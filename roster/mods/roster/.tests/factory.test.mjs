@@ -133,9 +133,13 @@ test('one alert, one prominent row: the group copy is a muted echo', () => {
   const s = setup(factory()); const tree = s.render();
   const prominent = find(s.view, 'edge/t70', true), echo = find(s.view, 'edge/t70', false);
   assert.ok(echo.echo); assert.equal(prominent.echo, undefined);
-  assert.equal(textOf(byId(tree, 'row-echo:' + echo.key)), 'in Needs you');
+  // The echo ends in the Needs you bell (#30: an icon, not a text chip), never a second alert line.
+  const bell = byId(tree, 'row-status:' + echo.key);
+  assert.equal(flatten(bell).find(e => e.attributes.svg).attributes.svg[0], 'mods/roster/icons/bell.svg');
+  assert.match(bell.attributes.accessibility_label[0], /listed in Needs you above/);
+  assert.equal(byId(tree, 'alert:' + echo.key), undefined);
   const chips = el => flatten(el).filter(e => e.attributes.max_w?.[0] === 104).map(textOf);
   assert.deepEqual(chips(byId(tree, prominent.key)), [], 'the pinned header says it'); assert.deepEqual(chips(byId(tree, echo.key)), [], 'no second chip');
   assert.ok(byId(byId(tree, 'roster-needs-you'), prominent.key), 'the alert is pinned');
-  assert.equal((textOf(byId(tree, 'roster-rows')).match(/\bNeeds you\b/g) ?? []).length, 1, 'only the echo note is in the list');
+  assert.equal((textOf(byId(tree, 'roster-rows')).match(/\bNeeds you\b/g) ?? []).length, 0, 'no Needs you text in the list: the echo is an icon');
 });

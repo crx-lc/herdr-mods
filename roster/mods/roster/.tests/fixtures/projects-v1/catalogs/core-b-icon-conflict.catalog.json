@@ -1,0 +1,79 @@
+{
+  "schema": "herdr-agents/projects",
+  "version": 1,
+  "owner": "herdr-agents",
+  "producer": {
+    "core": null,
+    "machine": "host-b"
+  },
+  "revision": 7,
+  "updatedAt": "2026-11-24T12:00:00.000Z",
+  "projects": [
+    {
+      "id": "pilot",
+      "token": "pilot",
+      "displayName": "Herdr Pilot",
+      "kind": "manifest",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/pilot-app",
+      "manifest": {
+        "commit": "7a2e4c6b8d0f1e3a5c7b9d1f3e5a7c9b0d2f4e6a",
+        "version": 2
+      },
+      "board": {
+        "provider": "github-project",
+        "owner": "crx-lc",
+        "ownerType": "organization",
+        "number": 7,
+        "url": "https://github.com/orgs/crx-lc/projects/7"
+      },
+      "repositories": [
+        {
+          "name": "crx-lc/pilot-app",
+          "role": "app",
+          "primary": true,
+          "checkout": "bound"
+        },
+        {
+          "name": "crx-lc/pilot-site",
+          "role": "site",
+          "primary": false,
+          "checkout": "bound"
+        },
+        {
+          "name": "crx-lc/pilot-docs",
+          "role": "docs",
+          "primary": false,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": "Pilot",
+        "id": "sp-core-b",
+        "binding": "bound"
+      },
+      "presentation": {
+        "icon": {
+          "format": "svg",
+          "version": 1,
+          "sha256": "ddafabfa651d936b41a3b8dca3970e713bf767101a7f482af28afac66f451c48",
+          "bytes": 62,
+          "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 16 16\"/>\n"
+        },
+        "palette": {
+          "light": {
+            "foreground": "#1B3A5C",
+            "background": "#F4F7FA"
+          },
+          "dark": {
+            "foreground": "#E6EEF5",
+            "background": "#14202C"
+          }
+        }
+      },
+      "revision": 7
+    }
+  ]
+}

@@ -37,7 +37,7 @@ export class Element {
   constructor() { this.children = []; this.attributes = {}; }
   child(v) { this.children.push(v); return this; }
 }
-for (const name of ['flex', 'flex_col', 'flex_row', 'gap', 'p', 'pl', 'w', 'h', 'id', 'text_size', 'bg', 'text_color', 'size_full', 'flex_1', 'overflow_y_scrollbar', 'track_focus', 'on_key_down', 'on_click', 'accessibility_label', 'tooltip', 'items_center', 'min_w', 'min_h', 'max_h', 'max_w', 'px', 'rounded', 'flex_none', 'truncate', 'font_semibold', 'justify_center', 'track_scroll', 'cursor_pointer', 'cursor_default', 'frames', 'hover', 'font_bold', 'size', 'on_hover', 'absolute', 'relative', 'top', 'left', 'right', 'items_start', 'border', 'border_color', 'py', 'w_full', 'whitespace_normal', 'line_height', 'pb', 'border_b', 'spin', 'loop', 'opacity', 'mt', 'key_context', 'on_action', 'on_mouse_down', 'on_size_change']) {
+for (const name of ['flex', 'flex_col', 'flex_row', 'gap', 'p', 'pl', 'w', 'h', 'id', 'text_size', 'bg', 'text_color', 'size_full', 'flex_1', 'overflow_y_scrollbar', 'track_focus', 'on_key_down', 'on_click', 'accessibility_label', 'tooltip', 'items_center', 'min_w', 'min_h', 'max_h', 'max_w', 'px', 'rounded', 'flex_none', 'truncate', 'font_semibold', 'justify_center', 'track_scroll', 'cursor_pointer', 'cursor_default', 'frames', 'hover', 'font_bold', 'size', 'on_hover', 'absolute', 'relative', 'top', 'left', 'right', 'items_start', 'border', 'border_color', 'py', 'w_full', 'whitespace_normal', 'line_height', 'pb', 'border_b', 'spin', 'loop', 'opacity', 'mt', 'key_context', 'on_action', 'on_mouse_down', 'on_size_change', 'flex_wrap']) {
   Element.prototype[name] = function (...args) { this.attributes[name] = args; return this; };
 }
 // Several actions can sit on one element: keep each by name.
@@ -75,3 +75,13 @@ export const flatten = e => e instanceof Element ? [e, ...e.children.flatMap(fla
 export const textOf = e => e instanceof Element ? e.children.map(textOf).join(' ') : String(e ?? '');
 export const appOf = host => ({ ...host, theme: () => ({ surface: '#111111', raised: '#222222', foreground: '#eeeeee' }), props: () => ({}), checking: () => false, nextCommand: () => new Promise(() => {}) });
 export const layoutHostUnused = new Proxy({}, { get: (_t, p) => () => { throw Error(`unexpected layout ${String(p)}`); } });
+// Like Herdr: an event handler's cx is its own and works only while the handler runs ("Never keep a cx and use it
+// later"). eventCx(cx) gives such a cx; end() is the handler returning, after which every use throws.
+export function eventCx(cx) {
+  let alive = true;
+  const guard = (name, fn) => (...args) => { if (!alive) throw Error(`cx.${name} used after its callback returned`); return fn(...args); };
+  const child = { ...cx, timer: { ...cx.timer }, end() { alive = false; } };
+  for (const key of ['notify', 'spawn', 'stop_propagation', 'focus_handle', 'open_url']) if (typeof cx[key] === 'function') child[key] = guard(key, cx[key]);
+  for (const key of ['after', 'every']) if (typeof cx.timer?.[key] === 'function') child.timer[key] = guard('timer.' + key, cx.timer[key]);
+  return child;
+}

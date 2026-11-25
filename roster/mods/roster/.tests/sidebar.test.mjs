@@ -359,7 +359,8 @@ test('actual compact view keeps global child attention, contextual parent and ge
     const p = view.controller.projection, parent = find(p, 't1');
     assert.equal(p.counts.all.working, 2); assert.equal(p.counts.all.needsYou, 1);
     assert.equal(parent.contextOnly, true); assert.equal(parent.navigation.enabled, false);
-    assert.match(textOf(tree), /Child needs you/);
+    // Status names it in its header; Projects in the row's status icon (tooltip and accessible label, #30).
+    assert.match(textOf(tree) + ' ' + flatten(tree).map(e => e.attributes.tooltip?.[0] ?? '').join(' '), /Child needs you/);
     view.controller.change({ type: 'filters', coreIds: [] }); tree = view.render(cx);
     assert.deepEqual(rows(view.controller.projection).map(i => i.row.address), ['t2']);
     assert.match(textOf(tree), /Needs you/); assert.equal(f.calls.length, 0);

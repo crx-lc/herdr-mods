@@ -7,6 +7,10 @@ import { actionReason, rowContext, detailLabel, hoverText, reasonText, agentFact
 import { terminalKind } from './runtime.js';
 import { reducedMotion, readStored, writeStored, PULSE } from './motion.js';
 import { NeedsYou, CHIME, SOUND, SOUND_LABELS, readSound, writeSound, nextSoundChoice, herdrMuted, playsChime, lookingAt } from './reminders.js';
+import { CatalogSource, ProjectIcons } from './catalog-source.js';
+import { registeredGroups, catalogMembership, catalogNotice, machineLabel, sourceText, whyText, darkAppearance } from './project-groups.js';
+import { GitHubData } from './github.js';
+import { projectTotals, projectRepositories, issueList, reasonText as totalReason, utcStamp } from './project-totals.js';
 
 // One distinct icon per status group, so each reads as its own section.
 export const STATUS_ICONS = Object.freeze({ 'Needs you': 'bell', 'Child needs you': 'bell-dot', Working: 'working', Done: 'check-circle', Idle: 'pause-circle', Offline: 'offline', Stale: 'clock', Unknown: 'help-circle' });
@@ -36,6 +40,8 @@ export function createRosterView(kit, app, options = {}) {
   const picture = (name, size) => image('mods/roster/icons/' + name + '.svg').w(size).h(size).flex_none();
   const herdrGlyph = (name, size) => svg('icons/' + name + '.svg').size(size).flex_none();
   const herdrPicture = (name, size) => image('icons/' + name + '.svg').w(size).h(size).flex_none();
+  // A registered project's catalog icon: only a file ProjectIcons wrote, read back and compared, named by its sha256.
+  const projectPicture = (sha, size) => image('mods/roster/.cache/icons/' + sha + '.svg').w(size).h(size).flex_none();
   const storage = options.storage ?? (typeof localStorage === 'undefined' ? null : localStorage);
   // One Needs you timer for every copy of this class: main.js makes the class once per mod
   // context, so an arrival or reminder sounds once however many copies are open.
@@ -83,8 +89,35 @@ export function createRosterView(kit, app, options = {}) {
         if (typeof readTextFile === 'function') this.os = new MachineOs({ readTextFile, now, isReady: this.isReady });
         this.machineReady = new Map();
       }
-      // One gentle 1s timer: the Needs you reminders, and the Spaces probes when there are any.
-      if (ticking) cx.timer.every(1000, cx => { this.reconcilePanel(cx); this.watchNeedsYou(cx); if (this.machineReady) this.pollGit(cx); });
+      // Registered projects: the catalog (catalog-source.js), its icons and the GitHub totals (github.js). Tests and
+      // check copies pass their own; the live sidebar (Herdr's own host, no injected one) builds them from Herdr's
+      // APIs, never under a check.
+      const live = ticking && !options.host;
+      this.projectState = { sources: [], groups: [], notice: null };
+      this.catalogSource = options.catalogSource ?? null; this.projectIcons = options.projectIcons ?? null; this.github = options.github ?? null;
+      this.projectPanel = null;
+      if (live && !this.catalogSource && typeof readTextFile === 'function') {
+        const host = this.controller.host;
+        this.catalogSource = new CatalogSource({ readTextFile, machines: () => host.machines(), terminals: () => host.terminals(),
+          home: () => (typeof app.home === 'function' ? app.home() : null),
+          platform: () => (typeof app.window === 'function' ? app.window()?.platform ?? null : null), now: () => host.now() });
+      }
+      const appHome = live && typeof app.appHome === 'function' ? app.appHome() : null;
+      const mkdir = options.mkdir ?? null, writeTextFile = options.writeTextFile ?? app.writeTextFile;
+      const cacheDir = appHome ? appHome.replace(/\\/g, '/') + '/mods/roster/.cache' : null;
+      if (cacheDir && mkdir && typeof writeTextFile === 'function' && typeof readTextFile === 'function') {
+        if (!this.projectIcons) this.projectIcons = new ProjectIcons({ dir: cacheDir + '/icons', rel: 'mods/roster/.cache/icons', mkdir,
+          readTextFile: path => readTextFile(path, { on: null }), writeTextFile });
+        if (!this.github && typeof exec === 'function') {
+          const file = cacheDir + '/github.json';
+          this.github = new GitHubData({ exec, now: () => this.controller.host.now(), load: () => readTextFile(file, { on: null }),
+            save: async (text, expected) => { await mkdir(cacheDir); await writeTextFile(file, text, expected); } });
+          this.github.restore().then(() => { this.applyProjects(); });
+        }
+      }
+      this.applyProjects();
+      // One gentle 1s timer: the Needs you reminders, the Spaces probes when there are any, and the projects data.
+      if (ticking) cx.timer.every(1000, cx => { this.reconcilePanel(cx); this.watchNeedsYou(cx); if (this.machineReady) this.pollGit(cx); this.pollProjects(cx); });
     }
     // Watch readiness in every tab; ask about Spaces' folders on ready machines while Spaces
     // is shown; redraw on answers.
@@ -134,12 +167,59 @@ export function createRosterView(kit, app, options = {}) {
         try { if (typeof play === 'function') play(CHIME); } catch { /* A sound that fails stays silent. */ }
       }
       const pulse = needsYou.count !== this.heardCount;
+      // The Projects echo pulses only for sessions that arrived in an event this copy has not pulsed for yet; a
+      // reminder alone leaves it still (the shared timer keeps the last arrival's identities, nothing else).
+      if (pulse) this.echoFresh = needsYou.arrived && needsYou.arrived.count > (this.heardCount ?? Infinity) ? needsYou.arrived.identities : new Set();
       this.heardCount = needsYou.count;
       if (!pulse || this.reduceMotion()) { if (fresh) cx.notify(); return; }
       this.pulseUntil = now + PULSE.ms;
       cx.notify();
       // Then still: one redraw after the pulse draws the bell without it.
       cx.timer.after(PULSE.ms, cx => cx.notify());
+    }
+    // The registered projects as the catalog reads now say: groups, membership and the notice. Called on a change.
+    applyProjects() {
+      const sources = this.catalogSource?.sources() ?? [];
+      const groups = registeredGroups(sources);
+      this.projectState = { sources, groups, notice: this.catalogSource ? catalogNotice(sources) : null };
+      this.controller.catalog = groups.length || sources.length ? { groups, member: catalogMembership(sources, groups) } : null;
+      for (const group of groups) if (group.presentation?.icon) this.projectIcons?.ensure(group.presentation.icon);
+    }
+    // Read the catalog (every 60 s), keep the totals of every registered project fresh (every 5 min) and the open
+    // issue list fresh while its panel is open. Deadlines are times, never a kept cx: swept here every second, and read
+    // by both modules themselves whenever an answer is taken or more work starts.
+    pollProjects(cx) {
+      this.catalogSource?.refresh();
+      const changed = (this.catalogSource?.takeChanged() ?? false) | (this.projectIcons?.takeChanged() ?? false);
+      if (changed) this.applyProjects();
+      if (this.github) {
+        const names = [...new Set(this.projectState.groups.flatMap(projectRepositories))];
+        this.github.tick();
+        this.github.wantCounts(names);
+        const open = this.projectPanel && this.projectState.groups.find(g => g.key === this.projectPanel.groupKey);
+        if (open && this.projectPanel.tab === 'issues') this.github.wantList(projectRepositories(open), open.board.state === 'known' ? open.board.board : null);
+      }
+      if (changed | (this.github?.takeChanged() ?? false)) cx.notify();
+    }
+    // The panel's Refresh: catalog and this project's totals and list now, at most once per 30 s (github.js).
+    refreshProject(group, cx) {
+      this.catalogSource?.refresh(this.controller.host.now() - (this.catalogSource.last ?? -Infinity) >= 10000);
+      const ok = this.github?.refreshNow(projectRepositories(group), this.projectPanel?.tab === 'issues' ? (group.board.state === 'known' ? group.board.board : null) : undefined);
+      this.message = ok ? 'Refreshing ' + group.displayName : this.github ? 'Refreshed less than 30 s ago' : 'GitHub data unavailable here';
+      cx.notify();
+    }
+    // A project panel: Details (ⓘ), the open issue list (issues total) or the pull requests (PR total), below its header.
+    openProjectPanel(groupKey, tab, returnKey, cx) {
+      const anchor = JSON.stringify(['project', groupKey, tab]);
+      if (!this.projectState.groups.some(g => g.key === groupKey)) return;
+      if (!this.beginPanel('project', anchor, returnKey, cx)) { cx.notify(); return; }
+      this.projectPanel = { groupKey, tab, returnKey, filter: 'all' };
+      this.readerCursor = 'project:close'; this.place('project:close'); this.readerControls = [];
+      if (tab === 'issues' && this.github) {
+        const group = this.projectState.groups.find(g => g.key === groupKey);
+        this.github.wantList(projectRepositories(group), group.board.state === 'known' ? group.board.board : null);
+      }
+      cx.notify();
     }
     // Herdr's one final call when this copy goes (its pane, tab, slot or overlay, or the app
     // quits; never for a hidden copy). The shared timer stops counting this copy, so it knows
@@ -177,7 +257,7 @@ export function createRosterView(kit, app, options = {}) {
     dismissPanel(cx, restore = true) {
       const panel = this.panel;
       if (panel) this.observedSpace = this.currentSpaceObservation();
-      this.panel = null; this.reader = null; this.newSpace = null; this.toolsOpen = false;
+      this.panel = null; this.reader = null; this.newSpace = null; this.toolsOpen = false; this.projectPanel = null;
       const oldInput = this.pathInput; this.pathInput = null; oldInput?.release?.();
       this.readerControls = []; this.inputFocused = false; this.inputRequest = null; this.newSpaceCursor = null;
       if (restore && panel) {
@@ -205,7 +285,13 @@ export function createRosterView(kit, app, options = {}) {
     reconcilePanel(cx) {
       if (!this.panel) return;
       const projection = this.controller.render();
-      if ((this.reader && !this.activeReader(projection)) || (this.newSpace && !this.activeNewSpace())) this.invalidatePanel(cx);
+      if ((this.reader && !this.activeReader(projection)) || (this.newSpace && !this.activeNewSpace()) || (this.projectPanel && !this.activeProjectPanel(projection))) this.invalidatePanel(cx);
+    }
+    // A project panel lives while its project is still listed, in Projects, with its header drawn (not folded away).
+    activeProjectPanel(projection = this.controller.projection) {
+      const p = this.projectPanel;
+      return !!p && this.controller.state.view === 'projects' && this.projectState.groups.some(g => g.key === p.groupKey)
+        && !!projection?.instances.some(i => i.kind === 'section' && i.registered?.key === p.groupKey);
     }
     invalidatePanel(cx) {
       // Only actual native focus (or the input's focus event) authorizes a focus return.
@@ -262,7 +348,7 @@ export function createRosterView(kit, app, options = {}) {
       if (panel.revealPending) {
         panel.revealPending = false;
         // A remote folder form's first control is its focused path field: that is what must show.
-        const firstKey = panel.kind === 'details' ? 'details:close'
+        const firstKey = panel.kind === 'details' ? 'details:close' : panel.kind === 'project' ? 'project:close'
           : panel.kind === 'folder' ? (controls.some(c => c.key === 'new-space:path') ? 'new-space:path' : 'new-space:cancel') : null;
         const first = controls.find(c => c.key === firstKey);
         if (first) { this.reveal(first); cx.notify(); }
@@ -588,6 +674,142 @@ export function createRosterView(kit, app, options = {}) {
       this.panelItems = panelIndex;
       return box;
     }
+    totalsOf(group) {
+      return this.github ? projectTotals(group, this.github, this.controller.host.now())
+        : { issues: { state: 'unavailable', value: null, text: '– issues', label: 'Open issues unavailable: GitHub data is not read here' },
+          prs: { state: 'unavailable', value: null, text: '– PRs', label: 'Open pull requests unavailable: GitHub data is not read here' },
+          repos: projectRepositories(group).map(name => ({ name, issues: { value: null, state: 'missing', reason: null }, prs: { value: null, state: 'missing', reason: null } })) };
+    }
+    // A registered project's header: its verified name, its catalog icon (or the neutral monogram) in its palette, the
+    // two labeled totals (each its own control: the issue list, the pull requests), ⓘ for Details, the agent count
+    // and the fold chevron. Keyboard order: the header (fold), issues, PRs, ⓘ. Leaves the element in this.lastHeader.
+    registeredHeader(i, { click, labelText, h, fg, muted, dim, theme, groupHeader, change, leadBox, first, slot }) {
+      const group = i.registered, totals = this.totalsOf(group), before = this.controls.length;
+      const dark = darkAppearance({ settings: typeof app.settings === 'function' ? app.settings() : null,
+        themes: typeof app.themes === 'function' ? app.themes() : null, theme });
+      const palette = group.presentation?.palette?.[dark ? 'dark' : 'light'] ?? null;
+      const sha = this.projectIcons?.lookup(group.presentation?.icon ?? null) ?? null;
+      const lead = leadBox().rounded(5).bg(palette?.background ?? theme.raised ?? theme.surface);
+      if (sha) lead.child(projectPicture(sha, 16).id('project-icon:' + i.key));
+      else lead.child(div().id('project-monogram:' + i.key).text_size(10.5).font_bold().text_color(palette?.foreground ?? fg)
+        .child((Array.from(group.displayName.trim())[0] ?? '?').toUpperCase()));
+      const open = this.projectPanel?.groupKey === group.key ? this.projectPanel.tab : null;
+      const total = (tab, t, noun) => {
+        const key = 'project-' + tab + ':' + i.key;
+        const color = t.state === 'ok' ? fg : t.state === 'partial' && !t.stale ? theme.ansi3 ?? fg : muted;
+        const label = (t.state === 'none' ? 'No repositories registered for ' + noun : t.label) + '. ' + (open === tab ? 'Close' : 'Show') + ' the ' + noun;
+        const el = click(key, label, cx => this.openProjectPanel(group.key, tab, key, cx))
+          .h(20).flex_none().px(4).rounded(4).cursor_pointer().tooltip(t.state === 'none' ? label : t.label).hover(e => e.bg(theme.hover ?? theme.raised))
+          .child(div().text_size(10.5).text_color(color).child(t.state === 'none' ? '–' : t.text));
+        if (open === tab) el.bg(theme.selected ?? theme.raised);
+        Object.assign(this.controls.at(-1), { detail: label, hover: t.label || label });
+        return el;
+      };
+      const notes = [group.state === 'ok' ? null : 'flagged' + (group.flags.length ? ': ' + group.flags.join(', ') : ''),
+        group.stale ? 'catalog not re-read on ' + group.cores.filter(core => !core.current).map(core => machineLabel(core.machine)).join(', ') : null].filter(Boolean);
+      // A flagged or stale project says so with a quiet mark; Details names why.
+      const extras = notes.length ? [div().id('project-flag:' + i.key).flex_none().text_size(10).text_color(dim).child('!')] : [];
+      extras.push(total('issues', totals.issues, 'open issues'), total('prs', totals.prs, 'open pull requests'));
+      const infoKey = 'project-info:' + i.key;
+      extras.push(click(infoKey, (open === 'details' ? 'Close' : 'Show') + ' project details: primary repository, board, Cores',
+        cx => this.openProjectPanel(group.key, 'details', infoKey, cx)).w(16).h(20).flex_none().px(0).justify_center().cursor_pointer()
+        .tooltip('Project details').child(div().text_size(12).text_color(muted).child('ⓘ')));
+      if (open === 'details') extras.at(-1).bg(theme.selected ?? theme.raised);
+      const agents = i.counts?.identities ?? 0;
+      const where = group.cores.map(core => machineLabel(core.machine)).join(', ');
+      const label = 'Project ' + group.displayName + ', ' + (agents ? agents + (agents === 1 ? ' agent' : ' agents') : 'idle') + ', ' + totals.issues.text + ', ' + totals.prs.text
+        + (notes.length ? ', ' + notes.join('; ') : '') + (i.collapsed ? ', folded' : ', open');
+      const header = groupHeader(i.key, label, group.displayName, change({ type: 'fold', key: i.key, collapsed: !i.collapsed }),
+        { icon: lead, collapsed: i.collapsed, extras, depth: i.depth, count: agents || null, first,
+          tooltip: group.displayName + ' · registered project on ' + where + (group.primary ? ' · ' + group.primary : '') + (notes.length ? ' · ' + notes.join('; ') : '') });
+      // The header's own control first, then its totals and ⓘ, as they read left to right after the name.
+      this.controls.splice(before, 0, this.controls.pop());
+      for (const control of this.controls.slice(before)) Object.assign(control, slot(i));
+      this.lastHeader = header;
+    }
+    // The inline panel below a registered project's header: Details, its open issues or its pull requests. Everything
+    // here is read-only; links open GitHub pages built from the repository and number, never from an answer's text.
+    renderProjectPanel(group, totals, theme, { h, v, fg, muted }) {
+      const p = this.projectPanel, now = this.controller.host.now();
+      this.readerControls = [];
+      let panelIndex = 0;
+      const text = (value, size, color = fg) => div().min_w(0).flex_none().whitespace_normal().text_size(size).text_color(color).child(panelText(value));
+      const control = (key, label, content, activate, color = fg, { active = false } = {}) => {
+        const owner = this.panel;
+        const guarded = cx => { this.reconcilePanel(cx); if (this.panel === owner) activate(cx); };
+        const item = { key, label, activate: guarded, panelIndex, detail: label, hover: label };
+        this.readerControls.push(item); this.controls.push(item);
+        const el = h().id(key).min_h(20).flex_none().min_w(0).px(5).gap(5).rounded(4).accessibility_label(label).tooltip(label).cursor_pointer()
+          .bg(this.readerCursor === key || active ? theme.selected ?? theme.raised : theme.raised ?? theme.surface)
+          .hover(e => e.bg(theme.hover ?? theme.selected ?? theme.surface))
+          .on_click((_e, cx) => { cx.stop_propagation(); this.readerCursor = key; this.place(key); this.focus(cx); guarded(cx); });
+        return typeof content === 'string' ? el.child(div().min_w(0).flex_1().whitespace_normal().text_size(11.5).text_color(color).child(panelText(content))) : el.child(content);
+      };
+      const title = { details: 'Project details', issues: 'Open issues', prs: 'Open pull requests' }[p.tab];
+      const box = this.disclosure('roster-project', theme, { v, muted }, p.tab === 'details' ? 132 : 176).accessibility_label(title + ': ' + group.displayName);
+      const append = el => { box.child(el); panelIndex++; return box; };
+      append(h().h(22).flex_none().gap(6).child(text(title + ' · ' + group.displayName, 12).font_semibold().flex_1().truncate())
+        .child(control('project:close', 'Close ' + title.toLowerCase() + ' (Esc)', '×', cx => this.dismissPanel(cx))));
+      const link = (key, label, value, url, color = theme.accent ?? fg) => control(key, label, value, cx => cx.open_url(url), color);
+      const repoUrl = name => 'https://github.com/' + name;
+      if (p.tab === 'details') {
+        const field = (id, label, value) => append(v().id('project-field:' + id).min_w(0).flex_none().gap(1).child(text(label, 10.5, muted)).child(text(value, 11.5)));
+        field('id', 'Project ID', group.id + (group.state === 'ok' ? '' : ' · flagged'));
+        if (group.primary) append(link('project:primary', 'Open the primary repository ' + group.primary + ' on GitHub', 'Primary: ' + group.primary, repoUrl(group.primary)));
+        for (const [n, repo] of group.repositories.filter(r => r.name.toLowerCase() !== String(group.primary).toLowerCase()).entries())
+          append(link('project:repo:' + n, 'Open ' + repo.name + ' on GitHub', (repo.role ? repo.role + ': ' : '') + repo.name, repoUrl(repo.name), fg));
+        if (group.board.state === 'known') append(link('project:board', 'Open the monitored board on GitHub', 'Board: ' + group.board.board.owner + ' #' + group.board.board.number, group.board.board.url));
+        else field('board', 'Board', group.board.state === 'none' ? 'No board (a manual project)' : 'Unknown: the Cores do not name one GitHub board');
+        for (const core of group.cores) field('core:' + machineLabel(core.machine), machineLabel(core.machine),
+          [core.mode ?? 'mode unknown', core.space.binding === 'bound' ? 'Space ' + (core.space.name ?? core.space.id ?? 'bound') : 'Space missing',
+            core.kind === 'legacy' ? 'legacy' : null, core.problems.length ? 'problems: ' + core.problems.join(', ') : null,
+            core.current ? null : 'catalog not re-read: ' + whyText(core.sourceWhy)].filter(Boolean).join(' · '));
+        if (group.flags.length) field('flags', 'Flags', group.flags.join(', '));
+      } else if (p.tab === 'prs') {
+        const t = totals.prs;
+        append(text(t.state === 'none' ? 'No repositories registered' : t.label + (t.state === 'ok' || t.state === 'stale' ? '; drafts count as open' : ''), 11, t.state === 'ok' ? fg : muted).id('project-prs:summary'));
+        for (const [n, r] of totals.repos.entries()) append(link('project:pulls:' + n, 'Open pull requests of ' + r.name + ' on GitHub',
+          r.name + ': ' + (r.prs.value === null ? (r.prs.state === 'loading' ? 'loading' : 'unavailable (' + totalReason(r.prs.reason) + ')') : r.prs.value + (r.prs.state === 'stale' ? ' (as of ' + utcStamp(r.prs.okAt) + ')' : '')),
+          repoUrl(r.name) + '/pulls', r.prs.value === null ? muted : fg));
+      } else {
+        const list = this.github ? issueList(group, this.github, now, p.filter) : { state: 'unavailable', items: [], total: 0, filters: [], notes: ['GitHub data is not read here'] };
+        const t = totals.issues;
+        append(text(list.state === 'loading' ? 'Loading open issues…' : list.state === 'unavailable' ? 'Open issues unavailable'
+          : (list.state === 'partial' ? 'Partial list: ' : list.state === 'stale' ? 'Stale list: ' : '') + list.total + ' open, oldest first' + (t.state === 'stale' ? ' · ' + t.label : ''), 11, list.state === 'ok' ? fg : muted).id('project-issues:summary'));
+        for (const note of list.notes) append(text(note, 10.5, muted).id('project-issues:note:' + panelIndex));
+        if (totals.repos.length > 1) {
+          const row = h().id('project-issues:repos').flex_none().flex_wrap().gap(3);
+          for (const [n, r] of totals.repos.entries()) row.child(link('project:issues-repo:' + n, 'Open issues of ' + r.name + ' on GitHub',
+            r.name.split('/')[1] + ' ' + (r.issues.value ?? '–'), repoUrl(r.name) + '/issues', r.issues.value === null ? muted : fg));
+          append(row);
+        }
+        if (list.filters.length > 1) {
+          const row = h().id('project-issues:filters').flex_none().flex_wrap().gap(3);
+          for (const f of list.filters) row.child(control('project:filter:' + f.key, 'Show ' + (f.key === 'all' ? 'all open issues' : f.label) + ' (' + f.count + ')',
+            f.label + ' ' + f.count, cx => { p.filter = f.key; cx.notify(); }, f.key === list.filter ? theme.accent ?? fg : fg, { active: f.key === list.filter }));
+          append(row);
+        }
+        for (const item of list.items) {
+          const facts = item.repo + '#' + item.number + ' ' + item.title + ' · ' + (item.statusText || 'no board') + ' · ' + item.age;
+          const label = facts + ' · ' + item.exact;
+          const line = h().min_w(0).flex_1().gap(5)
+            .child(div().flex_none().text_size(10.5).text_color(muted).child(item.short + '#' + item.number))
+            .child(div().min_w(0).flex_1().truncate().text_size(11.5).text_color(theme.accent ?? fg).child(item.title));
+          if (item.statusText) line.child(div().flex_none().max_w(90).truncate().text_size(10.5).text_color(item.status.kind === 'status' ? fg : muted).child(item.statusText));
+          line.child(div().flex_none().text_size(10.5).text_color(muted).child(item.age.replace('opened ', '')));
+          const el = link('project:issue:' + item.key, label, line, item.url);
+          el.tooltip(item.exact + '\n' + item.repo + '#' + item.number + ' ' + item.title);
+          // On keyboard focus the footer shows one line, cut at the sidebar's width: the exact time comes first so it
+          // always shows (#25), then what the entry already draws. The label keeps its order for screen readers.
+          Object.assign(this.controls.at(-1), { hover: item.exact, detail: item.exact + ' · ' + facts });
+          append(el);
+        }
+        if (list.state !== 'loading' && !list.items.length && list.total > 0) append(text('No open issue has this status', 11, muted));
+      }
+      append(control('project:refresh', 'Refresh the catalog and this project\'s GitHub data now (at most every 30 s)', 'Refresh', cx => this.refreshProject(group, cx), muted));
+      this.panelItems = panelIndex;
+      return box;
+    }
     renderDetails(reader, projection, theme, { labelText, h, v, fg, muted }) {
       const c = this.controller;
       this.readerControls = [];
@@ -681,12 +903,14 @@ export function createRosterView(kit, app, options = {}) {
       // chevron (or an empty slot of its size where a group never folds). The header's own
       // 11px size and dim color reach only the tail.
       const groupHeader = (key, label, title, activate, { icon: lead = null, collapsed = false, foldable = true, extras = [], tooltip = label, depth = 0,
-        count = null, first = false } = {}) => {
+        count = null, first = false, subordinate = false } = {}) => {
         const head = click(key, label, activate).h(HEADER.height).mt(first ? 0 : HEADER.gapAbove).flex_none().px(8).pl(8 + Math.min(depth, 3) * 8).gap(7)
           .text_size(11).text_color(dim).cursor_pointer().hover(el => el.bg(theme.hover ?? theme.raised)).tooltip(tooltip);
         const leadEl = typeof lead === 'string' ? icon(lead, HEADER.iconSize) : lead;
         if (leadEl) head.child(leadEl.id('group-icon:' + key));
-        head.child(labelText(title, HEADER.titleSize, fg).id('group-label:' + key).font_bold().flex_1());
+        // A fallback group under registered projects reads as secondary: smaller, muted and not bold.
+        head.child(subordinate ? labelText(title, 12, muted).id('group-label:' + key).font_semibold().flex_1()
+          : labelText(title, HEADER.titleSize, fg).id('group-label:' + key).font_bold().flex_1());
         for (const extra of extras) head.child(extra);
         if (count != null) head.child(div().id('group-count:' + key).flex_none().text_size(11).text_color(dim).child(String(count)));
         head.child(foldable ? icon(collapsed ? 'chevron-right' : 'chevron-down', HEADER.chevron).id('group-chevron:' + key)
@@ -705,8 +929,8 @@ export function createRosterView(kit, app, options = {}) {
       const STATUS_COLORS = { 'Needs you': theme.blocked, 'Child needs you': theme.blocked, Working: theme.working, Done: theme.done,
         Idle: theme.idle, Unknown: theme.unknown };
       const still = this.reduceMotion();
-      const statusIcon = label => {
-        const el = icon(STATUS_ICONS[label] ?? 'help-circle', HEADER.iconSize).text_color(STATUS_COLORS[label] ?? dim);
+      const statusIcon = (label, size = HEADER.iconSize) => {
+        const el = icon(STATUS_ICONS[label] ?? 'help-circle', size).text_color(STATUS_COLORS[label] ?? dim);
         return label === 'Working' && !still ? el.spin(1200) : el;
       };
       const change = event => cx => { if (!this.toolsOpen) this.dismissPanel(cx, false); this.controls = []; c.change(event); cx.notify(); };
@@ -738,7 +962,7 @@ export function createRosterView(kit, app, options = {}) {
           try { if (await this.controller.refresh(p => timerDeadline(cx, p))) cx.notify(); } finally { this.reading = false; } });
       }
       const reader = this.activeReader(projection);
-      if ((this.reader && !reader) || (this.newSpace && !this.activeNewSpace())) {
+      if ((this.reader && !reader) || (this.newSpace && !this.activeNewSpace()) || (this.projectPanel && !this.activeProjectPanel(projection))) {
         const stale = this.panel;
         cx.spawn(async cx => { await null; if (this.panel === stale) this.invalidatePanel(cx); });
       }
@@ -809,6 +1033,12 @@ export function createRosterView(kit, app, options = {}) {
       // Each instance is one direct child of its list; these count them for scrolling.
       let bodyAt = 0, pinnedAt = 0;
       const place = (i, element) => {
+        if (i.kind === 'section' && i.registered && this.projectPanel?.groupKey === i.registered.key && viewMode === 'projects') {
+          element = v().id('inline:' + i.key).flex_none().min_w(0).child(element);
+          const before = this.controls.length;
+          element.child(this.renderProjectPanel(i.registered, this.totalsOf(i.registered), theme, { h, v, fg, muted }));
+          for (const control of this.controls.slice(before)) Object.assign(control, slot(i));
+        }
         if (i.kind === 'terminal') {
           element = v().id('inline:' + i.key).flex_none().min_w(0).child(element);
           if (reader?.sourceKey === i.key) {
@@ -820,7 +1050,16 @@ export function createRosterView(kit, app, options = {}) {
         if (i.pinned) { pinnedRows.child(element); pinnedAt++; } else { body.child(element); bodyAt++; }
       };
       const slot = i => i.pinned ? { pinnedIndex: pinnedAt, pinned: true } : { rowIndex: bodyAt };
-      let section = null, firstHeader = true;
+      let section = null, firstHeader = true, captioned = false;
+      // What the list says about the catalog: loading, unavailable (Spaces only) or partial. Focusable, with every
+      // machine's state in its label; Enter reads the catalog again (at most every 10 s).
+      const notice = viewMode === 'projects' ? this.projectState.notice : null;
+      if (notice) {
+        body.child(click('catalog:notice', notice.detail, cx => { this.catalogSource?.refresh(c.host.now() - (this.catalogSource.last ?? -Infinity) >= 10000); cx.notify(); })
+          .h(20).flex_none().gap(5).tooltip(notice.detail).child(icon(notice.kind === 'loading' ? 'clock' : 'help-circle', 12).text_color(dim))
+          .child(labelText(notice.text, 11, muted).id('catalog-notice-text').flex_1()));
+        Object.assign(this.controls.at(-1), { rowIndex: bodyAt, detail: notice.text, hover: notice.detail }); bodyAt++;
+      }
       for (const i of projection.instances) {
         if (i.kind === 'section' && i.pinned) {
           section = i;
@@ -831,8 +1070,22 @@ export function createRosterView(kit, app, options = {}) {
           this.controls.at(-1).pinned = true;
           continue;
         }
+        if (i.kind === 'section' && i.registered && viewMode === 'projects') {
+          section = i;
+          this.registeredHeader(i, { click, labelText, h, fg, muted, dim, theme, groupHeader, change, leadBox, first: firstHeader, slot });
+          place(i, this.lastHeader);
+          firstHeader = false;
+          continue;
+        }
         if (i.kind === 'section') {
           section = i;
+          // Below registered projects, a caption opens the fallback groups: sessions no catalog places in a project.
+          if (i.subordinate && i.depth === 0 && !captioned && projection.instances.some(s => s.kind === 'section' && s.registered)) {
+            captioned = true;
+            body.child(labelText('Not in a registered project', 10.5, dim).id('fallback-caption').h(18).mt(HEADER.gapAbove).px(8).flex_none()
+              .accessibility_label('Below: sessions that are not in a registered project, grouped by Space, repository or kind'));
+            bodyAt++;
+          }
           const count = i.label === 'Working' ? i.counts?.working : i.label === 'Needs you' ? i.counts?.needsYou : i.counts?.identities ?? i.count;
           const title = i.label;
           const foldable = true;
@@ -847,7 +1100,7 @@ export function createRosterView(kit, app, options = {}) {
           const extras = where ? [div().id('group-space:' + i.key).flex_none().text_size(10).text_color(muted).child(where)] : [];
           const header = groupHeader(i.key, title + (count != null ? ', ' + count : '') + (where ? ', ' + where : '') + (foldable ? (i.collapsed ? ', folded' : ', open') : ''), title,
             change({ type: 'fold', key: i.key, collapsed: !i.collapsed }), { icon: lead, collapsed: i.collapsed, foldable, extras, depth: i.depth, count, first: firstHeader || i.depth > 0,
-              tooltip: where ? i.label + ': the Herdr Space on ' + (i.space.machine ?? 'this computer') + ' that shows these terminals (project not verified)' : undefined });
+              subordinate: i.subordinate === true && i.depth === 0, tooltip: where ? i.label + ': the Herdr Space on ' + (i.space.machine ?? 'this computer') + ' that shows these terminals (project not verified)' : undefined });
           Object.assign(this.controls.at(-1), slot(i));
           place(i, header);
           firstHeader = false;
@@ -857,6 +1110,11 @@ export function createRosterView(kit, app, options = {}) {
         const status = waiting ? i.display.compact ? '◈ Waiting' : i.display.label : i.display.error ?? i.status;
         const provider = row.providerBadge?.accessibleName;
         const context = rowContext(i), label = detailLabel(i), explanation = actionReason(i);
+        // On keyboard focus the footer shows this line, cut at the sidebar's width: the full status comes first so it
+        // always shows (#30), then the row's facts.
+        const fullStatus = i.echo ? 'Needs you: listed in Needs you above' : i.pinned ? 'Needs you'
+          : waiting ? i.display.detail ?? 'Waiting for delegate' : i.display.error ?? i.status;
+        const focusLine = 'Status: ' + fullStatus + ' · ' + label;
         // Hover is short and pre-wrapped; the full label stays for screen readers and Info.
         const hover = hoverText(i, waiting ? i.display.detail ?? 'Waiting' : status);
         // One compact line per agent: name, machine, known context, badges. Everything
@@ -875,7 +1133,7 @@ export function createRosterView(kit, app, options = {}) {
         element.hover(el => el.bg(theme.hover ?? theme.raised));
         if (c.cursor !== i.key && c.feed.snapshot?.focused?.terminal === row.address) element.bg(theme.raised);
         const selected = this.controls.at(-1), at = slot(i);
-        Object.assign(selected, { ...at, instance: i, anchor: rowAnchor(i, c.feed.snapshot), detail: label, hover,
+        Object.assign(selected, { ...at, instance: i, anchor: rowAnchor(i, c.feed.snapshot), detail: focusLine, hover,
           disabledReason: i.navigation.enabled ? null : explanation });
         // One leading icon: what runs there, from Herdr's program table only (runtime.js),
         // never a tab title or role. A neutral terminal when nothing is known.
@@ -925,7 +1183,21 @@ export function createRosterView(kit, app, options = {}) {
         // Status groups by state, so a chip that repeats its header is dropped there; Projects
         // mixes states and keeps every chip. Waiting stays in Working with a compact marker.
         const statusView = viewMode === 'status';
-        if (statusView && waiting) element.child(badge('◈ Waiting', theme.accent ?? muted).id('row-waiting:' + i.key)
+        // Projects: a compact status icon at the row's end, from the same vocabulary as the Status tab's headers (Working
+        // turns, unless motion is reduced). The echo of a pending session shows the bell, which pulses once with the
+        // pinned bell for a new arrival and never on a refresh; the alert itself stays pinned above. The full status is
+        // the icon's tooltip and accessible label, and part of the row's own label for keyboard focus.
+        const rowStatus = () => {
+          const full = echo ? 'Needs you: listed in Needs you above' : waiting ? i.display.detail ?? 'Waiting for delegate' : i.display.error ?? i.status;
+          const box = h().id('row-status:' + i.key).w(16).h(16).flex_none().justify_center().tooltip(full).accessibility_label('Status: ' + full);
+          if (waiting && !echo) return box.child(div().text_size(11).text_color(theme.accent ?? muted).child('◈'));
+          const glyph = statusIcon(echo ? 'Needs you' : i.display.error ? 'Unknown' : i.status, 14);
+          if (i.display.error) glyph.text_color(theme.blocked ?? fg);
+          if (echo && !still && this.pulseUntil > c.host.now() && (this.echoFresh?.has(i.identity) ?? false)) glyph.loop('opacity', { from: PULSE.from, to: PULSE.to, period: PULSE.period });
+          return box.child(glyph);
+        };
+        if (!statusView && !i.pinned) element.child(rowStatus());
+        else if (statusView && waiting) element.child(badge('◈ Waiting', theme.accent ?? muted).id('row-waiting:' + i.key)
           .accessibility_label('Waiting for delegate').tooltip('Waiting for delegate'));
         else if (echo) element.child(labelText('in Needs you', 10, muted).id('row-echo:' + i.key).flex_none());
         // The pinned header already says Needs you: its rows carry no repeated chip.
@@ -945,13 +1217,13 @@ export function createRosterView(kit, app, options = {}) {
           .child(labelText(infoShown ? 'ⓘ' : '', 12, muted).id('info-glyph:' + i.key))
           : div().id('info-unavailable:' + i.key).text_size(10).text_color(muted)
             .child('Details unavailable: ambiguous instance');
-        if (selected.anchor) Object.assign(this.controls.at(-1), { ...at, instance: i, anchor: rowAnchor(i, c.feed.snapshot), detail: label, hover, disabledReason: selected.disabledReason });
+        if (selected.anchor) Object.assign(this.controls.at(-1), { ...at, instance: i, anchor: rowAnchor(i, c.feed.snapshot), detail: focusLine, hover, disabledReason: selected.disabledReason });
         line.child(info);
         if (parents.has(row.associationKey)) {
           const collapsed = c.state.folds[i.key] ?? false;
           line.child(button('fold:' + i.key, collapsed ? 'Show children' : 'Hide children',
             change({ type: 'fold', key: i.key, collapsed: !collapsed }), { text: collapsed ? '▸' : '▾' }).px(0).w(18));
-          Object.assign(this.controls.at(-1), { ...at, instance: i, anchor: rowAnchor(i, c.feed.snapshot), detail: label, hover, disabledReason: selected.disabledReason });
+          Object.assign(this.controls.at(-1), { ...at, instance: i, anchor: rowAnchor(i, c.feed.snapshot), detail: focusLine, hover, disabledReason: selected.disabledReason });
         }
         if (!i.alert) { place(i, line); continue; }
         // The first line is the verified agent, Space and machine. The second carries only
@@ -971,7 +1243,7 @@ export function createRosterView(kit, app, options = {}) {
             else { this.message = reasonText(plan.reason); this.openMessage = true; }
             cx?.notify?.();
           }, { text: 'Open ' + a.recipient.title }).h(20));
-          Object.assign(this.controls.at(-1), { ...at, instance: i, anchor: rowAnchor(i, c.feed.snapshot), detail: label, hover: details });
+          Object.assign(this.controls.at(-1), { ...at, instance: i, anchor: rowAnchor(i, c.feed.snapshot), detail: focusLine, hover: details });
         }
         // What was not reported, when no recipient button takes the place.
         if (a.missing.length && !a.recipient) {

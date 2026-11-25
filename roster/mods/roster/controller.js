@@ -5,7 +5,9 @@ import { LocalReader } from './local-reader.js';
 export class Controller {
   constructor(host, { collapseUnassigned = true, initialView = 'projects' } = {}) { this.host = host; this.collapseUnassigned = collapseUnassigned; this.feed = new Feed(); this.state = viewState({ view: initialView }); this.cursor = null; this.reader = new LocalReader(host);
     // Only a host that declares it (the stock desktop adapter) navigates natively.
-    this.nativeNavigation = host.nativeNavigation === true; }
+    this.nativeNavigation = host.nativeNavigation === true;
+    // Registered projects ({ groups, member } from project-groups.js), set by the view from the catalog it read.
+    this.catalog = null; }
   observe(refresh = false) {
     const snapshot = capture(this.host);
     const evidence = this.host.evidence ? (snapshot, generation) => this.host.evidence(snapshot, generation) : emptyEvidence();
@@ -14,7 +16,7 @@ export class Controller {
   }
   project() {
     return projectRoster(this.feed.reduced, this.state, { navigation: this.feed.navigation, scopes: this.feed.evidence.scopes ?? [],
-      repositories: this.feed.evidence.repositories ?? [], spaces: this.feed.spaces ?? {}, collapseUnassigned: this.collapseUnassigned });
+      repositories: this.feed.evidence.repositories ?? [], spaces: this.feed.spaces ?? {}, collapseUnassigned: this.collapseUnassigned, catalog: this.catalog });
   }
   render() {
     this.observe();
@@ -45,7 +47,7 @@ export class Controller {
     this.observe();
     const plan = actionIntent(this.feed.reduced, projection, key, this.feed.navigation,
       { state: this.state, generation: this.feed.generation, scopes: this.feed.evidence.scopes ?? [],
-        repositories: this.feed.evidence.repositories ?? [], spaces: this.feed.spaces ?? {} });
+        repositories: this.feed.evidence.repositories ?? [], spaces: this.feed.spaces ?? {}, catalog: this.catalog });
     if (plan.enabled) this.go(plan.intent);
     return plan;
   }

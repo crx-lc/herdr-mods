@@ -1,0 +1,12 @@
+{
+  "schema": "herdr-agents/projects",
+  "version": 2,
+  "owner": "herdr-agents",
+  "producer": {
+    "core": null,
+    "machine": "host-a"
+  },
+  "revision": 1,
+  "updatedAt": "2026-11-24T12:00:00.000Z",
+  "projects": []
+}

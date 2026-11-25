@@ -63,8 +63,12 @@ function verifiedRepository(row, repositories) {
 }
 // Identified: a role label or an agent that reports a status. Plain shells and raw IDs are not.
 export const identified = row => row.role !== 'unknown' || row.rawStatus !== 'unknown';
-function placement(row, scopes, repositories = [], spaces = {}) {
+function placement(row, scopes, repositories = [], spaces = {}, catalog = null) {
   if (row.project.id) return { key: tuple('project', row.project.id), label: row.project.displayName, projectId: row.project.id };
+  // A registered project from the catalog: only through catalogMembership (project-groups.js), never by a name.
+  const registered = catalog?.member?.(row) ?? null;
+  const group = registered ? catalog.groups.find(g => g.key === registered) : null;
+  if (group) return { key: group.key, label: group.displayName, projectId: group.id, registered: group };
   const facts = scopes.filter(e => e?.associationKey === row.associationKey && row.associationKey);
   if (row.core.verified && facts.length === 1 && facts[0].verified === true && facts[0].scope === 'core-wide'
     && facts[0].coreId === row.core.id && typeof facts[0].source === 'string' && facts[0].source.trim()) {
@@ -118,10 +122,12 @@ function counts(rows) {
 // ambient storage, inferred assignments or rewritten native fields live here.
 // collapseUnassigned: the Other project group and the Status Unknown group start
 // folded (a count stays on the header); an explicit fold in state always wins.
-export function projectRoster(reduced, inputState = {}, { scopes = [], repositories = [], spaces = {}, navigation = {}, collapseUnassigned = false } = {}) {
+// catalog: { groups, member } from project-groups.js: registered projects are listed first, idle ones included, and
+// everything that is not one of their members keeps the fallbacks below them, marked subordinate.
+export function projectRoster(reduced, inputState = {}, { scopes = [], repositories = [], spaces = {}, navigation = {}, collapseUnassigned = false, catalog = null } = {}) {
   const state = viewState(inputState), rows = sortRows(reduced.rows), instances = [];
   const filtered = rows.filter(r => !filterReasons(r, state).length);
-  const placements = new Map(rows.map(r => [rowIdentity(r), placement(r, scopes, repositories, spaces)]));
+  const placements = new Map(rows.map(r => [rowIdentity(r), placement(r, scopes, repositories, spaces, catalog)]));
   const byAssociation = new Map(rows.filter(r => r.associationKey).map(r => [r.associationKey, r]));
   const open = (key, fallback = false) => !(state.folds[key] ?? fallback);
   function header(path, label, depth, defaultCollapsed = false, extra = {}) {
@@ -167,8 +173,15 @@ export function projectRoster(reduced, inputState = {}, { scopes = [], repositor
       if (header(path, label, 0, label === 'Done' || (collapseUnassigned && label === 'Unknown'), { counts: counts(members) })) for (const row of members) terminal(row, path, 1, row.roster.state === 'child-needs-you');
     }
   } else {
-    const groups = [...new Map(filtered.map(r => [placements.get(rowIdentity(r)).key, placements.get(rowIdentity(r))])).values()]
-      .sort((a, b) => rank(a) - rank(b) || (a.space && b.space ? compare(tuple(a.space.machine ?? ''), tuple(b.space.machine ?? '')) || a.space.order - b.space.order : 0) || compare(a.key, b.key));
+    const found = new Map(filtered.map(r => [placements.get(rowIdentity(r)).key, placements.get(rowIdentity(r))]));
+    // Registered projects show even with no session (the catalog proves they exist), in the catalog's name order.
+    for (const group of catalog?.groups ?? []) if (!found.has(group.key)) found.set(group.key, { key: group.key, label: group.displayName, projectId: group.id, registered: group });
+    const registeredOrder = new Map((catalog?.groups ?? []).map((g, n) => [g.key, n]));
+    const groups = [...found.values()]
+      .sort((a, b) => rank(a) - rank(b) || (a.registered && b.registered ? registeredOrder.get(a.key) - registeredOrder.get(b.key) : 0)
+        || (a.space && b.space ? compare(tuple(a.space.machine ?? ''), tuple(b.space.machine ?? '')) || a.space.order - b.space.order : 0) || compare(a.key, b.key));
+    // With a catalog, anything that is not a project (registered or bound) is a fallback: drawn subordinate.
+    const subordinate = group => !!catalog?.groups?.length && !group.projectId;
     for (const group of groups) {
       const members = filtered.filter(r => placements.get(rowIdentity(r)).key === group.key), memberKeys = new Set(members.map(rowIdentity));
       const parentOf = new Map();
@@ -187,7 +200,8 @@ export function projectRoster(reduced, inputState = {}, { scopes = [], repositor
       }
       const path = ['projects', group.key];
       if (!header(path, group.label, 0, collapseUnassigned && [tuple('other'), tuple('unidentified')].includes(group.key),
-        { projectId: group.projectId, space: group.space ?? null, repository: group.repository ?? null, counts: counts(members) })) continue;
+        { projectId: group.projectId, space: group.space ?? null, repository: group.repository ?? null, counts: counts(members),
+          registered: group.registered ?? null, subordinate: subordinate(group) })) continue;
       // Iterative event stack prevents recursive overflow on deep actual ancestry.
       const stack = [{ type: 'siblings', siblings: members.filter(r => !parentOf.has(rowIdentity(r))), path, depth: 1 }];
       while (stack.length) {

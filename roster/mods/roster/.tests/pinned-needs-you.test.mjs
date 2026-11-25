@@ -62,7 +62,8 @@ test('the same section, rows and selection across Spaces, Projects and Status', 
   tree = tab(s, tree, 'status');
   assert.doesNotMatch(textOf(byId(tree, 'roster-rows')), /Needs you/);
   tree = tab(s, tree, 'projects');
-  assert.equal((textOf(byId(tree, 'roster-rows')).match(/\bNeeds you\b/g) ?? []).length, 2, 'one "in Needs you" echo per pending session');
+  // #30: the echo is the row's Needs you bell icon, one per pending session, not text.
+  assert.equal(s.view.controller.projection.instances.filter(i => i.echo && byId(tree, 'row-status:' + i.key)).length, 2, 'one echo per pending session');
   assert.deepEqual(s.f.calls, [], 'switching tabs never navigates');
 });
 

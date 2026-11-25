@@ -48,7 +48,7 @@ export function lookingAt(addresses, focused, win) {
 // 'reminder' or null. A reminder that falls due while the person looks at every pending
 // session is skipped, and the next one is 2 minutes later.
 export class Reminders {
-  constructor(every = REMIND_MS) { this.every = every; this.seen = null; this.due = null; }
+  constructor(every = REMIND_MS) { this.every = every; this.seen = null; this.due = null; this.arrived = []; }
   start(identities, now) {
     if (this.seen !== null) return;
     this.seen = new Set(identities);
@@ -58,6 +58,8 @@ export class Reminders {
   take(identities, now, looking = () => false) {
     if (this.seen === null) { this.start(identities, now); return null; }
     const pending = new Set(identities), arrived = [...pending].some(id => !this.seen.has(id));
+    // Which sessions arrived at this look (for the Projects echo); it decides nothing here.
+    this.arrived = [...pending].filter(id => !this.seen.has(id));
     this.seen = pending;
     if (!pending.size) { this.due = null; return null; }
     if (arrived || this.due === null) { this.due = now + this.every; return arrived ? 'arrival' : null; }
@@ -83,7 +85,7 @@ export class Reminders {
 export class NeedsYou {
   constructor(every = REMIND_MS) {
     this.every = every; this.reminders = new Reminders(every);
-    this.count = 0; this.reads = 0; this.latest = 0; this.open = 0;
+    this.count = 0; this.reads = 0; this.latest = 0; this.open = 0; this.arrived = null;
   }
   read() { return ++this.reads; }
   // A copy's first draw, of identities from read number `read`. Answers the count it starts from.
@@ -100,6 +102,9 @@ export class NeedsYou {
     if (read < this.latest) identities = this.reminders.seen ?? identities; else this.latest = read;
     const event = this.reminders.take(identities, now, looking);
     if (event) this.count++;
+    // The last arrival event and who arrived in it, so every copy's Projects echo can pulse for an arrival (never for
+    // a reminder). Read only by the views; it changes no decision of the timer.
+    if (event === 'arrival') this.arrived = { count: this.count, identities: new Set(this.reminders.arrived) };
     return event;
   }
 }

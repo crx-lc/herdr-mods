@@ -1,0 +1,228 @@
+{
+  "description": "Icon cases for validateIcon (bin/project-manifest.mjs). Each file is read as bytes; mode, when present, is the Git tree mode passed in. reason is a substring of the refusal message. Oversize icons (above 65536 bytes) are built by the test, not stored. Every valid case is also accepted by Roster's validateIcon (herdr-mods roster/mods/roster/icons.js); rosterAccepts marks the invalid cases that Roster's wider subset accepts and herdr-agents refuses. Every other invalid case is refused by both.",
+  "cases": [
+    {
+      "file": "icons/valid-pilot.svg",
+      "valid": true
+    },
+    {
+      "file": "icons/valid-minimal.svg",
+      "valid": true
+    },
+    {
+      "file": "icons/valid-pilot.svg",
+      "mode": "100644",
+      "valid": true
+    },
+    {
+      "file": "icons/valid-pilot.svg",
+      "mode": "120000",
+      "valid": false,
+      "code": "icon-not-file",
+      "reason": "symlink"
+    },
+    {
+      "file": "icons/valid-pilot.svg",
+      "mode": "160000",
+      "valid": false,
+      "code": "icon-not-file",
+      "reason": "submodule"
+    },
+    {
+      "file": "icons/valid-pilot.svg",
+      "mode": "100755",
+      "valid": false,
+      "code": "icon-not-file",
+      "reason": "executable"
+    },
+    {
+      "file": "icons/invalid-script.svg",
+      "valid": false,
+      "code": "icon-invalid",
+      "reason": "<script>"
+    },
+    {
+      "file": "icons/invalid-onload.svg",
+      "valid": false,
+      "code": "icon-invalid",
+      "reason": "onload"
+    },
+    {
+      "file": "icons/invalid-href.svg",
+      "valid": false,
+      "code": "icon-invalid",
+      "reason": "attribute href"
+    },
+    {
+      "file": "icons/invalid-xlink-href.svg",
+      "valid": false,
+      "code": "icon-invalid",
+      "reason": "xlink:href"
+    },
+    {
+      "file": "icons/invalid-url.svg",
+      "valid": false,
+      "code": "icon-invalid",
+      "reason": "url("
+    },
+    {
+      "file": "icons/invalid-entity.svg",
+      "valid": false,
+      "code": "icon-invalid",
+      "reason": "(&)"
+    },
+    {
+      "file": "icons/invalid-doctype.svg",
+      "valid": false,
+      "code": "icon-invalid",
+      "reason": "DOCTYPE"
+    },
+    {
+      "file": "icons/invalid-entity-declaration.svg",
+      "valid": false,
+      "code": "icon-invalid",
+      "reason": "ENTITY"
+    },
+    {
+      "file": "icons/invalid-xml-stylesheet.svg",
+      "valid": false,
+      "code": "icon-invalid",
+      "reason": "(<?)"
+    },
+    {
+      "file": "icons/invalid-cdata.svg",
+      "valid": false,
+      "code": "icon-invalid",
+      "reason": "CDATA"
+    },
+    {
+      "file": "icons/invalid-style-element.svg",
+      "valid": false,
+      "code": "icon-invalid",
+      "reason": "<style>"
+    },
+    {
+      "file": "icons/invalid-style-attribute.svg",
+      "valid": false,
+      "code": "icon-invalid",
+      "reason": "style"
+    },
+    {
+      "file": "icons/invalid-image.svg",
+      "valid": false,
+      "code": "icon-invalid",
+      "reason": "<image>"
+    },
+    {
+      "file": "icons/invalid-use.svg",
+      "valid": false,
+      "code": "icon-invalid",
+      "reason": "<use>"
+    },
+    {
+      "file": "icons/invalid-foreign-object.svg",
+      "valid": false,
+      "code": "icon-invalid",
+      "reason": "<foreignObject>"
+    },
+    {
+      "file": "icons/invalid-anchor.svg",
+      "valid": false,
+      "code": "icon-invalid",
+      "reason": "<a>"
+    },
+    {
+      "file": "icons/invalid-animate.svg",
+      "valid": false,
+      "code": "icon-invalid",
+      "reason": "<animate>"
+    },
+    {
+      "file": "icons/invalid-http.svg",
+      "valid": false,
+      "code": "icon-invalid",
+      "reason": "http:"
+    },
+    {
+      "file": "icons/invalid-width.svg",
+      "valid": false,
+      "code": "icon-invalid",
+      "reason": "at most 1024"
+    },
+    {
+      "file": "icons/invalid-width-unit.svg",
+      "valid": false,
+      "code": "icon-invalid",
+      "reason": "unitless"
+    },
+    {
+      "file": "icons/invalid-no-xmlns.svg",
+      "valid": false,
+      "code": "icon-invalid",
+      "reason": "xmlns",
+      "rosterAccepts": true
+    },
+    {
+      "file": "icons/invalid-no-viewbox.svg",
+      "valid": false,
+      "code": "icon-invalid",
+      "reason": "viewBox",
+      "rosterAccepts": true
+    },
+    {
+      "file": "icons/invalid-single-quotes.svg",
+      "valid": false,
+      "code": "icon-invalid",
+      "reason": "double-quoted"
+    },
+    {
+      "file": "icons/invalid-unclosed.svg",
+      "valid": false,
+      "code": "icon-invalid",
+      "reason": "unexpected closing tag </svg>"
+    },
+    {
+      "file": "icons/invalid-unterminated.svg",
+      "valid": false,
+      "code": "icon-invalid",
+      "reason": "not closed"
+    },
+    {
+      "file": "icons/invalid-two-roots.svg",
+      "valid": false,
+      "code": "icon-invalid",
+      "reason": "root"
+    },
+    {
+      "file": "icons/invalid-text.svg",
+      "valid": false,
+      "code": "icon-invalid",
+      "reason": "text outside"
+    },
+    {
+      "file": "icons/invalid-named-color.svg",
+      "valid": false,
+      "code": "icon-invalid",
+      "reason": "#RRGGBB",
+      "rosterAccepts": true
+    },
+    {
+      "file": "icons/invalid-transform.svg",
+      "valid": false,
+      "code": "icon-invalid",
+      "reason": "transform"
+    },
+    {
+      "file": "icons/invalid-non-ascii.svg",
+      "valid": false,
+      "code": "icon-invalid",
+      "reason": "not printable ASCII"
+    },
+    {
+      "file": "icons/invalid-bom.svg",
+      "valid": false,
+      "code": "icon-invalid",
+      "reason": "not printable ASCII"
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "description": "Cases for a consumer reading another Core's project catalog (owner decision D8; projects/README.md, Reading another Core's catalog). readiness lists what successive isReady() calls return: true, false, a state string, null for unknown, or {\"throws\": message}. read is what the one read() call does: {\"text\": ...}, {\"throws\": message} or {\"returns\": value}. expect is the outcome; calls counts isReady() and read() calls. A consumer passes when its outcome and call counts match and it never calls read() when the readiness check before it is not true. The reference is bin/catalog-remote-read.mjs.",
+  "cases": [
+    { "name": "ready, read, still ready", "readiness": [true, true], "read": { "text": "{\"schema\":\"herdr-agents/projects\",\"version\":1}" }, "expect": { "state": "available" }, "calls": { "isReady": 2, "read": 1 } },
+    { "name": "not ready: no read", "readiness": [false], "read": { "text": "{}" }, "expect": { "state": "unavailable", "reason": "not-ready" }, "calls": { "isReady": 1, "read": 0 } },
+    { "name": "stopped: no read", "readiness": ["stopped"], "read": { "text": "{}" }, "expect": { "state": "unavailable", "reason": "not-ready" }, "calls": { "isReady": 1, "read": 0 } },
+    { "name": "disconnected: no read", "readiness": ["disconnected"], "read": { "text": "{}" }, "expect": { "state": "unavailable", "reason": "not-ready" }, "calls": { "isReady": 1, "read": 0 } },
+    { "name": "unknown machine: no read", "readiness": [null], "read": { "text": "{}" }, "expect": { "state": "unavailable", "reason": "not-ready" }, "calls": { "isReady": 1, "read": 0 } },
+    { "name": "a state string that only looks ready: no read", "readiness": ["ready"], "read": { "text": "{}" }, "expect": { "state": "unavailable", "reason": "not-ready" }, "calls": { "isReady": 1, "read": 0 } },
+    { "name": "readiness check fails: no read", "readiness": [{ "throws": "machines() timed out" }], "read": { "text": "{}" }, "expect": { "state": "unavailable", "reason": "not-ready" }, "calls": { "isReady": 1, "read": 0 } },
+    { "name": "read throws: one call, no retry", "readiness": [true, true], "read": { "throws": "ENOENT" }, "expect": { "state": "unavailable", "reason": "read-failed" }, "calls": { "isReady": 1, "read": 1 } },
+    { "name": "Core stopped between check and read, so the read fails: no retry, no reconnect", "readiness": [true, false], "read": { "throws": "core not running" }, "expect": { "state": "unavailable", "reason": "read-failed" }, "calls": { "isReady": 1, "read": 1 } },
+    { "name": "read returns no text", "readiness": [true, true], "read": { "returns": null }, "expect": { "state": "unavailable", "reason": "read-failed" }, "calls": { "isReady": 1, "read": 1 } },
+    { "name": "readiness lost during the read: text discarded, no retry", "readiness": [true, false], "read": { "text": "{}" }, "expect": { "state": "unavailable", "reason": "readiness-lost" }, "calls": { "isReady": 2, "read": 1 } },
+    { "name": "readiness check after the read fails: text discarded", "readiness": [true, { "throws": "machines() failed" }], "read": { "text": "{}" }, "expect": { "state": "unavailable", "reason": "readiness-lost" }, "calls": { "isReady": 2, "read": 1 } },
+    { "name": "limitation: a Core that stopped after the check and was started by the read looks available", "readiness": [true, true], "read": { "text": "{}", "note": "the Core stopped after the first check; the read reached it and started it" }, "expect": { "state": "available" }, "calls": { "isReady": 2, "read": 1 } }
+  ]
+}

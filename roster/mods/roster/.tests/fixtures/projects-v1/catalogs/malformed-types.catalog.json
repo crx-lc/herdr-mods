@@ -1,0 +1,2547 @@
+{
+  "schema": "herdr-agents/projects",
+  "version": 1,
+  "owner": "herdr-agents",
+  "producer": {
+    "core": null,
+    "machine": "host-a"
+  },
+  "revision": 4,
+  "updatedAt": "2026-11-24T12:00:00.000Z",
+  "projects": [
+    {
+      "id": "pilot",
+      "token": "pilot",
+      "displayName": "Herdr Pilot",
+      "kind": "manifest",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/pilot-app",
+      "manifest": {
+        "commit": "3f1c9a0e5b7d2c4a6e8f0a1b3c5d7e9f1a2b3c4d",
+        "version": 2
+      },
+      "board": {
+        "provider": "github-project",
+        "owner": "crx-lc",
+        "ownerType": "organization",
+        "number": 7,
+        "url": "https://github.com/orgs/crx-lc/projects/7"
+      },
+      "repositories": [
+        {
+          "name": "crx-lc/pilot-app",
+          "role": "app",
+          "primary": true,
+          "checkout": "bound"
+        },
+        {
+          "name": "crx-lc/pilot-site",
+          "role": "site",
+          "primary": false,
+          "checkout": "bound"
+        },
+        {
+          "name": "crx-lc/pilot-docs",
+          "role": "docs",
+          "primary": false,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": "Pilot",
+        "id": "sp-core-a",
+        "binding": "bound"
+      },
+      "presentation": {
+        "icon": {
+          "format": "svg",
+          "version": 1,
+          "sha256": "448b0212015a7217b5fab7f5bb18894532c88a1c3a1f41a6c10c230a0de3c1dd",
+          "bytes": 642,
+          "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 64 64\" width=\"64\" height=\"64\">\n  <rect x=\"0\" y=\"0\" width=\"64\" height=\"64\" rx=\"12\" fill=\"#1B3A5C\"/>\n  <g fill=\"none\" stroke=\"#F4F7FA\" stroke-width=\"4\" stroke-linecap=\"round\" stroke-linejoin=\"round\">\n    <path d=\"M16 44 L28 20 L36 34 L48 16\"/>\n    <polyline points=\"16,50 32,50 48,50\"/>\n  </g>\n  <circle cx=\"48\" cy=\"16\" r=\"5\" fill=\"#E8A33D\"/>\n  <ellipse cx=\"16\" cy=\"44\" rx=\"4\" ry=\"3\" fill=\"#E8A33D\" fill-opacity=\"0.8\"/>\n  <polygon points=\"28,20 32,26 24,26\" fill=\"#F4F7FA\" fill-rule=\"evenodd\"/>\n  <line x1=\"8\" y1=\"58\" x2=\"56\" y2=\"58\" stroke=\"#F4F7FA\" stroke-width=\"2\" opacity=\"0.5\"/>\n</svg>\n"
+        },
+        "palette": {
+          "light": {
+            "foreground": "#1B3A5C",
+            "background": "#F4F7FA"
+          },
+          "dark": {
+            "foreground": "#E6EEF5",
+            "background": "#14202C"
+          }
+        }
+      },
+      "revision": 4
+    },
+    {
+      "id": 7,
+      "token": "placeholder",
+      "displayName": "Types",
+      "kind": "legacy",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-app",
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": "sp-types",
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": true,
+      "token": "placeholder",
+      "displayName": "Types",
+      "kind": "legacy",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-app",
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": "sp-types",
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": [
+        "types"
+      ],
+      "token": "placeholder",
+      "displayName": "Types",
+      "kind": "legacy",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-app",
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": "sp-types",
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": {
+        "toString": null
+      },
+      "token": "placeholder",
+      "displayName": "Types",
+      "kind": "legacy",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-app",
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": "sp-types",
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "token-number",
+      "token": 7,
+      "displayName": "Types",
+      "kind": "legacy",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-app",
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": "sp-types",
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "token-boolean",
+      "token": true,
+      "displayName": "Types",
+      "kind": "legacy",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-app",
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": "sp-types",
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "token-array",
+      "token": [
+        "types"
+      ],
+      "displayName": "Types",
+      "kind": "legacy",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-app",
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": "sp-types",
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "token-object",
+      "token": {
+        "toString": null
+      },
+      "displayName": "Types",
+      "kind": "legacy",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-app",
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": "sp-types",
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "displayname-number",
+      "token": "displayname-number",
+      "displayName": 7,
+      "kind": "legacy",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-app",
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": "sp-types",
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "displayname-boolean",
+      "token": "displayname-boolean",
+      "displayName": true,
+      "kind": "legacy",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-app",
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": "sp-types",
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "displayname-array",
+      "token": "displayname-array",
+      "displayName": [
+        "types"
+      ],
+      "kind": "legacy",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-app",
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": "sp-types",
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "displayname-object",
+      "token": "displayname-object",
+      "displayName": {
+        "toString": null
+      },
+      "kind": "legacy",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-app",
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": "sp-types",
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "kind-number",
+      "token": "kind-number",
+      "displayName": "Types",
+      "kind": 7,
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-app",
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": "sp-types",
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "kind-boolean",
+      "token": "kind-boolean",
+      "displayName": "Types",
+      "kind": true,
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-app",
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": "sp-types",
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "kind-array",
+      "token": "kind-array",
+      "displayName": "Types",
+      "kind": [
+        "types"
+      ],
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-app",
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": "sp-types",
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "kind-object",
+      "token": "kind-object",
+      "displayName": "Types",
+      "kind": {
+        "toString": null
+      },
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-app",
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": "sp-types",
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "mode-number",
+      "token": "mode-number",
+      "displayName": "Types",
+      "kind": "legacy",
+      "mode": 7,
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-app",
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": "sp-types",
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "mode-boolean",
+      "token": "mode-boolean",
+      "displayName": "Types",
+      "kind": "legacy",
+      "mode": true,
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-app",
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": "sp-types",
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "mode-array",
+      "token": "mode-array",
+      "displayName": "Types",
+      "kind": "legacy",
+      "mode": [
+        "types"
+      ],
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-app",
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": "sp-types",
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "mode-object",
+      "token": "mode-object",
+      "displayName": "Types",
+      "kind": "legacy",
+      "mode": {
+        "toString": null
+      },
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-app",
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": "sp-types",
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "state-number",
+      "token": "state-number",
+      "displayName": "Types",
+      "kind": "legacy",
+      "mode": "watcher",
+      "state": 7,
+      "problems": [],
+      "primary": "crx-lc/types-app",
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": "sp-types",
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "state-boolean",
+      "token": "state-boolean",
+      "displayName": "Types",
+      "kind": "legacy",
+      "mode": "watcher",
+      "state": true,
+      "problems": [],
+      "primary": "crx-lc/types-app",
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": "sp-types",
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "state-array",
+      "token": "state-array",
+      "displayName": "Types",
+      "kind": "legacy",
+      "mode": "watcher",
+      "state": [
+        "types"
+      ],
+      "problems": [],
+      "primary": "crx-lc/types-app",
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": "sp-types",
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "state-object",
+      "token": "state-object",
+      "displayName": "Types",
+      "kind": "legacy",
+      "mode": "watcher",
+      "state": {
+        "toString": null
+      },
+      "problems": [],
+      "primary": "crx-lc/types-app",
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": "sp-types",
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "primary-number",
+      "token": "primary-number",
+      "displayName": "Types",
+      "kind": "legacy",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": 7,
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": "sp-types",
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "primary-boolean",
+      "token": "primary-boolean",
+      "displayName": "Types",
+      "kind": "legacy",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": true,
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": "sp-types",
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "primary-array",
+      "token": "primary-array",
+      "displayName": "Types",
+      "kind": "legacy",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": [
+        "types"
+      ],
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": "sp-types",
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "primary-object",
+      "token": "primary-object",
+      "displayName": "Types",
+      "kind": "legacy",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": {
+        "toString": null
+      },
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": "sp-types",
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "problems-number",
+      "token": "problems-number",
+      "displayName": "Types",
+      "kind": "legacy",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [
+        7
+      ],
+      "primary": "crx-lc/types-app",
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": "sp-types",
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "problems-boolean",
+      "token": "problems-boolean",
+      "displayName": "Types",
+      "kind": "legacy",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [
+        true
+      ],
+      "primary": "crx-lc/types-app",
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": "sp-types",
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "problems-array",
+      "token": "problems-array",
+      "displayName": "Types",
+      "kind": "legacy",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [
+        [
+          "types"
+        ]
+      ],
+      "primary": "crx-lc/types-app",
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": "sp-types",
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "problems-object",
+      "token": "problems-object",
+      "displayName": "Types",
+      "kind": "legacy",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [
+        {
+          "toString": null
+        }
+      ],
+      "primary": "crx-lc/types-app",
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": "sp-types",
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "manifest-commit-number",
+      "token": "manifest-commit-number",
+      "displayName": "Types",
+      "kind": "legacy",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-app",
+      "manifest": {
+        "commit": 7,
+        "version": 2
+      },
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": "sp-types",
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "manifest-commit-boolean",
+      "token": "manifest-commit-boolean",
+      "displayName": "Types",
+      "kind": "legacy",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-app",
+      "manifest": {
+        "commit": true,
+        "version": 2
+      },
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": "sp-types",
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "manifest-commit-array",
+      "token": "manifest-commit-array",
+      "displayName": "Types",
+      "kind": "legacy",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-app",
+      "manifest": {
+        "commit": [
+          "types"
+        ],
+        "version": 2
+      },
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": "sp-types",
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "manifest-commit-object",
+      "token": "manifest-commit-object",
+      "displayName": "Types",
+      "kind": "legacy",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-app",
+      "manifest": {
+        "commit": {
+          "toString": null
+        },
+        "version": 2
+      },
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": "sp-types",
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "repositories-name-number",
+      "token": "repositories-name-number",
+      "displayName": "Types",
+      "kind": "legacy",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-app",
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": 7,
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": "sp-types",
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "repositories-name-boolean",
+      "token": "repositories-name-boolean",
+      "displayName": "Types",
+      "kind": "legacy",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-app",
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": true,
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": "sp-types",
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "repositories-name-array",
+      "token": "repositories-name-array",
+      "displayName": "Types",
+      "kind": "legacy",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-app",
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": [
+            "types"
+          ],
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": "sp-types",
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "repositories-name-object",
+      "token": "repositories-name-object",
+      "displayName": "Types",
+      "kind": "legacy",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-app",
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": {
+            "toString": null
+          },
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": "sp-types",
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "repositories-role-number",
+      "token": "repositories-role-number",
+      "displayName": "Types",
+      "kind": "legacy",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-app",
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": 7,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": "sp-types",
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "repositories-role-boolean",
+      "token": "repositories-role-boolean",
+      "displayName": "Types",
+      "kind": "legacy",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-app",
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": true,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": "sp-types",
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "repositories-role-array",
+      "token": "repositories-role-array",
+      "displayName": "Types",
+      "kind": "legacy",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-app",
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": [
+            "types"
+          ],
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": "sp-types",
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "repositories-role-object",
+      "token": "repositories-role-object",
+      "displayName": "Types",
+      "kind": "legacy",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-app",
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": {
+            "toString": null
+          },
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": "sp-types",
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "space-name-number",
+      "token": "space-name-number",
+      "displayName": "Types",
+      "kind": "legacy",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-app",
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": 7,
+        "id": "sp-types",
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "space-name-boolean",
+      "token": "space-name-boolean",
+      "displayName": "Types",
+      "kind": "legacy",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-app",
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": true,
+        "id": "sp-types",
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "space-name-array",
+      "token": "space-name-array",
+      "displayName": "Types",
+      "kind": "legacy",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-app",
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": [
+          "types"
+        ],
+        "id": "sp-types",
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "space-name-object",
+      "token": "space-name-object",
+      "displayName": "Types",
+      "kind": "legacy",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-app",
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": {
+          "toString": null
+        },
+        "id": "sp-types",
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "space-id-number",
+      "token": "space-id-number",
+      "displayName": "Types",
+      "kind": "legacy",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-app",
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": 7,
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "space-id-boolean",
+      "token": "space-id-boolean",
+      "displayName": "Types",
+      "kind": "legacy",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-app",
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": true,
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "space-id-array",
+      "token": "space-id-array",
+      "displayName": "Types",
+      "kind": "legacy",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-app",
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": [
+          "types"
+        ],
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "space-id-object",
+      "token": "space-id-object",
+      "displayName": "Types",
+      "kind": "legacy",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-app",
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": {
+          "toString": null
+        },
+        "binding": "bound"
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "space-binding-number",
+      "token": "space-binding-number",
+      "displayName": "Types",
+      "kind": "legacy",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-app",
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": "sp-types",
+        "binding": 7
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "space-binding-boolean",
+      "token": "space-binding-boolean",
+      "displayName": "Types",
+      "kind": "legacy",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-app",
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": "sp-types",
+        "binding": true
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "space-binding-array",
+      "token": "space-binding-array",
+      "displayName": "Types",
+      "kind": "legacy",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-app",
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": "sp-types",
+        "binding": [
+          "types"
+        ]
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "space-binding-object",
+      "token": "space-binding-object",
+      "displayName": "Types",
+      "kind": "legacy",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-app",
+      "manifest": null,
+      "board": null,
+      "repositories": [
+        {
+          "name": "crx-lc/types-app",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": null,
+        "id": "sp-types",
+        "binding": {
+          "toString": null
+        }
+      },
+      "presentation": null,
+      "revision": 4
+    },
+    {
+      "id": "icon-format-number",
+      "token": "icon-format-number",
+      "displayName": "Herdr Pilot",
+      "kind": "manifest",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-art",
+      "manifest": {
+        "commit": "3f1c9a0e5b7d2c4a6e8f0a1b3c5d7e9f1a2b3c4d",
+        "version": 2
+      },
+      "board": {
+        "provider": "github-project",
+        "owner": "crx-lc",
+        "ownerType": "organization",
+        "number": 7,
+        "url": "https://github.com/orgs/crx-lc/projects/7"
+      },
+      "repositories": [
+        {
+          "name": "crx-lc/types-art",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": "Pilot",
+        "id": "sp-core-a",
+        "binding": "bound"
+      },
+      "presentation": {
+        "icon": {
+          "format": 7,
+          "version": 1,
+          "sha256": "448b0212015a7217b5fab7f5bb18894532c88a1c3a1f41a6c10c230a0de3c1dd",
+          "bytes": 642,
+          "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 64 64\" width=\"64\" height=\"64\">\n  <rect x=\"0\" y=\"0\" width=\"64\" height=\"64\" rx=\"12\" fill=\"#1B3A5C\"/>\n  <g fill=\"none\" stroke=\"#F4F7FA\" stroke-width=\"4\" stroke-linecap=\"round\" stroke-linejoin=\"round\">\n    <path d=\"M16 44 L28 20 L36 34 L48 16\"/>\n    <polyline points=\"16,50 32,50 48,50\"/>\n  </g>\n  <circle cx=\"48\" cy=\"16\" r=\"5\" fill=\"#E8A33D\"/>\n  <ellipse cx=\"16\" cy=\"44\" rx=\"4\" ry=\"3\" fill=\"#E8A33D\" fill-opacity=\"0.8\"/>\n  <polygon points=\"28,20 32,26 24,26\" fill=\"#F4F7FA\" fill-rule=\"evenodd\"/>\n  <line x1=\"8\" y1=\"58\" x2=\"56\" y2=\"58\" stroke=\"#F4F7FA\" stroke-width=\"2\" opacity=\"0.5\"/>\n</svg>\n"
+        },
+        "palette": {
+          "light": {
+            "foreground": "#1B3A5C",
+            "background": "#F4F7FA"
+          },
+          "dark": {
+            "foreground": "#E6EEF5",
+            "background": "#14202C"
+          }
+        }
+      },
+      "revision": 4
+    },
+    {
+      "id": "icon-format-boolean",
+      "token": "icon-format-boolean",
+      "displayName": "Herdr Pilot",
+      "kind": "manifest",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-art",
+      "manifest": {
+        "commit": "3f1c9a0e5b7d2c4a6e8f0a1b3c5d7e9f1a2b3c4d",
+        "version": 2
+      },
+      "board": {
+        "provider": "github-project",
+        "owner": "crx-lc",
+        "ownerType": "organization",
+        "number": 7,
+        "url": "https://github.com/orgs/crx-lc/projects/7"
+      },
+      "repositories": [
+        {
+          "name": "crx-lc/types-art",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": "Pilot",
+        "id": "sp-core-a",
+        "binding": "bound"
+      },
+      "presentation": {
+        "icon": {
+          "format": true,
+          "version": 1,
+          "sha256": "448b0212015a7217b5fab7f5bb18894532c88a1c3a1f41a6c10c230a0de3c1dd",
+          "bytes": 642,
+          "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 64 64\" width=\"64\" height=\"64\">\n  <rect x=\"0\" y=\"0\" width=\"64\" height=\"64\" rx=\"12\" fill=\"#1B3A5C\"/>\n  <g fill=\"none\" stroke=\"#F4F7FA\" stroke-width=\"4\" stroke-linecap=\"round\" stroke-linejoin=\"round\">\n    <path d=\"M16 44 L28 20 L36 34 L48 16\"/>\n    <polyline points=\"16,50 32,50 48,50\"/>\n  </g>\n  <circle cx=\"48\" cy=\"16\" r=\"5\" fill=\"#E8A33D\"/>\n  <ellipse cx=\"16\" cy=\"44\" rx=\"4\" ry=\"3\" fill=\"#E8A33D\" fill-opacity=\"0.8\"/>\n  <polygon points=\"28,20 32,26 24,26\" fill=\"#F4F7FA\" fill-rule=\"evenodd\"/>\n  <line x1=\"8\" y1=\"58\" x2=\"56\" y2=\"58\" stroke=\"#F4F7FA\" stroke-width=\"2\" opacity=\"0.5\"/>\n</svg>\n"
+        },
+        "palette": {
+          "light": {
+            "foreground": "#1B3A5C",
+            "background": "#F4F7FA"
+          },
+          "dark": {
+            "foreground": "#E6EEF5",
+            "background": "#14202C"
+          }
+        }
+      },
+      "revision": 4
+    },
+    {
+      "id": "icon-format-array",
+      "token": "icon-format-array",
+      "displayName": "Herdr Pilot",
+      "kind": "manifest",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-art",
+      "manifest": {
+        "commit": "3f1c9a0e5b7d2c4a6e8f0a1b3c5d7e9f1a2b3c4d",
+        "version": 2
+      },
+      "board": {
+        "provider": "github-project",
+        "owner": "crx-lc",
+        "ownerType": "organization",
+        "number": 7,
+        "url": "https://github.com/orgs/crx-lc/projects/7"
+      },
+      "repositories": [
+        {
+          "name": "crx-lc/types-art",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": "Pilot",
+        "id": "sp-core-a",
+        "binding": "bound"
+      },
+      "presentation": {
+        "icon": {
+          "format": [
+            "types"
+          ],
+          "version": 1,
+          "sha256": "448b0212015a7217b5fab7f5bb18894532c88a1c3a1f41a6c10c230a0de3c1dd",
+          "bytes": 642,
+          "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 64 64\" width=\"64\" height=\"64\">\n  <rect x=\"0\" y=\"0\" width=\"64\" height=\"64\" rx=\"12\" fill=\"#1B3A5C\"/>\n  <g fill=\"none\" stroke=\"#F4F7FA\" stroke-width=\"4\" stroke-linecap=\"round\" stroke-linejoin=\"round\">\n    <path d=\"M16 44 L28 20 L36 34 L48 16\"/>\n    <polyline points=\"16,50 32,50 48,50\"/>\n  </g>\n  <circle cx=\"48\" cy=\"16\" r=\"5\" fill=\"#E8A33D\"/>\n  <ellipse cx=\"16\" cy=\"44\" rx=\"4\" ry=\"3\" fill=\"#E8A33D\" fill-opacity=\"0.8\"/>\n  <polygon points=\"28,20 32,26 24,26\" fill=\"#F4F7FA\" fill-rule=\"evenodd\"/>\n  <line x1=\"8\" y1=\"58\" x2=\"56\" y2=\"58\" stroke=\"#F4F7FA\" stroke-width=\"2\" opacity=\"0.5\"/>\n</svg>\n"
+        },
+        "palette": {
+          "light": {
+            "foreground": "#1B3A5C",
+            "background": "#F4F7FA"
+          },
+          "dark": {
+            "foreground": "#E6EEF5",
+            "background": "#14202C"
+          }
+        }
+      },
+      "revision": 4
+    },
+    {
+      "id": "icon-format-object",
+      "token": "icon-format-object",
+      "displayName": "Herdr Pilot",
+      "kind": "manifest",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-art",
+      "manifest": {
+        "commit": "3f1c9a0e5b7d2c4a6e8f0a1b3c5d7e9f1a2b3c4d",
+        "version": 2
+      },
+      "board": {
+        "provider": "github-project",
+        "owner": "crx-lc",
+        "ownerType": "organization",
+        "number": 7,
+        "url": "https://github.com/orgs/crx-lc/projects/7"
+      },
+      "repositories": [
+        {
+          "name": "crx-lc/types-art",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": "Pilot",
+        "id": "sp-core-a",
+        "binding": "bound"
+      },
+      "presentation": {
+        "icon": {
+          "format": {
+            "toString": null
+          },
+          "version": 1,
+          "sha256": "448b0212015a7217b5fab7f5bb18894532c88a1c3a1f41a6c10c230a0de3c1dd",
+          "bytes": 642,
+          "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 64 64\" width=\"64\" height=\"64\">\n  <rect x=\"0\" y=\"0\" width=\"64\" height=\"64\" rx=\"12\" fill=\"#1B3A5C\"/>\n  <g fill=\"none\" stroke=\"#F4F7FA\" stroke-width=\"4\" stroke-linecap=\"round\" stroke-linejoin=\"round\">\n    <path d=\"M16 44 L28 20 L36 34 L48 16\"/>\n    <polyline points=\"16,50 32,50 48,50\"/>\n  </g>\n  <circle cx=\"48\" cy=\"16\" r=\"5\" fill=\"#E8A33D\"/>\n  <ellipse cx=\"16\" cy=\"44\" rx=\"4\" ry=\"3\" fill=\"#E8A33D\" fill-opacity=\"0.8\"/>\n  <polygon points=\"28,20 32,26 24,26\" fill=\"#F4F7FA\" fill-rule=\"evenodd\"/>\n  <line x1=\"8\" y1=\"58\" x2=\"56\" y2=\"58\" stroke=\"#F4F7FA\" stroke-width=\"2\" opacity=\"0.5\"/>\n</svg>\n"
+        },
+        "palette": {
+          "light": {
+            "foreground": "#1B3A5C",
+            "background": "#F4F7FA"
+          },
+          "dark": {
+            "foreground": "#E6EEF5",
+            "background": "#14202C"
+          }
+        }
+      },
+      "revision": 4
+    },
+    {
+      "id": "icon-svg-number",
+      "token": "icon-svg-number",
+      "displayName": "Herdr Pilot",
+      "kind": "manifest",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-art",
+      "manifest": {
+        "commit": "3f1c9a0e5b7d2c4a6e8f0a1b3c5d7e9f1a2b3c4d",
+        "version": 2
+      },
+      "board": {
+        "provider": "github-project",
+        "owner": "crx-lc",
+        "ownerType": "organization",
+        "number": 7,
+        "url": "https://github.com/orgs/crx-lc/projects/7"
+      },
+      "repositories": [
+        {
+          "name": "crx-lc/types-art",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": "Pilot",
+        "id": "sp-core-a",
+        "binding": "bound"
+      },
+      "presentation": {
+        "icon": {
+          "format": "svg",
+          "version": 1,
+          "sha256": "448b0212015a7217b5fab7f5bb18894532c88a1c3a1f41a6c10c230a0de3c1dd",
+          "bytes": 642,
+          "svg": 7
+        },
+        "palette": {
+          "light": {
+            "foreground": "#1B3A5C",
+            "background": "#F4F7FA"
+          },
+          "dark": {
+            "foreground": "#E6EEF5",
+            "background": "#14202C"
+          }
+        }
+      },
+      "revision": 4
+    },
+    {
+      "id": "icon-svg-boolean",
+      "token": "icon-svg-boolean",
+      "displayName": "Herdr Pilot",
+      "kind": "manifest",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-art",
+      "manifest": {
+        "commit": "3f1c9a0e5b7d2c4a6e8f0a1b3c5d7e9f1a2b3c4d",
+        "version": 2
+      },
+      "board": {
+        "provider": "github-project",
+        "owner": "crx-lc",
+        "ownerType": "organization",
+        "number": 7,
+        "url": "https://github.com/orgs/crx-lc/projects/7"
+      },
+      "repositories": [
+        {
+          "name": "crx-lc/types-art",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": "Pilot",
+        "id": "sp-core-a",
+        "binding": "bound"
+      },
+      "presentation": {
+        "icon": {
+          "format": "svg",
+          "version": 1,
+          "sha256": "448b0212015a7217b5fab7f5bb18894532c88a1c3a1f41a6c10c230a0de3c1dd",
+          "bytes": 642,
+          "svg": true
+        },
+        "palette": {
+          "light": {
+            "foreground": "#1B3A5C",
+            "background": "#F4F7FA"
+          },
+          "dark": {
+            "foreground": "#E6EEF5",
+            "background": "#14202C"
+          }
+        }
+      },
+      "revision": 4
+    },
+    {
+      "id": "icon-svg-array",
+      "token": "icon-svg-array",
+      "displayName": "Herdr Pilot",
+      "kind": "manifest",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-art",
+      "manifest": {
+        "commit": "3f1c9a0e5b7d2c4a6e8f0a1b3c5d7e9f1a2b3c4d",
+        "version": 2
+      },
+      "board": {
+        "provider": "github-project",
+        "owner": "crx-lc",
+        "ownerType": "organization",
+        "number": 7,
+        "url": "https://github.com/orgs/crx-lc/projects/7"
+      },
+      "repositories": [
+        {
+          "name": "crx-lc/types-art",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": "Pilot",
+        "id": "sp-core-a",
+        "binding": "bound"
+      },
+      "presentation": {
+        "icon": {
+          "format": "svg",
+          "version": 1,
+          "sha256": "448b0212015a7217b5fab7f5bb18894532c88a1c3a1f41a6c10c230a0de3c1dd",
+          "bytes": 642,
+          "svg": [
+            "types"
+          ]
+        },
+        "palette": {
+          "light": {
+            "foreground": "#1B3A5C",
+            "background": "#F4F7FA"
+          },
+          "dark": {
+            "foreground": "#E6EEF5",
+            "background": "#14202C"
+          }
+        }
+      },
+      "revision": 4
+    },
+    {
+      "id": "icon-svg-object",
+      "token": "icon-svg-object",
+      "displayName": "Herdr Pilot",
+      "kind": "manifest",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-art",
+      "manifest": {
+        "commit": "3f1c9a0e5b7d2c4a6e8f0a1b3c5d7e9f1a2b3c4d",
+        "version": 2
+      },
+      "board": {
+        "provider": "github-project",
+        "owner": "crx-lc",
+        "ownerType": "organization",
+        "number": 7,
+        "url": "https://github.com/orgs/crx-lc/projects/7"
+      },
+      "repositories": [
+        {
+          "name": "crx-lc/types-art",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": "Pilot",
+        "id": "sp-core-a",
+        "binding": "bound"
+      },
+      "presentation": {
+        "icon": {
+          "format": "svg",
+          "version": 1,
+          "sha256": "448b0212015a7217b5fab7f5bb18894532c88a1c3a1f41a6c10c230a0de3c1dd",
+          "bytes": 642,
+          "svg": {
+            "toString": null
+          }
+        },
+        "palette": {
+          "light": {
+            "foreground": "#1B3A5C",
+            "background": "#F4F7FA"
+          },
+          "dark": {
+            "foreground": "#E6EEF5",
+            "background": "#14202C"
+          }
+        }
+      },
+      "revision": 4
+    },
+    {
+      "id": "icon-sha256-number",
+      "token": "icon-sha256-number",
+      "displayName": "Herdr Pilot",
+      "kind": "manifest",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-art",
+      "manifest": {
+        "commit": "3f1c9a0e5b7d2c4a6e8f0a1b3c5d7e9f1a2b3c4d",
+        "version": 2
+      },
+      "board": {
+        "provider": "github-project",
+        "owner": "crx-lc",
+        "ownerType": "organization",
+        "number": 7,
+        "url": "https://github.com/orgs/crx-lc/projects/7"
+      },
+      "repositories": [
+        {
+          "name": "crx-lc/types-art",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": "Pilot",
+        "id": "sp-core-a",
+        "binding": "bound"
+      },
+      "presentation": {
+        "icon": {
+          "format": "svg",
+          "version": 1,
+          "sha256": 7,
+          "bytes": 642,
+          "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 64 64\" width=\"64\" height=\"64\">\n  <rect x=\"0\" y=\"0\" width=\"64\" height=\"64\" rx=\"12\" fill=\"#1B3A5C\"/>\n  <g fill=\"none\" stroke=\"#F4F7FA\" stroke-width=\"4\" stroke-linecap=\"round\" stroke-linejoin=\"round\">\n    <path d=\"M16 44 L28 20 L36 34 L48 16\"/>\n    <polyline points=\"16,50 32,50 48,50\"/>\n  </g>\n  <circle cx=\"48\" cy=\"16\" r=\"5\" fill=\"#E8A33D\"/>\n  <ellipse cx=\"16\" cy=\"44\" rx=\"4\" ry=\"3\" fill=\"#E8A33D\" fill-opacity=\"0.8\"/>\n  <polygon points=\"28,20 32,26 24,26\" fill=\"#F4F7FA\" fill-rule=\"evenodd\"/>\n  <line x1=\"8\" y1=\"58\" x2=\"56\" y2=\"58\" stroke=\"#F4F7FA\" stroke-width=\"2\" opacity=\"0.5\"/>\n</svg>\n"
+        },
+        "palette": {
+          "light": {
+            "foreground": "#1B3A5C",
+            "background": "#F4F7FA"
+          },
+          "dark": {
+            "foreground": "#E6EEF5",
+            "background": "#14202C"
+          }
+        }
+      },
+      "revision": 4
+    },
+    {
+      "id": "icon-sha256-boolean",
+      "token": "icon-sha256-boolean",
+      "displayName": "Herdr Pilot",
+      "kind": "manifest",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-art",
+      "manifest": {
+        "commit": "3f1c9a0e5b7d2c4a6e8f0a1b3c5d7e9f1a2b3c4d",
+        "version": 2
+      },
+      "board": {
+        "provider": "github-project",
+        "owner": "crx-lc",
+        "ownerType": "organization",
+        "number": 7,
+        "url": "https://github.com/orgs/crx-lc/projects/7"
+      },
+      "repositories": [
+        {
+          "name": "crx-lc/types-art",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": "Pilot",
+        "id": "sp-core-a",
+        "binding": "bound"
+      },
+      "presentation": {
+        "icon": {
+          "format": "svg",
+          "version": 1,
+          "sha256": true,
+          "bytes": 642,
+          "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 64 64\" width=\"64\" height=\"64\">\n  <rect x=\"0\" y=\"0\" width=\"64\" height=\"64\" rx=\"12\" fill=\"#1B3A5C\"/>\n  <g fill=\"none\" stroke=\"#F4F7FA\" stroke-width=\"4\" stroke-linecap=\"round\" stroke-linejoin=\"round\">\n    <path d=\"M16 44 L28 20 L36 34 L48 16\"/>\n    <polyline points=\"16,50 32,50 48,50\"/>\n  </g>\n  <circle cx=\"48\" cy=\"16\" r=\"5\" fill=\"#E8A33D\"/>\n  <ellipse cx=\"16\" cy=\"44\" rx=\"4\" ry=\"3\" fill=\"#E8A33D\" fill-opacity=\"0.8\"/>\n  <polygon points=\"28,20 32,26 24,26\" fill=\"#F4F7FA\" fill-rule=\"evenodd\"/>\n  <line x1=\"8\" y1=\"58\" x2=\"56\" y2=\"58\" stroke=\"#F4F7FA\" stroke-width=\"2\" opacity=\"0.5\"/>\n</svg>\n"
+        },
+        "palette": {
+          "light": {
+            "foreground": "#1B3A5C",
+            "background": "#F4F7FA"
+          },
+          "dark": {
+            "foreground": "#E6EEF5",
+            "background": "#14202C"
+          }
+        }
+      },
+      "revision": 4
+    },
+    {
+      "id": "icon-sha256-array",
+      "token": "icon-sha256-array",
+      "displayName": "Herdr Pilot",
+      "kind": "manifest",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-art",
+      "manifest": {
+        "commit": "3f1c9a0e5b7d2c4a6e8f0a1b3c5d7e9f1a2b3c4d",
+        "version": 2
+      },
+      "board": {
+        "provider": "github-project",
+        "owner": "crx-lc",
+        "ownerType": "organization",
+        "number": 7,
+        "url": "https://github.com/orgs/crx-lc/projects/7"
+      },
+      "repositories": [
+        {
+          "name": "crx-lc/types-art",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": "Pilot",
+        "id": "sp-core-a",
+        "binding": "bound"
+      },
+      "presentation": {
+        "icon": {
+          "format": "svg",
+          "version": 1,
+          "sha256": [
+            "types"
+          ],
+          "bytes": 642,
+          "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 64 64\" width=\"64\" height=\"64\">\n  <rect x=\"0\" y=\"0\" width=\"64\" height=\"64\" rx=\"12\" fill=\"#1B3A5C\"/>\n  <g fill=\"none\" stroke=\"#F4F7FA\" stroke-width=\"4\" stroke-linecap=\"round\" stroke-linejoin=\"round\">\n    <path d=\"M16 44 L28 20 L36 34 L48 16\"/>\n    <polyline points=\"16,50 32,50 48,50\"/>\n  </g>\n  <circle cx=\"48\" cy=\"16\" r=\"5\" fill=\"#E8A33D\"/>\n  <ellipse cx=\"16\" cy=\"44\" rx=\"4\" ry=\"3\" fill=\"#E8A33D\" fill-opacity=\"0.8\"/>\n  <polygon points=\"28,20 32,26 24,26\" fill=\"#F4F7FA\" fill-rule=\"evenodd\"/>\n  <line x1=\"8\" y1=\"58\" x2=\"56\" y2=\"58\" stroke=\"#F4F7FA\" stroke-width=\"2\" opacity=\"0.5\"/>\n</svg>\n"
+        },
+        "palette": {
+          "light": {
+            "foreground": "#1B3A5C",
+            "background": "#F4F7FA"
+          },
+          "dark": {
+            "foreground": "#E6EEF5",
+            "background": "#14202C"
+          }
+        }
+      },
+      "revision": 4
+    },
+    {
+      "id": "icon-sha256-object",
+      "token": "icon-sha256-object",
+      "displayName": "Herdr Pilot",
+      "kind": "manifest",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-art",
+      "manifest": {
+        "commit": "3f1c9a0e5b7d2c4a6e8f0a1b3c5d7e9f1a2b3c4d",
+        "version": 2
+      },
+      "board": {
+        "provider": "github-project",
+        "owner": "crx-lc",
+        "ownerType": "organization",
+        "number": 7,
+        "url": "https://github.com/orgs/crx-lc/projects/7"
+      },
+      "repositories": [
+        {
+          "name": "crx-lc/types-art",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": "Pilot",
+        "id": "sp-core-a",
+        "binding": "bound"
+      },
+      "presentation": {
+        "icon": {
+          "format": "svg",
+          "version": 1,
+          "sha256": {
+            "toString": null
+          },
+          "bytes": 642,
+          "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 64 64\" width=\"64\" height=\"64\">\n  <rect x=\"0\" y=\"0\" width=\"64\" height=\"64\" rx=\"12\" fill=\"#1B3A5C\"/>\n  <g fill=\"none\" stroke=\"#F4F7FA\" stroke-width=\"4\" stroke-linecap=\"round\" stroke-linejoin=\"round\">\n    <path d=\"M16 44 L28 20 L36 34 L48 16\"/>\n    <polyline points=\"16,50 32,50 48,50\"/>\n  </g>\n  <circle cx=\"48\" cy=\"16\" r=\"5\" fill=\"#E8A33D\"/>\n  <ellipse cx=\"16\" cy=\"44\" rx=\"4\" ry=\"3\" fill=\"#E8A33D\" fill-opacity=\"0.8\"/>\n  <polygon points=\"28,20 32,26 24,26\" fill=\"#F4F7FA\" fill-rule=\"evenodd\"/>\n  <line x1=\"8\" y1=\"58\" x2=\"56\" y2=\"58\" stroke=\"#F4F7FA\" stroke-width=\"2\" opacity=\"0.5\"/>\n</svg>\n"
+        },
+        "palette": {
+          "light": {
+            "foreground": "#1B3A5C",
+            "background": "#F4F7FA"
+          },
+          "dark": {
+            "foreground": "#E6EEF5",
+            "background": "#14202C"
+          }
+        }
+      },
+      "revision": 4
+    },
+    {
+      "id": "palette-light-foreground-number",
+      "token": "palette-light-foreground-number",
+      "displayName": "Herdr Pilot",
+      "kind": "manifest",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-art",
+      "manifest": {
+        "commit": "3f1c9a0e5b7d2c4a6e8f0a1b3c5d7e9f1a2b3c4d",
+        "version": 2
+      },
+      "board": {
+        "provider": "github-project",
+        "owner": "crx-lc",
+        "ownerType": "organization",
+        "number": 7,
+        "url": "https://github.com/orgs/crx-lc/projects/7"
+      },
+      "repositories": [
+        {
+          "name": "crx-lc/types-art",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": "Pilot",
+        "id": "sp-core-a",
+        "binding": "bound"
+      },
+      "presentation": {
+        "icon": {
+          "format": "svg",
+          "version": 1,
+          "sha256": "448b0212015a7217b5fab7f5bb18894532c88a1c3a1f41a6c10c230a0de3c1dd",
+          "bytes": 642,
+          "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 64 64\" width=\"64\" height=\"64\">\n  <rect x=\"0\" y=\"0\" width=\"64\" height=\"64\" rx=\"12\" fill=\"#1B3A5C\"/>\n  <g fill=\"none\" stroke=\"#F4F7FA\" stroke-width=\"4\" stroke-linecap=\"round\" stroke-linejoin=\"round\">\n    <path d=\"M16 44 L28 20 L36 34 L48 16\"/>\n    <polyline points=\"16,50 32,50 48,50\"/>\n  </g>\n  <circle cx=\"48\" cy=\"16\" r=\"5\" fill=\"#E8A33D\"/>\n  <ellipse cx=\"16\" cy=\"44\" rx=\"4\" ry=\"3\" fill=\"#E8A33D\" fill-opacity=\"0.8\"/>\n  <polygon points=\"28,20 32,26 24,26\" fill=\"#F4F7FA\" fill-rule=\"evenodd\"/>\n  <line x1=\"8\" y1=\"58\" x2=\"56\" y2=\"58\" stroke=\"#F4F7FA\" stroke-width=\"2\" opacity=\"0.5\"/>\n</svg>\n"
+        },
+        "palette": {
+          "light": {
+            "foreground": 7,
+            "background": "#F4F7FA"
+          },
+          "dark": {
+            "foreground": "#E6EEF5",
+            "background": "#14202C"
+          }
+        }
+      },
+      "revision": 4
+    },
+    {
+      "id": "palette-light-foreground-boolean",
+      "token": "palette-light-foreground-boolean",
+      "displayName": "Herdr Pilot",
+      "kind": "manifest",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-art",
+      "manifest": {
+        "commit": "3f1c9a0e5b7d2c4a6e8f0a1b3c5d7e9f1a2b3c4d",
+        "version": 2
+      },
+      "board": {
+        "provider": "github-project",
+        "owner": "crx-lc",
+        "ownerType": "organization",
+        "number": 7,
+        "url": "https://github.com/orgs/crx-lc/projects/7"
+      },
+      "repositories": [
+        {
+          "name": "crx-lc/types-art",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": "Pilot",
+        "id": "sp-core-a",
+        "binding": "bound"
+      },
+      "presentation": {
+        "icon": {
+          "format": "svg",
+          "version": 1,
+          "sha256": "448b0212015a7217b5fab7f5bb18894532c88a1c3a1f41a6c10c230a0de3c1dd",
+          "bytes": 642,
+          "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 64 64\" width=\"64\" height=\"64\">\n  <rect x=\"0\" y=\"0\" width=\"64\" height=\"64\" rx=\"12\" fill=\"#1B3A5C\"/>\n  <g fill=\"none\" stroke=\"#F4F7FA\" stroke-width=\"4\" stroke-linecap=\"round\" stroke-linejoin=\"round\">\n    <path d=\"M16 44 L28 20 L36 34 L48 16\"/>\n    <polyline points=\"16,50 32,50 48,50\"/>\n  </g>\n  <circle cx=\"48\" cy=\"16\" r=\"5\" fill=\"#E8A33D\"/>\n  <ellipse cx=\"16\" cy=\"44\" rx=\"4\" ry=\"3\" fill=\"#E8A33D\" fill-opacity=\"0.8\"/>\n  <polygon points=\"28,20 32,26 24,26\" fill=\"#F4F7FA\" fill-rule=\"evenodd\"/>\n  <line x1=\"8\" y1=\"58\" x2=\"56\" y2=\"58\" stroke=\"#F4F7FA\" stroke-width=\"2\" opacity=\"0.5\"/>\n</svg>\n"
+        },
+        "palette": {
+          "light": {
+            "foreground": true,
+            "background": "#F4F7FA"
+          },
+          "dark": {
+            "foreground": "#E6EEF5",
+            "background": "#14202C"
+          }
+        }
+      },
+      "revision": 4
+    },
+    {
+      "id": "palette-light-foreground-array",
+      "token": "palette-light-foreground-array",
+      "displayName": "Herdr Pilot",
+      "kind": "manifest",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-art",
+      "manifest": {
+        "commit": "3f1c9a0e5b7d2c4a6e8f0a1b3c5d7e9f1a2b3c4d",
+        "version": 2
+      },
+      "board": {
+        "provider": "github-project",
+        "owner": "crx-lc",
+        "ownerType": "organization",
+        "number": 7,
+        "url": "https://github.com/orgs/crx-lc/projects/7"
+      },
+      "repositories": [
+        {
+          "name": "crx-lc/types-art",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": "Pilot",
+        "id": "sp-core-a",
+        "binding": "bound"
+      },
+      "presentation": {
+        "icon": {
+          "format": "svg",
+          "version": 1,
+          "sha256": "448b0212015a7217b5fab7f5bb18894532c88a1c3a1f41a6c10c230a0de3c1dd",
+          "bytes": 642,
+          "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 64 64\" width=\"64\" height=\"64\">\n  <rect x=\"0\" y=\"0\" width=\"64\" height=\"64\" rx=\"12\" fill=\"#1B3A5C\"/>\n  <g fill=\"none\" stroke=\"#F4F7FA\" stroke-width=\"4\" stroke-linecap=\"round\" stroke-linejoin=\"round\">\n    <path d=\"M16 44 L28 20 L36 34 L48 16\"/>\n    <polyline points=\"16,50 32,50 48,50\"/>\n  </g>\n  <circle cx=\"48\" cy=\"16\" r=\"5\" fill=\"#E8A33D\"/>\n  <ellipse cx=\"16\" cy=\"44\" rx=\"4\" ry=\"3\" fill=\"#E8A33D\" fill-opacity=\"0.8\"/>\n  <polygon points=\"28,20 32,26 24,26\" fill=\"#F4F7FA\" fill-rule=\"evenodd\"/>\n  <line x1=\"8\" y1=\"58\" x2=\"56\" y2=\"58\" stroke=\"#F4F7FA\" stroke-width=\"2\" opacity=\"0.5\"/>\n</svg>\n"
+        },
+        "palette": {
+          "light": {
+            "foreground": [
+              "types"
+            ],
+            "background": "#F4F7FA"
+          },
+          "dark": {
+            "foreground": "#E6EEF5",
+            "background": "#14202C"
+          }
+        }
+      },
+      "revision": 4
+    },
+    {
+      "id": "palette-light-foreground-object",
+      "token": "palette-light-foreground-object",
+      "displayName": "Herdr Pilot",
+      "kind": "manifest",
+      "mode": "watcher",
+      "state": "ok",
+      "problems": [],
+      "primary": "crx-lc/types-art",
+      "manifest": {
+        "commit": "3f1c9a0e5b7d2c4a6e8f0a1b3c5d7e9f1a2b3c4d",
+        "version": 2
+      },
+      "board": {
+        "provider": "github-project",
+        "owner": "crx-lc",
+        "ownerType": "organization",
+        "number": 7,
+        "url": "https://github.com/orgs/crx-lc/projects/7"
+      },
+      "repositories": [
+        {
+          "name": "crx-lc/types-art",
+          "role": null,
+          "primary": true,
+          "checkout": "bound"
+        }
+      ],
+      "space": {
+        "name": "Pilot",
+        "id": "sp-core-a",
+        "binding": "bound"
+      },
+      "presentation": {
+        "icon": {
+          "format": "svg",
+          "version": 1,
+          "sha256": "448b0212015a7217b5fab7f5bb18894532c88a1c3a1f41a6c10c230a0de3c1dd",
+          "bytes": 642,
+          "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 64 64\" width=\"64\" height=\"64\">\n  <rect x=\"0\" y=\"0\" width=\"64\" height=\"64\" rx=\"12\" fill=\"#1B3A5C\"/>\n  <g fill=\"none\" stroke=\"#F4F7FA\" stroke-width=\"4\" stroke-linecap=\"round\" stroke-linejoin=\"round\">\n    <path d=\"M16 44 L28 20 L36 34 L48 16\"/>\n    <polyline points=\"16,50 32,50 48,50\"/>\n  </g>\n  <circle cx=\"48\" cy=\"16\" r=\"5\" fill=\"#E8A33D\"/>\n  <ellipse cx=\"16\" cy=\"44\" rx=\"4\" ry=\"3\" fill=\"#E8A33D\" fill-opacity=\"0.8\"/>\n  <polygon points=\"28,20 32,26 24,26\" fill=\"#F4F7FA\" fill-rule=\"evenodd\"/>\n  <line x1=\"8\" y1=\"58\" x2=\"56\" y2=\"58\" stroke=\"#F4F7FA\" stroke-width=\"2\" opacity=\"0.5\"/>\n</svg>\n"
+        },
+        "palette": {
+          "light": {
+            "foreground": {
+              "toString": null
+            },
+            "background": "#F4F7FA"
+          },
+          "dark": {
+            "foreground": "#E6EEF5",
+            "background": "#14202C"
+          }
+        }
+      },
+      "revision": 4
+    }
+  ]
+}

@@ -49,6 +49,9 @@ copying that folder. No imports from another mod or from the repo root.
 - Programs run directly with arguments, never through a shell. Open only `https://` URLs, with the
   opener chosen by platform (`opener.js`).
 - `window` inside a view is GPUI's drawing global; import Herdr's `window()` under another name.
+- A click or key handler's `cx` dies when the handler returns. Never pass it (or a `cx.timer.after` built from it)
+  into work that outlives the handler: keep deadlines as times checked by a timer of the view's own. Test fakes
+  must kill an event's `cx` too (`eventCx` in Roster's tests), or they hide this.
 - `cx.spawn` starts its task at once: one started in `render` runs inside render up to its first
   `await`, and `cx.notify()` there throws. Await once before post-render work. Test fakes must
   start tasks synchronously too, or they hide this.
