@@ -38,8 +38,8 @@ function world({ catalog = { local: catalogText(null, [PILOT, notes]), edge: cat
   const projectIcons = { lookup: icon => icon?.sha256 ?? null, ensure() {}, takeChanged: () => false };
   return { f, t, gh, catalogSource, github, projectIcons };
 }
-async function setup(w, { narrow = false, storage = null } = {}) {
-  const Type = createRosterView(kit, appOf(w.f.host), { host: w.f.host, layoutHost: layoutHostUnused, initialView: 'projects', collapseUnassigned: false,
+async function setup(w, { narrow = false, storage = null, app = {} } = {}) {
+  const Type = createRosterView(kit, { ...appOf(w.f.host), ...app }, { host: w.f.host, layoutHost: layoutHostUnused, initialView: 'projects', collapseUnassigned: false,
     catalogSource: w.catalogSource, github: w.github, projectIcons: w.projectIcons, storage });
   const view = new Type(), c = context(); view.init({}, c.cx);
   // Panels ask for data with the host timer; here it is the test's clock.
@@ -77,7 +77,7 @@ test('#30: registered projects by stable ID first (idle too), one group across r
   assert.ok(byId(tree, 'group-label:' + pilot.key).attributes.font_bold);
   // The catalog icon (a verified cached file) on the palette's background; Notes has the neutral monogram.
   assert.equal(byId(tree, 'project-icon:' + pilot.key).attributes.image[0], 'mods/roster/.cache/icons/' + PILOT.presentation.icon.sha256 + '.svg');
-  assert.equal(byId(tree, 'group-icon:' + pilot.key).attributes.bg[0], PILOT.presentation.palette.light.background);
+  assert.equal(byId(tree, 'group-icon:' + pilot.key).attributes.bg[0], PILOT.presentation.palette.dark.background, 'the sample theme is dark');
   assert.equal(textOf(byId(tree, 'project-monogram:' + idle.key)), 'N');
   assert.deepEqual(s.f.calls, []);
 });
@@ -226,4 +226,14 @@ test('#25: inaccessible board data is said, by repository; the list is never rea
   // Backlog stays only a filter of the board's own statuses (0 here); no issue is put there.
   for (const item of s.view.controls.filter(c => c.key.startsWith('project:issue:'))) assert.match(item.label, / · status unknown · /, 'never Backlog');
   assert.match(text, /Backlog 0/); assert.match(text, /Status unknown 2/);
+});
+
+test('fix1 (finding 4): the project palette follows the selected theme’s own light or dark flag', async () => {
+  const pal = PILOT.presentation.palette;
+  const bgOf = async app => { const s = await setup(world(), { app }); const tree = s.render(); return byId(tree, 'group-icon:' + registered(s.view, 'pilot').key).attributes.bg[0]; };
+  const themes = () => [{ name: 'sample-dark', light: false, colors: {} }, { name: 'sample-light', light: true, colors: {} }];
+  assert.equal(await bgOf({ settings: () => ({ theme: 'sample-dark', zoom: 1 }), themes }), pal.dark.background);
+  assert.equal(await bgOf({ settings: () => ({ theme: 'sample-light', zoom: 1 }), themes }), pal.light.background);
+  // No theme entry: a dark theme background still picks the dark pair.
+  assert.equal(await bgOf({ settings: () => ({}), theme: () => ({ surface: '#111111', background: '#101418', foreground: '#eeeeee' }) }), pal.dark.background);
 });

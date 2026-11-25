@@ -81,7 +81,7 @@ export function sha256(text) {
 
 // WCAG 2.2 contrast of two #RRGGBB colors.
 const channel = v => { const s = v / 255; return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; };
-const luminance = hex => { const n = parseInt(hex.slice(1), 16); return 0.2126 * channel((n >> 16) & 255) + 0.7152 * channel((n >> 8) & 255) + 0.0722 * channel(n & 255); };
+export const luminance = hex => { const n = parseInt(hex.slice(1), 16); return 0.2126 * channel((n >> 16) & 255) + 0.7152 * channel((n >> 8) & 255) + 0.0722 * channel(n & 255); };
 export function contrast(foreground, background) {
   const [a, b] = [luminance(foreground), luminance(background)].sort((x, y) => y - x);
   return (a + 0.05) / (b + 0.05);

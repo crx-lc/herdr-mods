@@ -7,7 +7,7 @@ import { actionReason, rowContext, detailLabel, hoverText, reasonText, agentFact
 import { terminalKind } from './runtime.js';
 import { reducedMotion, readStored, writeStored, Arrivals, PULSE } from './motion.js';
 import { CatalogSource, ProjectIcons } from './catalog-source.js';
-import { registeredGroups, catalogMembership, catalogNotice, machineLabel, sourceText, whyText } from './project-groups.js';
+import { registeredGroups, catalogMembership, catalogNotice, machineLabel, sourceText, whyText, darkAppearance } from './project-groups.js';
 import { GitHubData } from './github.js';
 import { projectTotals, projectRepositories, issueList, reasonText as totalReason, utcStamp } from './project-totals.js';
 
@@ -646,7 +646,8 @@ export function createRosterView(kit, app, options = {}) {
     // and the fold chevron. Keyboard order: the header (fold), issues, PRs, ⓘ. Leaves the element in this.lastHeader.
     registeredHeader(i, { click, labelText, h, fg, muted, dim, theme, groupHeader, change, leadBox, first, slot }) {
       const group = i.registered, totals = this.totalsOf(group), before = this.controls.length;
-      const dark = typeof app.settings === 'function' && app.settings()?.dark === true;
+      const dark = darkAppearance({ settings: typeof app.settings === 'function' ? app.settings() : null,
+        themes: typeof app.themes === 'function' ? app.themes() : null, theme });
       const palette = group.presentation?.palette?.[dark ? 'dark' : 'light'] ?? null;
       const sha = this.projectIcons?.lookup(group.presentation?.icon ?? null) ?? null;
       const lead = leadBox().rounded(5).bg(palette?.background ?? theme.raised ?? theme.surface);
@@ -656,7 +657,7 @@ export function createRosterView(kit, app, options = {}) {
       const open = this.projectPanel?.groupKey === group.key ? this.projectPanel.tab : null;
       const total = (tab, t, noun) => {
         const key = 'project-' + tab + ':' + i.key;
-        const color = t.state === 'ok' ? fg : t.state === 'partial' ? theme.ansi3 ?? fg : muted;
+        const color = t.state === 'ok' ? fg : t.state === 'partial' && !t.stale ? theme.ansi3 ?? fg : muted;
         const label = (t.state === 'none' ? 'No repositories registered for ' + noun : t.label) + '. ' + (open === tab ? 'Close' : 'Show') + ' the ' + noun;
         const el = click(key, label, cx => this.openProjectPanel(group.key, tab, key, cx))
           .h(20).flex_none().px(4).rounded(4).cursor_pointer().tooltip(t.state === 'none' ? label : t.label).hover(e => e.bg(theme.hover ?? theme.raised))
@@ -735,7 +736,7 @@ export function createRosterView(kit, app, options = {}) {
         const list = this.github ? issueList(group, this.github, now, p.filter) : { state: 'unavailable', items: [], total: 0, filters: [], notes: ['GitHub data is not read here'] };
         const t = totals.issues;
         append(text(list.state === 'loading' ? 'Loading open issues…' : list.state === 'unavailable' ? 'Open issues unavailable'
-          : (list.state === 'partial' ? 'Partial list: ' : '') + list.total + ' open, oldest first' + (t.state === 'stale' ? ' · ' + t.label : ''), 11, list.state === 'ok' ? fg : muted).id('project-issues:summary'));
+          : (list.state === 'partial' ? 'Partial list: ' : list.state === 'stale' ? 'Stale list: ' : '') + list.total + ' open, oldest first' + (t.state === 'stale' ? ' · ' + t.label : ''), 11, list.state === 'ok' ? fg : muted).id('project-issues:summary'));
         for (const note of list.notes) append(text(note, 10.5, muted).id('project-issues:note:' + panelIndex));
         if (totals.repos.length > 1) {
           const row = h().id('project-issues:repos').flex_none().flex_wrap().gap(3);

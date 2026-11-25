@@ -6,7 +6,7 @@
 //                               machine's catalog was read successfully at the last attempt and exactly one entry
 //                               there carries the terminal's herdr.project token. Names never join anything.
 //   catalogNotice(sources)      null, or what the list says about a catalog that is loading, unavailable or partial.
-import { mergeCatalogs, githubBoard } from './catalog.js';
+import { mergeCatalogs, githubBoard, luminance } from './catalog.js';
 import { tuple } from './normalize.js';
 
 export const LOCAL = 'This computer';
@@ -98,4 +98,16 @@ export function catalogNotice(sources = []) {
   const names = failed.map(s => machineLabel(s.machine));
   return { kind: 'partial', text: 'Project catalog: ' + (names.length === 1 ? names[0] : names.length + ' machines') + ' unavailable',
     detail: 'Some catalogs could not be read; their sessions stay outside registered projects.\n' + detail };
+}
+
+// Whether the shown theme is dark, for choosing a project palette's light or dark pair: the selected theme's own
+// light flag (settings().theme names it, themes() says whether it is light), else a dark flag in settings, else the
+// theme's background color. Never a guess from the system.
+export function darkAppearance({ settings = null, themes = null, theme = null } = {}) {
+  const name = typeof settings?.theme === 'string' ? settings.theme : null;
+  const found = name && Array.isArray(themes) ? themes.filter(t => t?.name === name) : [];
+  if (found.length === 1 && typeof found[0].light === 'boolean') return !found[0].light;
+  if (typeof settings?.dark === 'boolean') return settings.dark;
+  const bg = typeof theme?.background === 'string' ? theme.background : typeof theme?.surface === 'string' ? theme.surface : '';
+  return /^#[0-9A-Fa-f]{6}(?:[0-9A-Fa-f]{2})?$/.test(bg) ? luminance(bg.slice(0, 7)) < 0.2 : false;
 }

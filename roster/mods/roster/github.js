@@ -136,7 +136,7 @@ export class GitHubData {
   wantCounts(repositories, after, force = false) {
     for (const name of repositories.filter(validRepository).slice(0, this.limits.maxRepositories)) {
       const key = repoKey(name);
-      if (this.due(this.counts, key, this.limits.countMs, force)) this.enqueue({ map: this.counts, key, name, kind: 'counts' });
+      if (this.due(this.counts, key, this.limits.countMs, force)) this.enqueue({ map: this.counts, key, name, kind: 'counts' }, after);
     }
     this.pump(after);
   }
@@ -144,13 +144,13 @@ export class GitHubData {
   wantList(repositories, board, after, force = false) {
     for (const name of repositories.filter(validRepository).slice(0, this.limits.maxRepositories)) {
       const key = repoKey(name);
-      if (this.due(this.lists, key, this.limits.listMs, force)) this.enqueue({ map: this.lists, key, name, kind: 'list' });
+      if (this.due(this.lists, key, this.limits.listMs, force)) this.enqueue({ map: this.lists, key, name, kind: 'list' }, after);
       if (board) {
         const bkey = boardKey(board) + ' ' + key;
-        if (this.due(this.boards, bkey, this.limits.listMs, force)) this.enqueue({ map: this.boards, key: bkey, name, board, kind: 'board' });
+        if (this.due(this.boards, bkey, this.limits.listMs, force)) this.enqueue({ map: this.boards, key: bkey, name, board, kind: 'board' }, after);
       }
     }
-    if (board && this.due(this.fields, boardKey(board), force ? 0 : this.limits.boardMs, force)) this.enqueue({ map: this.fields, key: boardKey(board), board, kind: 'fields' });
+    if (board && this.due(this.fields, boardKey(board), force ? 0 : this.limits.boardMs, force)) this.enqueue({ map: this.fields, key: boardKey(board), board, kind: 'fields' }, after);
     this.pump(after);
   }
   // A person's explicit refresh: at most once per manualMs.
@@ -161,10 +161,21 @@ export class GitHubData {
     if (board !== undefined) this.wantList(repositories, board, after, true);
     return true;
   }
-  enqueue(job) {
+  // Queued work has a deadline too: while every slot is held by a call that has not ended (a hung gh), waiting in
+  // the queue ends as a timeout and the job is dropped; the running calls keep their slots until they really end, and
+  // the next scheduled interval asks again.
+  enqueue(job, after) {
     const before = job.map.get(job.key);
     job.map.set(job.key, { ...(before ?? { value: null, okAt: null, reason: null }), status: 'loading', at: this.host.now(), cached: before?.cached ?? false, previous: before?.status ?? null });
     this.queue.push(job); this.changed = true;
+    if (typeof after === 'function') after(this.limits.callMs + this.limits.graceMs, () => {
+      const at = this.queue.indexOf(job);
+      if (at < 0) return;
+      this.queue.splice(at, 1);
+      const now = job.map.get(job.key) ?? {};
+      job.map.set(job.key, { status: 'error', reason: 'timeout', at: this.host.now(), okAt: now.okAt ?? null, value: now.value ?? null, cached: now.cached ?? false });
+      this.changed = true;
+    });
   }
   pump(after) {
     while (this.running < this.limits.atOnce && this.queue.length) {

@@ -58,9 +58,16 @@ function total(parts, one, many) {
     if (loading.length) return { state: 'loading', value: null, text: '… ' + many, label: 'Open ' + many + ': loading' };
     return { state: 'unavailable', value: null, text: '– ' + many, label: 'Open ' + many + ' unavailable: ' + missingText };
   }
-  if (missing.length || loading.length) return { state: 'partial', value: sum, text: '≥' + sum + ' ' + word(sum),
-    label: 'Open ' + many + ': at least ' + sum + '; ' + (missing.length ? 'unavailable: ' + missingText : '') + (missing.length && loading.length ? '; ' : '')
-      + (loading.length ? 'still loading: ' + loading.map(p => p.name).join(', ') : '') };
+  const staleText = stale.map(p => p.name + ' ' + p.value + ' as of ' + utcStamp(p.okAt) + ' (' + (p.reason ? 'not refreshed: ' + reasonText(p.reason) : 'cached') + ')').join(', ');
+  if (missing.length || loading.length) {
+    // Only current answers make a lower bound now; a stale count is named with its time and why, never added to it.
+    const current = known.filter(p => p.state === 'ok'), bound = current.reduce((n, p) => n + p.value, 0);
+    const parts = [current.length ? 'at least ' + bound + ' now' : 'no current count',
+      stale.length ? 'stale: ' + staleText : '', missing.length ? 'unavailable: ' + missingText : '',
+      loading.length ? 'still loading: ' + loading.map(p => p.name).join(', ') : ''].filter(Boolean);
+    return { state: 'partial', value: current.length ? bound : null, stale: stale.length > 0, asOf: stale.length ? Math.min(...stale.map(p => p.okAt)) : null,
+      text: current.length ? '≥' + bound + ' ' + word(bound) : '– ' + many, label: 'Open ' + many + ': ' + parts.join('; ') };
+  }
   if (stale.length) return { state: 'stale', value: sum, text: sum + ' ' + word(sum), asOf: oldest,
     label: 'Open ' + many + ': ' + sum + ' as of ' + utcStamp(oldest) + ' (not refreshed: ' + stale.map(p => p.name + (p.reason ? ' ' + reasonText(p.reason) : ' cached')).join(', ') + ')' };
   return { state: 'ok', value: sum, text: sum + ' ' + word(sum),
@@ -94,9 +101,15 @@ export const statusText = s => s.kind === 'status' ? s.name : STATUS_TEXT[s.kind
 const filterOf = s => s.kind === 'status' ? 'status:' + s.name : s.kind === 'no-status' || s.kind === 'off-board' ? 'none' : s.kind === 'unknown' ? 'unknown' : 'all';
 
 export function issueList(group, data, now, filter = 'all') {
-  const names = projectRepositories(group).filter(validRepository).slice(0, data.limits.maxRepositories);
+  // Every registered repository counts toward completeness: one Roster does not read (not a GitHub name, or past the
+  // limit) is missing and named, never silently left out.
+  const all = projectRepositories(group);
+  const names = all.filter(validRepository).slice(0, data.limits.maxRepositories);
   const items = [], notes = [];
-  let loading = 0, missing = 0;
+  let loading = 0, missing = 0, stale = 0;
+  for (const name of all.filter(name => !names.includes(name))) {
+    missing++; notes.push(name + ': issues not listed (' + reasonText(validRepository(name) ? 'too-many' : 'unsupported') + ')');
+  }
   for (const name of names) {
     const e = data.lists.get(repoKey(name));
     if (!e?.value) {
@@ -104,8 +117,8 @@ export function issueList(group, data, now, filter = 'all') {
       else { missing++; notes.push(name + ': issues not listed (' + reasonText(e?.reason ?? 'not-loaded') + ')'); }
       continue;
     }
-    if (e.status === 'error') notes.push(name + ': list as of ' + utcStamp(e.okAt) + ' (' + reasonText(e.reason) + ')');
-    else if (e.cached) notes.push(name + ': list as of ' + utcStamp(e.okAt) + ' (cached)');
+    if (e.status === 'error') { stale++; notes.push(name + ': list as of ' + utcStamp(e.okAt) + ' (' + reasonText(e.reason) + ')'); }
+    else if (e.cached) { stale++; notes.push(name + ': list as of ' + utcStamp(e.okAt) + ' (cached)'); }
     if (e.value.truncated) notes.push(name + ': only the oldest ' + e.value.issues.length + ' of ' + e.value.total + ' are listed');
     for (const issue of e.value.issues) {
       const created = Date.parse(issue.createdAt);
@@ -137,7 +150,7 @@ export function issueList(group, data, now, filter = 'all') {
   if (items.some(i => i.filter === 'unknown') && group.board?.state !== 'none') filters.push({ key: 'unknown', label: 'Status unknown', count: count('unknown') });
   const active = filters.some(f => f.key === filter) ? filter : 'all';
   const shown = active === 'all' ? items : items.filter(i => i.filter === active);
-  const state = !names.length ? 'none' : missing === names.length ? 'unavailable' : loading === names.length ? 'loading' : missing || loading ? 'partial' : 'ok';
+  const state = !all.length ? 'none' : missing === all.length ? 'unavailable' : loading === all.length ? 'loading' : missing || loading ? 'partial' : stale ? 'stale' : 'ok';
   if (loading && state === 'partial') notes.push(plural(loading, 'repository', 'repositories') + ' still loading');
   return { state, items: shown, total: items.length, filter: active, filters, notes };
 }

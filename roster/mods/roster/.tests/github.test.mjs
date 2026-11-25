@@ -41,7 +41,7 @@ test('an empty project is a confirmed zero; one inaccessible repository makes th
   s.data.wantCounts(['sample-org/pilot-app', 'sample-org/private-app'], s.t.after); await settle();
   const t = projectTotals(group(['sample-org/pilot-app', 'sample-org/private-app']), s.data, s.t.now);
   assert.deepEqual([t.issues.state, t.issues.text, t.prs.text], ['partial', '≥4 issues', '≥1 PR']);
-  assert.match(t.issues.label, /at least 4; unavailable: sample-org\/private-app \(not found or access refused\)/);
+  assert.match(t.issues.label, /at least 4 now; unavailable: sample-org\/private-app \(not found or access refused\)/);
 });
 
 test('no gh, not logged in, an error status, a malformed answer: unavailable with the reason, never 0', async () => {
@@ -68,8 +68,50 @@ test('a hung call: loading until the host timer ends it, then unavailable; its s
   assert.deepEqual([t.issues.state, t.issues.label], ['unavailable', 'Open issues unavailable: sample-org/slow-app (no answer in time)']);
   assert.equal(s.gh.calls.length, 2, 'a timed-out call still holds its slot');
   s.gh.hung[0].resolve({ code: 0, stdout: '{"data":{"repository":{"issues":{"totalCount":1},"pullRequests":{"totalCount":1}}}}', stderr: '' }); await settle();
-  assert.equal(s.gh.calls.length, 3, 'the next call starts once the native call ended');
   assert.equal(projectTotals(group(['sample-org/slow-app']), s.data, s.t.now).issues.state, 'unavailable', 'a late answer never replaces the timeout');
+  // The queued third had its own deadline and was dropped; the next interval asks it once a slot is free.
+  assert.equal(s.gh.calls.length, 2);
+  s.t.advance(300000); s.data.wantCounts(['sample-org/next-app'], s.t.after); await settle();
+  assert.equal(s.gh.calls.length, 3, 'asked again on the next interval, in the slot the ended call freed');
+});
+
+test('fix1 (finding 1): queued work ends at its own deadline while both slots stay held by hung calls', async () => {
+  const s = setup({}, { modes: { 'sample-org/a': 'hang', 'sample-org/b': 'hang', 'sample-org/c': 'hang' } });
+  s.data.wantCounts(['sample-org/a', 'sample-org/b', 'sample-org/c'], s.t.after); await settle();
+  assert.equal(projectTotals(group(['sample-org/c']), s.data, s.t.now).issues.state, 'loading');
+  s.t.advance(3600000); await settle();
+  const t = projectTotals(group(['sample-org/c']), s.data, s.t.now);
+  assert.deepEqual([t.issues.state, t.issues.label], ['unavailable', 'Open issues unavailable: sample-org/c (no answer in time)'], 'never loading for ever');
+  assert.deepEqual([s.data.running, s.data.queue.length, s.gh.calls.length], [2, 0, 2], 'the hung calls keep their slots; nothing more is started');
+});
+
+test('fix1 (finding 2): repositories Roster does not read are counted as missing and named in the issue list', async () => {
+  const names = Array.from({ length: 33 }, (_, n) => 'sample-org/repo-' + n);
+  const s = setup(Object.fromEntries(names.map(n => [n, { list: [] }])));
+  s.data.wantList(names, null, s.t.after); await settle();
+  const list = issueList(group(names), s.data, s.t.now);
+  assert.equal(s.data.lists.size, 32);
+  assert.equal(list.state, 'partial');
+  assert.deepEqual(list.notes, ['sample-org/repo-32: issues not listed (more repositories than Roster reads)']);
+  const odd = setup({ 'sample-org/app': { list: [issue(1, 3)] } });
+  odd.data.wantList(['sample-org/app', 'sample_org/app'], null, odd.t.after); await settle();
+  const two = issueList(group(['sample-org/app', 'sample_org/app']), odd.data, odd.t.now);
+  assert.equal(two.state, 'partial');
+  assert.deepEqual(two.notes, ['sample_org/app: issues not listed (not a GitHub repository name)']);
+});
+
+test('fix1 (finding 3): a stale count beside an unavailable repository keeps its time and is never a current lower bound', () => {
+  const data = { limits: { countMs: 300000, maxRepositories: 32 }, counts: new Map([
+    ['sample-org/app', { status: 'error', reason: 'error', at: 900000, okAt: 1, value: { issues: 100, prs: 10 }, cached: true }],
+    ['sample-org/docs', { status: 'error', reason: 'refused', at: 900000, okAt: null, value: null, cached: false }]]) };
+  let t = projectTotals(group(['sample-org/app', 'sample-org/docs']), data, 1000000).issues;
+  assert.equal(t.state, 'partial'); assert.equal(t.stale, true);
+  assert.equal(t.text, '– issues', 'an old count is not shown as "≥100"');
+  assert.equal(t.label, 'Open issues: no current count; stale: sample-org/app 100 as of 1970-01-01 00:00 UTC (not refreshed: GitHub answered with an error); unavailable: sample-org/docs (not found or access refused)');
+  // With a current repository too, only the current one makes the lower bound.
+  data.counts.set('sample-org/site', { status: 'ok', reason: null, at: 999000, okAt: 999000, value: { issues: 3, prs: 0 }, cached: false });
+  t = projectTotals(group(['sample-org/app', 'sample-org/docs', 'sample-org/site']), data, 1000000).issues;
+  assert.equal(t.text, '≥3 issues'); assert.match(t.label, /^Open issues: at least 3 now; stale: sample-org\/app 100 as of/);
 });
 
 test('bounded refresh: totals again only after five minutes; an explicit refresh at most every 30 s; opening or closing shows after refresh', async () => {

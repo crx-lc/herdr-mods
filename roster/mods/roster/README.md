@@ -36,14 +36,16 @@ same name stay two groups, each named as a Space on its machine.
 
 A registered header shows the verified display name, the catalog's SVG icon (validated again by Roster, written once
 to the mod's hidden `.cache/icons/`, read back and compared before it is drawn) or the neutral monogram, on the
-palette's background for the current light or dark theme when the palette is valid; then the two totals, **ⓘ**, the
+palette's background for the selected theme's light or dark pair (the theme's own light flag from `themes()`)
+when the palette is valid; then the two totals, **ⓘ**, the
 session count and the fold chevron. ⓘ opens Details below the header: the ID, the primary and other repositories
 (links), the monitored board (a link; "No board" for a manual project), each Core's machine, mode and Space, and
 any flags or catalog problems.
 
 The totals are labeled ("12 issues", "3 PRs"), repository-wide across every distinct registered repository (once
 each across Cores and checkouts). Draft pull requests count as open pull requests; a pull request is never counted
-as an issue. **Partial** totals read "≥12 issues" and their label names the missing repository and why; **stale**
+as an issue. **Partial** totals read "≥12 issues", counting only repositories answered now, and their label names each
+missing repository and why, and any stale count with its time (a stale count is never added to that lower bound); **stale**
 ones are muted with "as of HH:MM UTC"; **unavailable** ones read "– issues" with the reason (no `gh`, not logged in,
 access refused, no answer in time, an error status, an answer Roster could not read). Only an answer from every
 repository shows a confirmed 0.
@@ -53,7 +55,8 @@ number, title (opens GitHub), the issue's Status on the project's monitored boar
 ago"), with the exact creation time (UTC) on hover and in the footer on keyboard focus. Oldest first, all open
 issues by default; filters for the board's own statuses, **No board status** (an issue not on the board, or on it
 with no Status: never counted as Backlog) and **Status unknown** (board data that could not be read). Notes name each
-repository whose list or board data is missing. The PR total opens the per-repository pull request counts, each
+repository whose list or board data is missing, including any registered repository Roster does not read (not a
+GitHub name, or beyond 32), so a partial list never reads as complete. The PR total opens the per-repository pull request counts, each
 linking to that repository's pull requests. Refresh asks again at most every 30 s.
 
 Agent rows in Projects end in a 14px **status icon** from the Status tab's vocabulary instead of a text chip:
@@ -340,7 +343,7 @@ for this, under Herdr's home).
 this computer, directly with arguments (no shell), with the person's own `gh` login; values are passed with `-f`
 (raw strings) and only the board number with `-F`. Nothing about credentials is read, stored or logged; only `gh`'s
 exit code, output and error text are read, and an error is kept as a short code. The calls, each with a 20 s timeout
-and at most two at once:
+and at most two at once (work waiting for a slot ends as "no answer in time" after 25 s):
 
 | Call | When |
 |---|---|
