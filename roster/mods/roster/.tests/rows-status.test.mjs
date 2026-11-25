@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRosterView } from '../view.js';
 import { programOf, terminalKind } from '../runtime.js';
-import { reducedMotion, Arrivals } from '../motion.js';
+import { reducedMotion } from '../motion.js';
+import { Reminders } from '../reminders.js';
 import { fakeHost, terminal, kit, context, appOf, flatten, textOf, layoutHostUnused } from './sidebar-fixtures.mjs';
 
 // Herdr's program records as terminals() reports them (neutral sample values).
@@ -195,5 +196,5 @@ test('a new arrival in Needs you pulses the bell once, then it is still; never a
   r.render(); r.every[0].fn(r.cx);
   assert.equal(r.stats.notify, 0); assert.deepEqual(moving(r.render()), []);
   // The arrival rule on its own: leaving and coming back is a new arrival.
-  const a = new Arrivals(); assert.equal(a.take(['x']), false); assert.equal(a.take(['x', 'y']), true); assert.equal(a.take(['y']), false); assert.equal(a.take(['x', 'y']), true);
+  const a = new Reminders(); assert.equal(a.take(['x'], 0), null); assert.equal(a.take(['x', 'y'], 1), 'arrival'); assert.equal(a.take(['y'], 2), null); assert.equal(a.take(['x', 'y'], 3), 'arrival');
 });

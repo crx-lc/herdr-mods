@@ -20,6 +20,8 @@ by their current Space or independently verified project/parent association; Sta
 groups sessions by reported status. Done starts folded. Global **Needs you** stays
 above the tabs, outside the main scrolling list, including when filters hide the
 same session elsewhere. Its repeated group row is an echo of the same session.
+While Needs you is not empty its bell pulses on a new arrival and again every 2 minutes,
+with a chime by Options › Sound (see [Needs you reminders and sound](#needs-you-reminders-and-sound)).
 
 **Details**, **Options** and **Open folder as Space** share one disclosure state:
 opening one closes the other. Click the same trigger again to close it. These are
@@ -33,7 +35,7 @@ inline panels, with surrounding rows still usable; none covers the sidebar.
   guarded native activation. Opening/closing Details does not activate a terminal;
   **Go to terminal** is a separate explicit action using the same fresh host checks.
 - Options expands immediately below the tab toolbar. It retains independent
-  Machine/Context filters, motion preference and existing Agents-slot controls.
+  Machine/Context filters, motion preference, the Sound choice and existing Agents-slot controls.
   Active filters always have a reset. Choosing a filter keeps Options open.
 - A machine's + expands the folder form below that machine's header, showing its
   exact target machine. The toolbar + uses the shown Space's machine and places
@@ -99,6 +101,74 @@ changed target. Late picker/check answers cannot enter a replacement panel.
 The public machine API supplies no durable Core/reconnection identity, so no claim
 is made about an unobserved disconnect/replacement between host snapshots. Native
 commands remain the final authority; unsupported identity facts are never invented.
+
+## Needs you reminders and sound
+
+When a session starts needing you, Herdr itself plays its `blocked` sound and, unless you
+are looking at that session, posts a toast. Roster adds a reminder for as long as
+something is still waiting:
+
+- **On a new arrival** in Needs you the bell pulses once (about 2 seconds, then still).
+- **Every 2 minutes** after that, while Needs you is not empty, the bell pulses again
+  and Roster plays its chime. A new arrival starts the 2 minutes again; reminders stop as
+  soon as Needs you is empty. Sessions already waiting when Roster starts make no sound
+  then; their first reminder comes 2 minutes later.
+- **No reminder while you are looking**: when Herdr's window is active and the focused
+  terminal (or the one a pane or agent block shows) is the pending session, the reminder
+  is skipped and the next one is 2 minutes later. With several sessions pending, looking
+  at one does not silence the others.
+- Nothing on the rows moves, and Roster posts no notification or toast of its own:
+  Herdr's toast stays the only one. A remote session reminds the same way; the chime
+  plays on this computer.
+- **One sound per event, however many Roster copies are open.** The copies Herdr runs
+  from this mod share one reminder timer, so an arrival or reminder sounds once while every
+  copy's bell pulses, and closing or opening a copy neither loses nor replays a sound. The
+  timer knows how many copies are open, because Herdr tells each copy when it closes: a copy
+  that opens while none is open starts silently, as Roster does at start, and one that opens
+  beside another changes nothing, so a reminder that fell due while the computer slept still
+  sounds once. Not verified in a running Herdr: that every copy that goes is told so (after
+  a missed one, the next Roster to open once all had closed would go on with the old timer
+  instead of starting silently: one pulse or chime as it opens, never two for one event), and
+  whether two Herdr windows can run separate copies of the mod that cannot see each other,
+  which would each sound.
+
+**Options › Sound** has three values (activate the entry to move to the next):
+
+| Sound | Arrival | Every 2 minutes |
+|---|---|---|
+| **Reminders only** (default) | Herdr's `blocked` sound, as before | Roster's chime |
+| **Arrival and reminders** | Roster's chime | Roster's chime |
+| **Off** | Herdr's `blocked` sound, as before | nothing |
+
+With **Arrival and reminders**, Herdr still plays its own `blocked` sound too, so you
+would hear the arrival twice. To avoid that, point Herdr's needs-you sound at a short
+silent MP3 in your own `~/.config/herdr-app/settings.json` (personal configuration,
+not part of this mod): `"sounds": { "enabled": true, "blocked": "<silent file>.mp3" }`.
+Herdr's `done` sound and its toasts are unchanged.
+
+**How to mute:** Options › Sound › Off silences Roster and leaves Herdr as it was.
+`"sounds": { "enabled": false }` in Herdr's settings mutes all of Herdr's alert sounds
+(including `done`), and Roster reads that setting and stays silent too, whatever Sound
+says (the entry then reads "muted in Herdr"). Options › Motion › reduced keeps the bell
+still; the chime still follows Sound. Both choices are kept in this mod's `localStorage`.
+
+**The chime** (`sounds/chime.mp3`, 0.9 s, about 10 KB) is original to this repository
+and under its MIT license, like the rest of Roster's own work. It contains no samples:
+`roster/tools/make-chime.mjs` computes it (two sine notes, A5 then E6, with a soft
+overtone and a decay) and writes a WAV, and `roster/tools/make-chime.ps1` encodes that
+with the MP3 encoder built into Windows (Media Foundation). The WAV is the same bytes on
+every run; the MP3 can differ with the Windows encoder's version. No third-party sound,
+encoder or library is bundled.
+
+**Limits, not verified in a running Herdr yet:** whether `playSound` itself honors
+`sounds.enabled: false` (Roster checks the setting first, so it does not depend on that);
+that `playSound('mods/roster/sounds/chime.mp3')` resolves against Herdr's home and plays
+this file; how loud it is next to Herdr's sounds; whether `focused()` reports a remote
+session's address in the same form as `terminals()`; and the live acceptance (one
+arrival heard exactly once, a reminder heard and seen after 2 minutes, a second arrival
+resetting the timer). Herdr does not tell a mod which session a toast was suppressed
+for, so the "looking" rule above is Roster's reading of `window().active` and
+`focused()`, not Herdr's own rule.
 
 ## Validation and screenshots
 
@@ -285,8 +355,8 @@ entries, other shells) are Herdr's shipped files in `icons/` of Herdr's home, dr
 reference and not bundled here; their notices are Herdr's (`icons/LICENSES.md`). Roster
 ships two original glyphs, `icons/bash.svg` and `icons/powershell.svg`: a generic prompt
 in each shell's customary color, not either project's logo. An unknown program gets the
-neutral `icons/terminal.svg`. Motion is limited to the Working header icon and one short
-pulse of the Needs you bell; Herdr does not report a system reduced-motion preference, so
+neutral `icons/terminal.svg`. Motion is limited to the Working header icon and the short
+pulses of the Needs you bell (`reminders.js` decides when); Herdr does not report a system reduced-motion preference, so
 Options > Motion turns both off (kept in this mod's `localStorage`), as does a
 `reduce_motion` flag if Herdr's settings ever carry one.
 
@@ -306,7 +376,7 @@ the current scope; the old Phase 2/#18 gate is retired.
 ## Package inventory and acceptance evidence
 
 From the repository root, run `node scripts/roster-package.mjs`. It prints the
-sorted, repository-relative paths of the 50 installed-folder files that would
+sorted, repository-relative paths of the 52 installed-folder files that would
 ship. It only reads the repository package; it never copies, installs, syncs,
 loads mod code or consults a live App home. No destination options are accepted.
 This is a separate inventory policy, not a dry run of `scripts/sync.mjs` (whose
