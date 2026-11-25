@@ -29,7 +29,9 @@ Options sits immediately below the toolbar in its existing 52px scrolling viewpo
 The folder form sits below its exact machine header/+ (below the toolbar for the
 single-local-machine case), showing target machine, chosen/typed path, verification,
 explicit Create/Open actions and Cancel. It shares the bounded 112px panel surface,
-shrunk (60px at least) to fit the measured visible list under its machine header.
+shrunk (60px at least) to fit the measured visible list under its machine header. In a
+list too short for header and 60px form (zoom 1.1 under three pinned rows), the form is its
+own direct list row, at most the list's height, so revealing it shows the focused path field.
 
 ## How it behaves
 

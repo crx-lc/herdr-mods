@@ -13,13 +13,14 @@ const trigger = 'machine-add:' + machineKey('edge');
 const local = 'machine-add:' + machineKey(null);
 const spaces = () => Array.from({ length: 8 }, (_, n) => ({ id: 'sp' + n, name: 'Sample ' + n, active: n === 0, tabs: [] }));
 
-function setup() {
+function setup({ zoom = null } = {}) {
   const f = fakeHost([terminal('t1')]); f.values.spaces = spaces();
   f.host.run = (name, args) => f.calls.push([name, args]);
   const c = context(); c.cx.timer.after = () => {};
   const bindings = []; c.cx.bind_keys = list => { bindings.push(...list); return list.length; };
   const traversal = []; const surface = { focus_next: () => traversal.push('next'), focus_prev: () => traversal.push('prev') };
-  const Type = createRosterView(kit, appOf(f.host), { host: f.host, layoutHost: layoutHostUnused, ...expanded, initialView: 'spaces', window: surface });
+  const app = appOf(f.host); if (zoom) app.settings = () => ({ zoom });
+  const Type = createRosterView(kit, app, { host: f.host, layoutHost: layoutHostUnused, ...expanded, initialView: 'spaces', window: surface });
   const view = new Type(); view.init({}, c.cx);
   let tree = null;
   const render = () => (tree = view.render(c.cx));
@@ -38,7 +39,7 @@ function setup() {
   };
   return { ...c, f, view, render, click, press, key, action, size, bindings, traversal, rejected };
 }
-async function ready() { const s = setup(); s.render(); await settle(); for (const h of [s.view.rowScroll, s.view.panelScroll]) h.requests.length = 0; return s; }
+async function ready(options) { const s = setup(options); s.render(); await settle(); for (const h of [s.view.rowScroll, s.view.panelScroll]) h.requests.length = 0; return s; }
 function inputProbe(s) {
   const input = s.view.pathInput; let count = 0;
   input.focus = () => { assert.notEqual(s.cx.phase, 'render', 'focus is requested after render'); count++; };
@@ -146,13 +147,60 @@ test('3.4: the folder form fits the measured list under its machine header and r
   assert.deepEqual(s.view.panelScroll.requests, [path.panelIndex], 'the focused field, not only Cancel');
   assert.equal(path.panelIndex, 2);
   // The footer appears and the list shrinks: the form shrinks and is revealed again, once.
-  const notify = s.stats.notify; s.size(84); assert.equal(s.stats.notify, notify + 1);
+  const notify = s.stats.notify; s.size(38 + FOLDER.min); assert.equal(s.stats.notify, notify + 1);
   assert.deepEqual(byId(s.render(), 'roster-new-space').attributes.h, [FOLDER.min]); await settle();
   assert.deepEqual(s.view.panelScroll.requests, [2, 2]);
-  const settled = s.stats.notify; s.size(84); assert.equal(s.stats.notify, settled, 'an unchanged size does nothing');
+  const settled = s.stats.notify; s.size(38 + FOLDER.min); assert.equal(s.stats.notify, settled, 'an unchanged size does nothing');
   s.render(); await settle(); assert.deepEqual(s.view.panelScroll.requests, [2, 2]);
   // Room enough: the full height.
   s.size(400); assert.deepEqual(byId(s.render(), 'roster-new-space').attributes.h, [FOLDER.height]);
+  assert.deepEqual(await s.rejected(), []); assert.deepEqual(s.f.calls, []);
+});
+
+// Review of b78ec55 at zoom 1.1: under three pinned rows the list is about 77px. Header and
+// gap (38) plus the least form (60) did not fit, the block showed from its top and the
+// focused path field, the form's third row, stayed below the list.
+function apartForm(s, height) {
+  const tree = s.render(), rows = byId(tree, 'roster-rows'), form = byId(tree, 'roster-new-space');
+  const block = byId(tree, 'machine-block:' + machineKey('edge'));
+  const path = s.view.controls.find(c => c.key === 'new-space:path'), header = s.view.controls.find(c => c.key === trigger);
+  assert.deepEqual(form.attributes.h, [height], 'the form is at most the list high');
+  assert.equal(byId(block, 'roster-new-space'), undefined, 'not inside the header block');
+  assert.equal(rows.children.indexOf(form), rows.children.indexOf(block) + 1, 'the next direct list child');
+  assert.equal(path.rowIndex, rows.children.indexOf(form)); assert.equal(header.rowIndex, rows.children.indexOf(block));
+  return { path, header };
+}
+
+test('3.4 zoom 1.1: in a 77px list the form is a row of its own that fits, and its focused field is revealed', async () => {
+  const s = await ready(); s.size(77); s.click(trigger);
+  const { path } = apartForm(s, 77); await settle();
+  assert.deepEqual(s.view.rowScroll.requests, [path.rowIndex], 'the form row, not the header block');
+  assert.deepEqual(s.view.panelScroll.requests, [path.panelIndex]); assert.equal(path.panelIndex, 2);
+  const p = inputProbe(s); s.render(); await settle(); assert.equal(p.count(), 0, 'one focus request per opening');
+  // Esc returns to the exact +; Enter reopens the form as its own row and reveals it again.
+  s.view.rowScroll.requests.length = 0; s.view.panelScroll.requests.length = 0;
+  s.key('escape'); s.render(); assert.equal(s.view.controller.cursor, trigger); assert.equal(s.view.panel, null);
+  s.key('enter'); const again = apartForm(s, 77).path; await settle();
+  assert.equal(s.view.panel?.kind, 'folder'); assert.equal(s.view.controller.cursor, 'new-space:path');
+  assert.deepEqual(s.view.rowScroll.requests, [again.rowIndex]); assert.deepEqual(s.view.panelScroll.requests, [2]);
+  // Up from the field reaches the header block again.
+  s.key('up'); assert.equal(s.view.controller.cursor, 'new-space:cancel'); s.key('up');
+  assert.equal(s.view.controller.cursor, trigger); assert.equal(s.view.rowScroll.requests.at(-1), again.rowIndex - 1);
+  assert.deepEqual(await s.rejected(), []); assert.deepEqual(s.f.calls, []);
+});
+
+test('3.4: the list size arrives in window px and is divided by the zoom; room again rejoins the header', async () => {
+  const s = await ready({ zoom: 1.1 }); s.size(85); s.click(trigger);
+  apartForm(s, 77); await settle();
+  // One px short of header and least form apart; at exactly that it joins the header.
+  s.size(Math.ceil((38 + FOLDER.min - 1) * 1.1)); apartForm(s, 38 + FOLDER.min - 1);
+  s.size((38 + FOLDER.min) * 1.1); s.render(); await settle();
+  const block = byId(s.render(), 'machine-block:' + machineKey('edge'));
+  assert.deepEqual(byId(block, 'roster-new-space').attributes.h, [FOLDER.min]);
+  const path = s.view.controls.find(c => c.key === 'new-space:path'), header = s.view.controls.find(c => c.key === trigger);
+  assert.equal(path.rowIndex, header.rowIndex); assert.equal(s.view.rowScroll.requests.at(-1), path.rowIndex);
+  // A list shorter than the field itself still gets a form tall enough for it.
+  s.size(20); apartForm(s, FOLDER.least);
   assert.deepEqual(await s.rejected(), []); assert.deepEqual(s.f.calls, []);
 });
 

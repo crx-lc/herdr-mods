@@ -14,8 +14,9 @@ export const WORKING_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', 
 // Tab and Shift-Tab inside Roster. Herdr's own Tab binding moves native focus before
 // on_key_down hears the key; a binding of Roster's own, deeper in, comes first.
 export const TAB_ACTIONS = Object.freeze({ next: 'roster_tab_next', prev: 'roster_tab_prev' });
-// The inline folder form: its full height, and the least it shrinks to in a short list.
-export const FOLDER = Object.freeze({ height: 112, min: 60 });
+// The inline folder form: its full height, the least it shrinks to under its machine header,
+// and the least it takes as a row of its own in a list too short for both (the path field).
+export const FOLDER = Object.freeze({ height: 112, min: 60, least: 36 });
 // The one group header's measures (see groupHeader in render).
 const HEADER = Object.freeze({ height: 30, iconSize: 18, titleSize: 13, chevron: 11, gapAbove: 8 });
 export function timerDeadline(cx, promise) {
@@ -321,15 +322,23 @@ export function createRosterView(kit, app, options = {}) {
       try { if (step > 0) surface?.focus_next?.(); else surface?.focus_prev?.(); } catch { /* Nothing else to reach. */ }
     }
     // The visible list's height; the folder form fits it with its machine header.
+    // on_size_change reports window px; the form's heights are written at zoom 1.
     measureList(size, cx) {
-      const height = Math.floor(size?.height ?? 0);
+      const settings = typeof app.settings === 'function' ? app.settings() : null;
+      const zoom = Number(settings?.zoom) > 0 ? Number(settings.zoom) : 1;
+      const height = Math.floor((size?.height ?? 0) / zoom);
       if (!(height > 0) || height === this.listHeight) return;
       this.listHeight = height;
       if (this.panel?.kind === 'folder') { this.panel.revealPending = true; cx.notify(); }
     }
+    // True when the header and the least form don't fit the list together.
+    folderApart(above) { return this.listHeight > 0 && this.listHeight < above + FOLDER.min; }
     folderHeight(above) {
       const room = this.listHeight;
-      return room > 0 ? Math.max(FOLDER.min, Math.min(FOLDER.height, Math.floor(room - above))) : FOLDER.height;
+      if (!(room > 0)) return FOLDER.height;
+      // A form of its own takes at most the whole list, so revealing it shows all of it.
+      if (this.folderApart(above)) return Math.max(FOLDER.least, Math.min(FOLDER.height, room));
+      return Math.max(FOLDER.min, Math.min(FOLDER.height, Math.floor(room - above)));
     }
     key(event, cx, traversal = false) {
       const chord = event.keystroke;
@@ -423,10 +432,15 @@ export function createRosterView(kit, app, options = {}) {
           this.controls.splice(row.ready ? this.controls.length - 1 : this.controls.length, 0, headerControl);
           const block = v_flex().id('machine-block:' + row.key).flex_none().min_w(0).child(header);
           // Below its header (and the gap above a later header), the form still fits the list.
-          if (this.activeNewSpace() && this.newSpace.machine === row.machine) block.child(this.renderNewSpace(theme, { labelText, h, v: () => v_flex(), fg, muted },
-            HEADER.height + (row === rows[0] ? 0 : HEADER.gapAbove)));
+          // In a list too short for both it is a row of its own that the list can show whole,
+          // focused field included; the header may then scroll off.
+          const above = HEADER.height + (row === rows[0] ? 0 : HEADER.gapAbove);
+          const formHere = this.activeNewSpace() && this.newSpace.machine === row.machine, apart = formHere && this.folderApart(above);
+          const form = () => this.renderNewSpace(theme, { labelText, h, v: () => v_flex(), fg, muted }, above);
+          if (formHere && !apart) block.child(form());
           for (const control of this.controls.slice(before)) control.rowIndex = drawn;
           add(block);
+          if (apart) { const at = this.controls.length; add(form()); for (const control of this.controls.slice(at)) control.rowIndex = drawn - 1; }
           if (!row.collapsed && row.count === 0 && row.ready) { add(click('spaces:new:' + machineKey(row.machine), 'New space on ' + row.label, cx => this.openNewSpace(row.machine, cx, 'spaces:new:' + machineKey(row.machine)))
             .h(28).flex_none().px(8).gap(7).rounded(7).text_size(12).text_color(dim).cursor_pointer()
             .hover(el => el.bg(theme.hover ?? theme.raised).text_color(fg)).child(icon('plus', 12)).child('New space there')); this.controls.at(-1).rowIndex = drawn - 1; }

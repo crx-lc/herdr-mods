@@ -78,7 +78,9 @@ request a selection reveal. Changes observed during inspection are consumed with
 and are never replayed when a panel closes. Details and
 the folder form use a bounded 112px internal vertical scrollbar (96px for pinned
 Details); the folder form shrinks (to 60px at least) so it fits the visible list with
-its machine header, measured with `on_size_change`; Options retains its 52px viewport. Long values/actions wrap, with invisible
+its machine header, measured with `on_size_change` (window px, divided by the zoom). In a
+list too short for both, the form becomes its own list row, at most the list's height, and
+revealing it shows the focused path field while the header may scroll off; Options retains its 52px viewport. Long values/actions wrap, with invisible
 wrap opportunities in tokens longer than 24 code points. Accessible labels and
 native action arguments retain the original text. These are compact-layout provisions,
 not evidence of native fit or Unicode shaping. No new screenshot is claimed.
