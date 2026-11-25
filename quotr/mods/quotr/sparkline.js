@@ -6,7 +6,7 @@
 // the regular session, and the dashed line is still the close that trade is measured against.
 // Only observed prices are drawn, each at its own time; consecutive prices are joined, so a
 // stretch with no trade is a straight segment, never a blank (the owner's decision, issue #37).
-import { formatPrice, isCryptoPair, shownQuote, STOCK_BAR_MS, CRYPTO_BAR_MS } from "./quotes.js";
+import { formatPrice, formatChange, isCryptoPair, shownQuote, STOCK_BAR_MS, CRYPTO_BAR_MS } from "./quotes.js";
 import { zoneAt } from "./readout.js";
 
 export const SPARK_WIDTH = 56;
@@ -129,6 +129,24 @@ export function watchlistSparkline(quote, now, { failed = false } = {}) {
 
 const isStale = (q, now, failed) => failed || !positive(q.fetchedAt) || !Number.isFinite(now) || now < q.fetchedAt
   || now - q.fetchedAt > STALE_AFTER_MS;
+
+/**
+ * What a row's pre-market or after-hours price is, for its icon's one-line tooltip; null when the
+ * row shows the regular quote. `quote` is the stored quote.
+ */
+export function extendedNote(quote) {
+  const q = quote ?? {};
+  const shown = shownQuote(q);
+  const session = shown?.shownSession;
+  if (session !== "pre" && session !== "post") return null;
+  const price = (value) => formatPrice({ price: value, currency: q.currency ?? null });
+  const at = clock(shown.timestamp, q.timeZone);
+  const trade = `${session === "pre" ? "Pre-market" : "After-hours"} trade ${price(shown.price)} at ${at.text} ${at.zone}`;
+  if (!positive(shown.previousClose) || !Number.isFinite(shown.changePercent)) return `${trade} · no previous close`;
+  // From the next day's first pre-market trade, the reference is the latest session's own close.
+  if (shown.previousClose === q.price) return `${trade} · ${formatChange(shown.changePercent)} vs the close ${price(q.price)}`;
+  return `${trade} · ${formatChange(shown.changePercent)} vs prev close ${price(shown.previousClose)} · close ${price(q.price)} (${formatChange(q.changePercent)})`;
+}
 
 function clock(t, zone) {
   const z = zoneAt(t, zone);

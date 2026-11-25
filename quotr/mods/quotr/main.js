@@ -3,7 +3,7 @@
 // add field and a line per ticker; docked as a short strip (top or bottom), it
 // draws one line of quotes. A row opens the ticker's day as a dialog: the same
 // mod, given the quote in its props.
-import { View, div, image } from "gpui-kit";
+import { View, div, image, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { nextCommand, openOverlay, props, setShared, shared, theme, checking } from "herdr";
 import { Watchlist, INTERVAL_MS } from "./watchlist.js";
@@ -11,9 +11,10 @@ import { formatBandPrice, formatChange, formatPrice, formatStaleDate, isCryptoPa
 import { createTickMemory, primeTicks, takeTicks } from "./ticks.js";
 import { MarketClock } from "./clockview.js";
 import {
-  STORE, RENAMED_KEYS, HEADERS, BAND_HEIGHT, LOGO, brand, stamp, loadSnapshot, saveSnapshot, LOGOS,
+  STORE, RENAMED_KEYS, HEADERS, BAND_HEIGHT, LOGO, SESSION_ICONS, brand, stamp, loadSnapshot, saveSnapshot, LOGOS,
 } from "./context.js";
 import { ChartParts } from "./charts.js";
+import { extendedNote } from "./sparkline.js";
 import { LogoParts } from "./logoview.js";
 import { DialogParts } from "./dialog.js";
 
@@ -250,7 +251,9 @@ export default class Quotr extends View {
       const stored = w.quotes[symbol];
       // The row shows a stock's latest trade, extended hours included; the dialog gets the stored quote.
       const quote = stored ? shownQuote(stored) : undefined;
-      const extended = quote?.shownSession === "pre" ? "Pre-market" : quote?.shownSession === "post" ? "After hours" : "";
+      // Pre-market or after hours: an icon beside the price, its tooltip saying what the price is.
+      const session = quote?.shownSession === "pre" || quote?.shownSession === "post" ? quote.shownSession : null;
+      const sessionNote = session ? extendedNote(stored) : null;
       const failed = w.errors[symbol];
       const stale = quote ? formatStaleDate(quote.timestamp, now) : "";
       // When this row's value was last fetched, if it is older than a few refreshes
@@ -258,7 +261,7 @@ export default class Quotr extends View {
       const updating = w.inflight.has(symbol);
       const flash = this.flashes?.[symbol];
       const old = quote && !updating && !failed && now - (quote.fetchedAt ?? 0) > 3 * INTERVAL_MS;
-      const meta = quote ? [quote.name, extended, stale && `As of ${stale}`,
+      const meta = quote ? [quote.name, stale && `As of ${stale}`,
         quote.delaySeconds ? `Delay ${Math.ceil(quote.delaySeconds / 60)}m` : "",
         old ? `Updated ${stamp(quote.fetchedAt, now)}` : ""].filter(Boolean).join(" · ") : "";
       const color = quote ? this.changeColor(t, quote.changePercent) : t.dim;
@@ -283,6 +286,9 @@ export default class Quotr extends View {
               .child(h_flex().justify_end().items_center().gap(5)
                 .when(updating && Boolean(quote), (el) => el.child(div().flex_none().w(5).h(5).rounded_full().bg(t.working)
                   .loop("opacity", { from: 0.25, to: 0.9, period: 1200 })))
+                .when(Boolean(sessionNote), (el) => el.child(div().id(`quotr-session-${symbol}`).flex_none().tooltip(sessionNote)
+                  .accessibility_label(sessionNote)
+                  .child(svg(SESSION_ICONS[session]).size(11).text_color(this.sessionColor(t, session)))))
                 // ▲/▼ since the previous quote (until the next one), and a tint
                 // behind the price that flashes on the change and fades out.
                 .when(Boolean(quote) && (flash?.dir === "up" || flash?.dir === "down"), (el) => el.child(

@@ -22,6 +22,8 @@ export const HEADERS = { "User-Agent": USER_AGENT, Accept: "application/json" };
 // Below this height the panel draws the one-line band.
 export const BAND_HEIGHT = 72;
 export const LOGO = "mods/quotr/icon.svg";
+// A row's price from pre-market or after hours: a sunrise or a moon beside it (Quotr's own icons).
+export const SESSION_ICONS = { pre: "mods/quotr/sunrise.svg", post: "mods/quotr/moon.svg" };
 // Pulse's blue: the bright one on dark themes, the text-safe one on light.
 export const brand = () => (settings().dark === false ? "#1066C6" : "#6AB0FF");
 // Fetched 1W / 1M / 1Y periods and the dialogs' Yahoo cooldown.

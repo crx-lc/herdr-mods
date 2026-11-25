@@ -3,7 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { shownQuote, yahooUrl } from "../quotes.js";
-import { watchlistSparkline, SPARK_TOP, SPARK_BOTTOM } from "../sparkline.js";
+import { watchlistSparkline, extendedNote, SPARK_TOP, SPARK_BOTTOM } from "../sparkline.js";
 import { createTickMemory, primeTicks, takeTicks } from "../ticks.js";
 import { views, walk, element, theme } from "./helpers/view-harness.mjs";
 
@@ -134,7 +134,13 @@ test("the real panel row shows the latest trade and its session; the chart has n
   const nodes = walk(v.panel(element(), theme));
   assert.ok(nodes.includes("91.00 USD"), "the after-hours price");
   assert.ok(nodes.includes("-9.00%"));
-  assert.ok(nodes.some((n) => typeof n === "string" && /After hours/.test(n)));
+  // The session is an icon beside the price, its tooltip saying what the price is; not a word in the meta line.
+  assert.ok(!nodes.some((n) => typeof n === "string" && /After hours/.test(n)));
+  const icon = nodes.find((n) => n.calls?.some((c) => c[0] === "id" && c[1] === "quotr-session-SAMPLE"));
+  assert.ok(icon, "the session icon");
+  assert.equal(icon.calls.find((c) => c[0] === "tooltip")[1],
+    "After-hours trade 91.00 USD at 17:30 EST · -9.00% vs prev close 100.00 USD · close 91.90 USD (-8.10%)");
+  assert.ok(walk(icon).some((n) => n.kind === "svg" && n.calls.some((c) => c[0] === "path" && c[1] === "moon.svg")));
   assert.ok(!nodes.includes("91.90 USD"));
   const spark = nodes.find((n) => n.calls?.some((c) => c[0] === "id" && c[1] === "quotr-spark-SAMPLE"));
   const paints = walk(spark).filter((n) => n.kind === "paint");
@@ -157,4 +163,16 @@ test("extended-hours bars at the closing price keep the close, without a label, 
   // Later bars at the closing price (Yahoo's live bar with no volume carries it forward): still the close.
   const later = answer({ days: [TUE, WED], now: WED + 21 * H + 28 * M, price, previousClose: 3.77, regularClose: close });
   assert.equal(shownQuote(later).shownSession, "regular"); assert.equal(shownQuote(later).price, close);
+});
+
+test("the session icon's tooltip says what the row's price is and what its change is measured against", () => {
+  const morning = THU + 12 * H + 15 * M; // 07:15 EST Thursday
+  const next = answer({ days: [WED, THU], now: morning, previousClose: 100, regularClose: 91.9,
+    price: (d, s) => d === WED ? (s === "post" ? 91 : 91.88) : 92.5 });
+  assert.equal(extendedNote(next), "Pre-market trade 92.50 USD at 07:15 EST · +0.65% vs the close 91.90 USD");
+  const none = answer({ days: [TUE, WED], now: WED + 22 * H, previousClose: null, regularClose: 90, price: (d, s) => (s === "post" && d === WED ? 91 : 90) });
+  assert.equal(extendedNote(none), "After-hours trade 91.00 USD at 17:00 EST · no previous close");
+  const day = answer({ days: [TUE, WED], now: WED + 18 * H, price: gap });
+  assert.equal(extendedNote(day), null, "no icon for the regular quote");
+  assert.equal(extendedNote({ symbol: "COIN/USDT", price: 1 }), null);
 });
