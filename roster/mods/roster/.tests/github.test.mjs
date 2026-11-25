@@ -2,7 +2,7 @@
 // a fake `gh` (projects-fixtures.mjs), never the network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { GitHubData, ghOutcome, graphqlArgs, COUNT_QUERY, parseCache, serializeCache, validRepository } from '../github.js';
+import { GitHubData, execFailure, ghOutcome, graphqlArgs, COUNT_QUERY, parseCache, serializeCache, validRepository } from '../github.js';
 import { projectTotals, issueList, ageText, utcStamp } from '../project-totals.js';
 import { fakeGh, clock, settle } from './projects-fixtures.mjs';
 
@@ -277,4 +277,45 @@ test('review 4 (deadline at use): a list asks for no further page once its deadl
   assert.equal(s.gh.calls.length, 3);
   assert.deepEqual(entryOf(s.data.lists, 'sample-org/slow'), ['error', 'timeout', null, null]);
   assert.deepEqual([s.data.running, s.data.queue.length], [0, 0], 'both slots are free once the calls really ended');
+});
+
+// Native run 3: a gh that answered slowly was ended by Herdr's own exec timeout (20 s, before the job's 25 s deadline),
+// and Roster said "gh did not run (is GitHub CLI installed?)". Herdr rejects a timed-out exec with an Error whose
+// message is "`gh` timed out after 20000 ms"; a program that cannot start is "running `gh` failed: …".
+test('native 3: a call Herdr ends at its own exec timeout is no answer in time, never "gh did not run"', async () => {
+  const s = setup({}, { modes: { 'sample-org/pilot-app': 'hang', 'sample-org/pilot-docs': 'hang' } });
+  const start = s.t.now;
+  s.data.wantCounts(['sample-org/pilot-app', 'sample-org/pilot-docs']); await settle();
+  // The first answered earlier, so the timeout leaves a stale total with its time.
+  s.gh.hung[0].resolve(COUNTS(3, 1)); await settle();
+  // 20 s later, with no poll in between, Herdr ends the slow call for time.
+  s.t.now = start + 20000;
+  s.gh.hung[1].reject(new Error('`gh` timed out after 20000 ms')); await settle();
+  assert.deepEqual(entryOf(s.data.counts, 'sample-org/pilot-docs'), ['error', 'timeout', null, null]);
+  assert.equal(s.data.running, 0, 'the call really ended, so its slot is free');
+  const label = projectTotals(group(['sample-org/pilot-app', 'sample-org/pilot-docs']), s.data, s.t.now).issues.label;
+  assert.match(label, /sample-org\/pilot-docs \(no answer in time\)/);
+  assert.doesNotMatch(label, /gh did not run|GitHub CLI installed/);
+  // A program that cannot start is still "gh did not run", at once.
+  const none = setup({ 'sample-org/pilot-app': { issues: 4, prs: 1 } }, { missing: true });
+  none.data.wantCounts(['sample-org/pilot-app']); await settle();
+  assert.deepEqual(entryOf(none.data.counts, 'sample-org/pilot-app'), ['error', 'gh-unavailable', null, null]);
+  assert.match(projectTotals(group(['sample-org/pilot-app']), none.data, none.t.now).issues.label, /gh did not run \(is GitHub CLI installed\?\)/);
+});
+
+test('native 3: Herdr\'s timeout ends a page of a list too; a rejection at the call\'s timeout is a timeout whatever its words', async () => {
+  const s = setup({}, { modes: { list: 'hang', board: 'hang' } });
+  const start = s.t.now;
+  s.data.wantList(['sample-org/pilot-docs'], undefined); await settle();
+  assert.equal(s.gh.hung.length, 1);
+  s.t.now = start + 20000;
+  s.gh.hung[0].reject('timed out after 20000 ms'); await settle();
+  assert.deepEqual(entryOf(s.data.lists, 'sample-org/pilot-docs').slice(0, 2), ['error', 'timeout']);
+  assert.equal(s.gh.calls.length, 1, 'no further page');
+  // The words can change between Herdr versions; the time cannot. Earlier than the timeout, an unknown rejection is
+  // a program that did not run.
+  assert.equal(execFailure(new Error('something else'), 20000, 20000), 'timeout');
+  assert.equal(execFailure(new Error('something else'), 19999, 20000), 'gh-unavailable');
+  assert.equal(execFailure(new Error('running `gh` failed: executable was not found on the host PATH'), 3, 20000), 'gh-unavailable');
+  assert.equal(execFailure(undefined, 0, 20000), 'gh-unavailable');
 });

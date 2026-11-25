@@ -40,7 +40,7 @@ export function graphqlArgs(query, fields = {}, numbers = {}) {
 }
 
 // What a gh answer means: { ok: true, data } or { ok: false, reason } with reason one of gh-unavailable (no gh or it
-// could not run), gh-auth (not logged in), refused (not found or not allowed), scope (a missing token scope),
+// could not start), timeout (Herdr ended the call for time, or the job passed its deadline), gh-auth (not logged in), refused (not found or not allowed), scope (a missing token scope),
 // rate-limited, error (another error status) or malformed.
 const REASONS = Object.freeze(['gh-unavailable', 'gh-auth', 'refused', 'scope', 'rate-limited', 'error', 'malformed', 'timeout']);
 function errorReason(errors, stderr = '') {
@@ -63,6 +63,15 @@ export function ghOutcome(result) {
   return { ok: true, data: doc.data };
 }
 export const isReason = value => REASONS.includes(value);
+// Why Herdr's exec rejected. It rejects for its own timeout, for a program that cannot start, and for a machine it
+// cannot reach (not here: gh runs on this computer). Herdr 0.1.18 words them "`gh` timed out after 20000 ms" and
+// "running `gh` failed: executable was not found on the host PATH". A timeout is "no answer in time"; anything else
+// is gh-unavailable. A rejection that came at or after the call's own timeout is a timeout too, whatever its words.
+// Herdr's timeout (callMs) is what ends a slow call: it comes before the job's deadline (its calls' time + graceMs).
+export function execFailure(error, elapsed, timeoutMs) {
+  const text = String(error?.message ?? error);
+  return /timed out/i.test(text) || elapsed >= timeoutMs ? 'timeout' : 'gh-unavailable';
+}
 
 export function parseCounts(data) {
   const repo = data?.repository;
@@ -225,8 +234,9 @@ export class GitHubData {
   async call(args, live) {
     if (!live()) return { ok: false, reason: 'timeout' };
     let result;
+    const started = this.host.now();
     try { result = await this.host.exec(GH, args, { timeout: this.limits.callMs }); }
-    catch { return { ok: false, reason: 'gh-unavailable' }; }
+    catch (error) { return { ok: false, reason: execFailure(error, this.host.now() - started, this.limits.callMs) }; }
     return ghOutcome(result);
   }
   async run(job, live) {

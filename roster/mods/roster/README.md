@@ -431,7 +431,11 @@ waiting for a slot ends as "no answer in time" after 25 s, a running job after i
 that cannot start fails at once and frees its slot. That time is read at every use, not only by Roster's 1 s timer:
 an answer that arrives after it is not taken (even between two timer runs, or after the timer was late), work whose
 wait has passed it is not started, and a list asks for no further page; a call still running keeps its slot until
-it really ends:
+it really ends. **A slow call is ended by Herdr's 20 s `exec` timeout**, which comes before the job's deadline: Herdr
+stops `gh`, and the repository reads "no answer in time". Herdr's `exec` rejects in both cases, and its words tell
+them apart (Herdr 0.1.18: "`gh` timed out after 20000 ms" against "running `gh` failed: executable was not found
+on the host PATH"); a rejection at or after the 20 s is also taken as a timeout, whatever its words. Only a `gh` that
+could not start reads "gh did not run (is GitHub CLI installed?)":
 
 | Call | When |
 |---|---|

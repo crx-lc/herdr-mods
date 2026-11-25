@@ -50,7 +50,8 @@ export function fakeGh(repos = {}, { missing = false, modes = {}, fields = ['Bac
     for (let i = 2; i < args.length; i += 2) if (args[i] === '-F') assert.match(args[i + 1], /^number=[1-9][0-9]*$/, '-F only for the board number');
     const kind = values.query === COUNT_QUERY ? 'counts' : values.query === ISSUES_QUERY ? 'list' : values.query === BOARD_ITEMS_QUERY ? 'board' : 'fields';
     calls.push({ kind, ...values });
-    if (missing) return Promise.reject(Error('spawn gh ENOENT'));
+    // Herdr's own words (0.1.18) for a program that cannot start.
+    if (missing) return Promise.reject(Error('running `gh` failed: executable was not found on the host PATH'));
     const name = values.owner + '/' + values.name, repo = repos[name], mode = modes[name] ?? modes[kind];
     if (mode === 'hang') return new Promise((resolve, reject) => hung.push({ resolve, reject }));
     if (mode === 'auth') return Promise.resolve({ code: 4, stdout: '', stderr: 'To get started with GitHub CLI, please run:  gh auth login' });
