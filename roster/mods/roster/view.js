@@ -5,7 +5,8 @@ import { desktopHost, desktopLayoutHost } from './desktop.js';
 import { spaceRows, machineKey, spaceFill, spacePlace, GitIdentities, MachineOs, folderSuggestions, matchingSpace, verifyFolder, spaceObservation } from './spaces.js';
 import { actionReason, rowContext, detailLabel, hoverText, reasonText, agentFacts, homeRelative } from './detail.js';
 import { terminalKind } from './runtime.js';
-import { reducedMotion, readStored, writeStored, Arrivals, PULSE } from './motion.js';
+import { reducedMotion, readStored, writeStored, PULSE } from './motion.js';
+import { Reminders, CHIME, SOUND, SOUND_LABELS, readSound, writeSound, nextSoundChoice, herdrMuted, playsChime, lookingAt } from './reminders.js';
 
 // One distinct icon per status group, so each reads as its own section.
 export const STATUS_ICONS = Object.freeze({ 'Needs you': 'bell', 'Child needs you': 'bell-dot', Working: 'working', Done: 'check-circle', Idle: 'pause-circle', Offline: 'offline', Stale: 'clock', Unknown: 'help-circle' });
@@ -64,8 +65,9 @@ export function createRosterView(kit, app, options = {}) {
       if (!app.checking()) cx.spawn(async cx => {
         for (;;) { if (await app.nextCommand() === 'focus') this.focus(cx); }
       });
-      // A new arrival in Needs you pulses the bell once; the check reads the last drawn list.
-      this.arrivals = new Arrivals(); this.pulseUntil = 0;
+      // Needs you pulses the bell, and by Options > Sound plays Roster's chime, on a new arrival
+      // and then every 2 minutes while it is not empty; the check reads the last drawn list.
+      this.reminders = new Reminders(); this.pulseUntil = 0;
       // Git identity for worktree nesting: the stock panel's two read-only rev-parse
       // queries, probed in the background (never in render, never under check).
       const exec = options.exec ?? app.exec, readTextFile = options.readTextFile ?? app.readTextFile;
@@ -77,8 +79,8 @@ export function createRosterView(kit, app, options = {}) {
         if (typeof readTextFile === 'function') this.os = new MachineOs({ readTextFile, now, isReady: this.isReady });
         this.machineReady = new Map();
       }
-      // One gentle 1s timer: the Needs you arrival check, and the Spaces probes when there are any.
-      if (ticking) cx.timer.every(1000, cx => { this.reconcilePanel(cx); this.watchArrivals(cx); if (this.machineReady) this.pollGit(cx); });
+      // One gentle 1s timer: the Needs you reminders, and the Spaces probes when there are any.
+      if (ticking) cx.timer.every(1000, cx => { this.reconcilePanel(cx); this.watchNeedsYou(cx); if (this.machineReady) this.pollGit(cx); });
     }
     // Watch readiness in every tab; ask about Spaces' folders on ready machines while Spaces
     // is shown; redraw on answers.
@@ -105,11 +107,27 @@ export function createRosterView(kit, app, options = {}) {
     }
     focus(cx) { this.handle.focus(); cx.notify(); }
     reduceMotion() { return reducedMotion(typeof app.settings === 'function' ? app.settings() : null, readStored(storage)); }
-    watchArrivals(cx) {
-      if (!this.controller.projection) return;
-      const pending = this.controller.projection.instances.filter(i => i.pinned && i.kind === 'terminal').map(i => i.identity);
-      if (!this.arrivals.take(pending) || this.reduceMotion()) return;
-      this.pulseUntil = this.controller.host.now() + PULSE.ms;
+    soundChoice() { return readSound(storage); }
+    watchNeedsYou(cx) {
+      const c = this.controller;
+      if (!c.projection) return;
+      const now = c.host.now();
+      // A reminder that falls due reads Herdr afresh first, so it never sounds for a list
+      // that has emptied since the last draw; that read is drawn too.
+      const fresh = this.reminders.isDue(now);
+      const pinned = (fresh ? c.render() : c.projection).instances.filter(i => i.pinned && i.kind === 'terminal');
+      const looking = () => {
+        const focused = typeof c.host.focused === 'function' ? c.host.focused() : null;
+        const win = typeof app.window === 'function' ? app.window() : null;
+        return pinned.every(i => lookingAt([i.row?.address, ...(i.row?.identityEvidence ?? []).map(e => e?.address)], focused, win));
+      };
+      const event = this.reminders.take(pinned.map(i => i.identity), now, looking);
+      if (event && playsChime(event, this.soundChoice(), typeof app.settings === 'function' ? app.settings() : null)) {
+        const play = options.playSound ?? app.playSound;
+        try { if (typeof play === 'function') play(CHIME); } catch { /* A sound that fails stays silent. */ }
+      }
+      if (!event || this.reduceMotion()) { if (fresh) cx.notify(); return; }
+      this.pulseUntil = now + PULSE.ms;
       cx.notify();
       // Then still: one redraw after the pulse draws the bell without it.
       cx.timer.after(PULSE.ms, cx => cx.notify());
@@ -727,9 +745,17 @@ export function createRosterView(kit, app, options = {}) {
           for (const id of ids) option('filter:' + field + ':' + (id === null ? 'null' : 'value:' + id), title + ': ' + (id ?? 'unknown'),
             change({ type: 'filters', [field]: [id] }), { active: selected?.includes(id) });
         }
-        option('motion:toggle', still ? 'Motion: reduced (status icons stay still)' : 'Motion: on (Working turns, a new Needs you pulses once)', cx => {
+        option('motion:toggle', still ? 'Motion: reduced (status icons stay still)' : 'Motion: on (Working turns, Needs you pulses on arrival and every 2 minutes)', cx => {
           writeStored(storage, still ? 'full' : 'reduce'); this.pulseUntil = 0; cx.notify();
         }, { active: still, text: still ? 'Motion: reduced' : 'Motion: on' });
+        // One entry, three values; activating it picks the next. Herdr's own sounds switch
+        // (settings.json sounds.enabled: false) mutes Roster as well, whatever is chosen here.
+        const sound = this.soundChoice(), silenced = herdrMuted(typeof app.settings === 'function' ? app.settings() : null);
+        const soundHelp = { [SOUND.off]: 'Roster plays nothing', [SOUND.reminders]: 'Herdr announces a new Needs you; Roster chimes every 2 minutes while it waits',
+          [SOUND.arrival]: "Roster chimes on a new Needs you and every 2 minutes; point Herdr's blocked sound at a silent file to avoid hearing the arrival twice" }[sound];
+        option('sound:cycle', 'Sound: ' + SOUND_LABELS[sound] + ' (' + soundHelp + (silenced ? "; Herdr's sounds are off, so Roster is silent too" : '') + '). Next: ' + SOUND_LABELS[nextSoundChoice(sound)], cx => {
+          writeSound(storage, nextSoundChoice(sound)); cx.notify();
+        }, { active: sound !== SOUND.reminders || silenced, text: 'Sound: ' + SOUND_LABELS[sound] + (silenced ? ' (muted in Herdr)' : '') });
         option('layout:select', 'Choose an existing Agents slot…', cx => {
           if (app.checking()) return;
           try { this.selection = this.optIn.inspect(); this.message = this.selection.slots.length ? 'Select the Agents slot to replace in a new layout copy' : 'No existing Agents slot'; }
@@ -752,9 +778,10 @@ export function createRosterView(kit, app, options = {}) {
       const PINNED = { row: 44, gap: 3, shown: 3 };
       const pinnedCount = projection.instances.filter(i => i.pinned && i.kind === 'terminal').length;
       // Capture the initial drawn attention list; its task establishes the baseline after render.
-      if (this.arrivals.seen === null) {
+      if (this.reminders.seen === null) {
         const pending = projection.instances.filter(i => i.pinned && i.kind === 'terminal').map(i => i.identity);
-        cx.spawn(async () => { if (this.arrivals.seen === null) this.arrivals.take(pending); });
+        const at = c.host.now();
+        cx.spawn(async () => { this.reminders.start(pending, at); });
       }
       const shown = Math.min(pinnedCount, PINNED.shown);
       const pinnedRows = v().id('roster-needs-rows').flex_none().gap(PINNED.gap).overflow_y_scrollbar().track_scroll(this.pinnedScroll)
