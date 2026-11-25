@@ -169,11 +169,14 @@ export class GitHubData {
   // good (the native check of 7d58e32).
   // Queued work waits at most callMs + graceMs; a running job at most its calls' time + graceMs.
   //
-  // The one deadline rule: late(job) reads the clock at the moment of use, and nothing uses a job without asking it.
-  // That is every place a job moves on: finish (an answer is taken), pump (queued work starts) and call (a request,
-  // so every page of a list, starts). tick() is only the sweep that shows "no answer in time" while nothing else
-  // happens (Roster's 1 s timer calls it); no path waits for it, so an answer that lands between two ticks, or after
-  // a late or missed one, is still refused. A job past its deadline keeps its slot until its native call really ends.
+  // The one deadline rule, the same as in catalog-source.js: no I/O starts and no result is accepted at or after the
+  // job's deadline, and a job that has settled starts nothing more. late(job) reads the clock at the moment of use,
+  // and nothing uses a job without asking it. That is every place a job moves on: pump (queued work starts), call
+  // (the only host.exec: a request, so every page of a list, starts; `live` there is "not settled and not late") and
+  // finish (an answer is taken). tick() is only the sweep that shows "no answer in time" while nothing else happens
+  // (Roster's 1 s timer calls it); no path waits for it, so an answer that lands between two ticks, or after a late
+  // or missed one, is still refused. A job past its deadline keeps its slot until its native call really ends.
+  // Outside the rule, on purpose: the disk cache (restore and persist, below). It is not a job and has no deadline.
   late(job) { return this.host.now() >= job.deadline; }
   enqueue(job) {
     const before = job.map.get(job.key);
@@ -257,6 +260,12 @@ export class GitHubData {
   }
   // The disk cache: counts and issue lists only (no board data, no credentials). Read once at start; shown as cached
   // (stale) until a refresh answers. Written after a batch of answers.
+  // No deadline (see the rule at late()). What bounds it: restore is one load per call (the view calls it once, at
+  // start); its answer only adds entries marked cached (stale, due for a refresh at once) and never replaces one that
+  // exists, however late it lands. persist is one write at a time (`saving`), only of values already held (accepted
+  // by finish, or restored), only when nothing runs or waits; after a failed write, one load inside the same latch.
+  // A save, or that load, that never ends leaves `saving` set: no further cache write in this run. Nothing else waits
+  // for either, and memory and the display are not affected.
   async restore() {
     let text = null;
     try { text = await this.host.load(); } catch { text = null; }

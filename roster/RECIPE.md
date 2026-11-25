@@ -122,7 +122,9 @@ is permitted. Native commands own the final machine/path validation.
 A click or key handler's cx dies when the handler returns: never hand its timer to work that outlives it. The
 GitHub provider and catalog reader keep deadlines as times (a kept cx stopped all GitHub work after a click in the
 native check of 7d58e32). Read that time wherever a job moves on (an answer taken, queued work or another page
-started, a catalog revision advanced), not only in the 1 s timer: an answer can land between two timer runs.
+started, a catalog revision advanced), not only in the 1 s timer: an answer can land between two timer runs. That
+includes a job's first request when it starts after an await: no I/O starts and no result is accepted at or after
+the deadline, and a settled job starts nothing more.
 
 Herdr starts a cx.spawn task at once: one started in render runs inside render until its
 first await, where cx.notify() throws and aborts the rest. Await once before post-render

@@ -414,9 +414,10 @@ the folder check in "Open folder as Space…". The delegation reader below stays
 Herdr reports it ready, under the D8 rule above (ready before the one read and again after it, never retried), at
 `~/.local/share/herdr-agents/published/projects.v1.json`. On either, a watcher's `herdr.projects` label names the
 path instead when exactly one valid absolute path is on that machine's live terminals. One read per machine every
-60 s, each ended after 5 s; a hung read is never started twice. The deadline is a time, read again when the answer
-arrives: a catalog that arrives after it is not accepted and moves no revision, whether or not Roster's 1 s timer
-ran in between. At most 1 MiB (Herdr's read limit).
+60 s, each ended after 5 s; a hung read is never started twice. The deadline is a time, read right before the read
+starts and again when the answer arrives: a read that could not start before it is not started, and a catalog that
+arrives after it is not accepted and moves no revision, whether or not Roster's 1 s timer ran in between. At most
+1 MiB (Herdr's read limit).
 No other file, folder scan, `hc` call or repository or board discovery: repositories and boards are only what the
 catalog names. Catalog icons are written to the mod's hidden `.cache/icons/<sha256>.svg` (the only file Roster writes
 for this, under Herdr's home).

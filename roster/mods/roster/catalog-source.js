@@ -4,8 +4,8 @@
 //   host: { readTextFile(path, { on }), machines(), terminals(), home(), platform(), now() }
 //   refresh(force)   starts the reads that are due; tick() ends a read that passed its deadline (Roster's 1 s timer
 //                    calls it). No timer is kept from a caller: a click handler's timer dies when it returns.
-//                    The deadline is a time read when a read's answer is taken (finish, in read()), so an answer
-//                    that lands after it is refused whether or not a tick came first.
+//                    The deadline is a time, read at every use (late(), below): right before the host read starts
+//                    and when its answer is taken, whether or not a tick came first.
 //   sources()        [{ machine, status, why, result, current, at, path }] for project-groups.js
 //
 // This computer: the fixed path for its platform. Another machine: only while Herdr reports it ready, with the
@@ -62,11 +62,15 @@ export class CatalogSource {
     for (const machine of machines) this.read(machine);
     return true;
   }
+  // The one deadline rule, the same as in github.js: no I/O starts and no result is accepted at or after the job's
+  // deadline, and a job that has settled starts nothing more. late(at) reads the clock at the moment of use; a read
+  // asks it in start (before the host read) and in finish (when an answer is taken), both in read().
+  late(at) { return this.host.now() >= at; }
   // A read past its deadline is unavailable ('timeout'); its slot stays taken until the read really ends. Only the
-  // sweep for a read that has not answered: finish itself reads the clock, so nothing depends on this having run.
+  // sweep for a read that has not answered: start and finish read the clock themselves, so nothing depends on this
+  // having run.
   tick() {
-    const now = this.host.now();
-    for (const d of [...this.deadlines.values()]) if (now >= d.at) d.finish({ status: 'unavailable', why: 'timeout' });
+    for (const d of [...this.deadlines.values()]) if (this.late(d.at)) d.finish({ status: 'unavailable', why: 'timeout' });
   }
   settle(machine, next) {
     const before = this.entries.get(machine);
@@ -88,23 +92,31 @@ export class CatalogSource {
     if (!path) { this.settle(machine, { status: 'unavailable', why: 'no-location' }); return; }
     if (!before) { this.entries.set(machine, { machine, status: 'reading', why: null, path, result: null, current: false, at: this.host.now(), okAt: null }); this.changed = true; }
     this.busy.add(machine);
-    // The one deadline rule (as in github.js): the clock is read at the moment an answer is taken. Whatever arrives at
-    // or after the deadline is 'timeout', and only an accepted catalog moves the revision high-water: both happen
-    // here and nowhere else. One read per machine and no second request, so there is nothing else to dispatch.
+    // The deadline rule (late(), above) at this job's two uses. finish: whatever arrives at or after the deadline is
+    // 'timeout', and only an accepted catalog moves the revision high-water; both happen here and nowhere else.
     const deadline = this.host.now() + this.deadlineMs;
-    let settled = false;
+    let settled = false, refused = false;
     const finish = next => {
       if (settled) return; settled = true; this.deadlines.delete(machine);
-      if (this.host.now() >= deadline) next = { status: 'unavailable', why: 'timeout' };
+      if (this.late(deadline)) next = { status: 'unavailable', why: 'timeout' };
       if (next.status === 'ok') this.revisions.set(machine, Math.max(this.revisions.get(machine) ?? 0, next.result.revision));
       this.settle(machine, { ...next, path });
     };
     this.deadlines.set(machine, { at: deadline, finish });
+    // start: the only host read of this job (one per machine, never a second request), asked at the moment of the
+    // call. Both reads below begin after an await (a microtask; for another machine, the readiness check), so the
+    // deadline can have passed, or a tick can have ended the read, in between: then no host read is made, the work
+    // ends at once and the slot is free.
+    const start = on => {
+      if (settled || this.late(deadline)) { refused = true; throw new Error('deadline'); }
+      return this.host.readTextFile(path, { on });
+    };
     const work = machine === null
-      ? Promise.resolve().then(() => this.host.readTextFile(path, { on: null })).then(text => ({ state: 'available', text, local: true }), () => ({ state: 'unavailable', reason: 'read-failed' }))
-      : remoteCatalogRead({ machine, isReady: () => this.ready(machine), read: () => this.host.readTextFile(path, { on: machine }) });
+      ? Promise.resolve().then(() => start(null)).then(text => ({ state: 'available', text, local: true }), () => ({ state: 'unavailable', reason: 'read-failed' }))
+      : remoteCatalogRead({ machine, isReady: () => this.ready(machine), read: () => start(machine) });
     // The slot frees only when the read has really ended, so a hung read is never started twice.
     Promise.resolve(work).then(outcome => {
+      if (refused) { finish({ status: 'unavailable', why: 'timeout' }); return; }
       if (outcome.state !== 'available') { finish({ status: 'unavailable', why: outcome.reason }); return; }
       if (outcome.local && outcome.text === null) { finish({ status: 'missing', why: 'no-file' }); return; }
       const result = assessCatalog({ text: outcome.text, lastRevision: this.revisions.get(machine) ?? null });
@@ -118,6 +130,9 @@ export class CatalogSource {
 
 // A catalog icon as a file Herdr can draw (its image element takes local paths only): written once under the mod's hidden .cache/icons/ (saving a
 // hidden file does not reload the mod), then read back and compared before it is shown. Keyed by its verified sha256.
+// Outside the deadline rule above, on purpose: it is not a job with a deadline. What bounds it: one chain of at most
+// four file calls per distinct sha256 for the life of this object, never repeated; a call that never ends leaves only
+// that icon as 'writing' (its monogram is drawn) and holds nothing anything else waits for.
 //   host: { dir, rel, mkdir(dir), readTextFile(path), writeTextFile(path, text, expected) }
 const SHA = /^[0-9a-f]{64}$/;
 export class ProjectIcons {

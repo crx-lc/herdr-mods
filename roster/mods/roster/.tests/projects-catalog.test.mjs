@@ -186,3 +186,64 @@ test('review 4 (deadline at use): a read that answers after its deadline, before
   assert.deepEqual(source.sources().map(s => [s.status, s.current, s.result.revision]), [['ok', true, 6]]);
   assert.equal(source.revisions.get(null), 6);
 });
+
+// Review 5: a read's host call begins after an await (a microtask; for another machine, the readiness check). The
+// clock is moved between refresh() and that continuation, with nothing awaited in between. Every host read here
+// hangs, so a read that was started would also keep its machine's slot.
+function delayed(machines) {
+  const t = clock(), answers = { local: 'hang', edge: 'hang' };
+  const { host, reads, hung } = catalogHost({ answers, machines, now: () => t.now });
+  const source = new CatalogSource(host);
+  const state = () => source.sources().map(s => [s.machine, s.status, s.why, s.current]);
+  const readsOn = on => reads.filter(r => r[1] === on).length;
+  return { t, answers, reads, hung, source, state, readsOn };
+}
+const localOnly = [{ name: null, layout: 'ready' }];
+
+const timedOut = machines => machines.map(m => [m.name, 'unavailable', 'timeout', false]);
+
+for (const [label, machines] of [['this computer\'s read', localOnly], ['a ready machine\'s read', both]]) {
+  test(`review 5 (no start past the deadline): ${label}, dispatched an hour late with no poll, makes no host read`, async () => {
+    // The app paused before the continuation ran: an hour on, no tick.
+    const r = delayed(machines);
+    r.source.refresh(); r.t.now += 3600000; await settle();
+    assert.deepEqual(r.reads, [], 'no host read an hour past the deadline');
+    assert.deepEqual(r.state(), timedOut(machines));
+    assert.deepEqual([r.source.busy.size, r.source.deadlines.size], [0, 0], 'nothing was started, so every slot is free at once');
+  });
+
+  test(`review 5 (no start past the deadline): ${label}, dispatched after a poll already ended it, makes no host read`, async () => {
+    // The timeout is delivered by a tick (the read is settled) before the continuation runs.
+    const r = delayed(machines);
+    r.source.refresh(); r.t.now += 5001; r.source.tick();
+    assert.deepEqual(r.state(), timedOut(machines));
+    await settle();
+    assert.deepEqual(r.reads, [], 'a settled read starts nothing');
+    assert.equal(r.source.busy.size, 0, 'no hung host read holds a slot');
+    // The slots are free: the next refresh reads each machine once, and the catalogs are accepted.
+    r.answers.local = catalogText(null, [pilot()], 4); r.answers.edge = catalogText('edge', [pilot()], 4);
+    r.t.now += 60000; r.source.refresh(); await settle();
+    assert.deepEqual(r.reads.map(read => read[1]), machines.map(m => m.name));
+    assert.deepEqual(r.source.sources().map(s => [s.machine, s.status, s.current, s.result.revision]), machines.map(m => [m.name, 'ok', true, 4]));
+    // Those catalogs are kept as stale when the next read is not started in time. Exactly at the deadline is too late.
+    r.answers.local = 'hang'; r.answers.edge = 'hang';
+    r.t.now += 60000; r.source.refresh(); r.t.now += 5000; await settle();
+    assert.equal(r.reads.length, machines.length, 'no further host read');
+    assert.deepEqual(r.source.sources().map(s => [s.machine, s.status, s.why, s.current, s.result.revision]), machines.map(m => [m.name, 'unavailable', 'timeout', false, 4]));
+    assert.deepEqual([...r.source.revisions.values()], machines.map(() => 4));
+  });
+}
+
+test('review 5 (controls): a read dispatched 1 ms before its deadline starts; the readiness checks around a remote read are as before', async () => {
+  const machines = [{ name: null, layout: 'ready' }, { name: 'edge', layout: 'ready' }];
+  const r = delayed(machines);
+  r.answers.local = catalogText(null, [pilot()], 4);
+  r.source.refresh(); r.t.now += 4999; await settle();
+  assert.deepEqual([r.readsOn(null), r.readsOn('edge'), r.source.busy.size], [1, 1, 1], 'both started; the ready machine\'s read is still running');
+  // A machine that stops being ready while its read runs is 'readiness-lost'; one that is not ready is not read.
+  machines[1].layout = 'unavailable';
+  r.hung[0].resolve(catalogText('edge', [pilot()], 4)); await settle();
+  assert.deepEqual(r.state(), [[null, 'ok', null, true], ['edge', 'unavailable', 'readiness-lost', false]]);
+  r.t.now += 60000; r.source.refresh(); await settle();
+  assert.deepEqual([r.readsOn('edge'), r.state()[1]], [1, ['edge', 'unavailable', 'not-ready', false]], 'not ready: no read');
+});
