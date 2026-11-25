@@ -49,6 +49,12 @@ copying that folder. No imports from another mod or from the repo root.
 - Programs run directly with arguments, never through a shell. Open only `https://` URLs, with the
   opener chosen by platform (`opener.js`).
 - `window` inside a view is GPUI's drawing global; import Herdr's `window()` under another name.
+- `cx.spawn` starts its task at once: one started in `render` runs inside render up to its first
+  `await`, and `cx.notify()` there throws. Await once before post-render work. Test fakes must
+  start tasks synchronously too, or they hide this.
+- Herdr's Tab binding moves native focus before `on_key_down` hears Tab: bind Tab to an action
+  under a `key_context` of the mod's own. GPUI also clicks a focused `track_focus` element on
+  Enter/Space after `on_key_down` ran, so a handler that activates on both toggles twice.
 
 ## Never commit
 

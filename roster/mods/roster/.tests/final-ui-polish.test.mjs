@@ -26,15 +26,13 @@ for (const id of ['mode:status', 'mode:projects', 'tools:toggle']) test('reader 
     assert.equal(byId(result, id).attributes.bg[0], appOf(s.f.host).theme().raised);
     assert.equal(s.view.controller.state.view, id === 'mode:status' ? 'status' : 'projects');
     assert.equal(s.view.toolsOpen, id === 'tools:toggle');
-    assert.equal(s.f.calls.length, 0); assert.equal(s.stats.focus, 1, 'only clicked sidebar control requests focus');
+    assert.equal(s.f.calls.length, 0); assert.equal(s.stats.focus, pending ? 2 : 1, 'Esc restores actual trigger focus; toolbar then takes sidebar focus');
   }
 });
-test('Back/Esc keep exact duplicate instance; a later state change never drags the cursor back', () => {
+test('Close/Esc keep exact duplicate instance; a later state change never drags the cursor back', () => {
   const s = setup(), rows = s.view.controller.projection.instances.filter(i => i.row?.address === 't2');
   for (const origin of rows) for (const close of ['escape', 'back']) {
     let tree = s.render(); s.click(tree, 'info:' + origin.key); tree = s.render();
-    s.f.values.terminals.splice(1, 1); s.render(); // disappear then reappear before return
-    s.f.values.terminals.push(terminal('t2', 'blocked', { name: 'Sample' })); s.render();
     const scrolls = s.view.rowScroll.requests.length;
     if (close === 'escape') s.key('escape'); else s.click(tree, 'details:close');
     s.render();

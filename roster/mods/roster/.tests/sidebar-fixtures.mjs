@@ -37,9 +37,11 @@ export class Element {
   constructor() { this.children = []; this.attributes = {}; }
   child(v) { this.children.push(v); return this; }
 }
-for (const name of ['flex', 'flex_col', 'flex_row', 'gap', 'p', 'pl', 'w', 'h', 'id', 'text_size', 'bg', 'text_color', 'size_full', 'flex_1', 'overflow_y_scrollbar', 'track_focus', 'on_key_down', 'on_click', 'accessibility_label', 'tooltip', 'items_center', 'min_w', 'min_h', 'max_h', 'max_w', 'px', 'rounded', 'flex_none', 'truncate', 'font_semibold', 'justify_center', 'track_scroll', 'cursor_pointer', 'cursor_default', 'frames', 'hover', 'font_bold', 'size', 'on_hover', 'absolute', 'relative', 'top', 'left', 'right', 'items_start', 'border', 'border_color', 'py', 'w_full', 'whitespace_normal', 'line_height', 'pb', 'border_b', 'spin', 'loop', 'opacity', 'mt']) {
+for (const name of ['flex', 'flex_col', 'flex_row', 'gap', 'p', 'pl', 'w', 'h', 'id', 'text_size', 'bg', 'text_color', 'size_full', 'flex_1', 'overflow_y_scrollbar', 'track_focus', 'on_key_down', 'on_click', 'accessibility_label', 'tooltip', 'items_center', 'min_w', 'min_h', 'max_h', 'max_w', 'px', 'rounded', 'flex_none', 'truncate', 'font_semibold', 'justify_center', 'track_scroll', 'cursor_pointer', 'cursor_default', 'frames', 'hover', 'font_bold', 'size', 'on_hover', 'absolute', 'relative', 'top', 'left', 'right', 'items_start', 'border', 'border_color', 'py', 'w_full', 'whitespace_normal', 'line_height', 'pb', 'border_b', 'spin', 'loop', 'opacity', 'mt', 'key_context', 'on_action', 'on_mouse_down', 'on_size_change']) {
   Element.prototype[name] = function (...args) { this.attributes[name] = args; return this; };
 }
+// Several actions can sit on one element: keep each by name.
+Element.prototype.on_action = function (action, handler) { (this.actions ??= {})[action] = handler; this.attributes.on_action = [action, handler]; return this; };
 // Like GPUI: cx.notify() during render throws ("not allowed during the `render` phase").
 class GuardedView {
   constructor() {
@@ -58,12 +60,15 @@ const Input = { new: state => { const e = new Element(); e.attributes.input = [s
 export const kit = { View: GuardedView, InputState, Input, image: path => { const e = new Element(); e.attributes.image = [path]; return e; }, svg: path => { const e = new Element(); e.attributes.svg = [path];
   // Chevrons read as text so header assertions stay legible.
   const glyph = { 'chevron-right': '▸', 'chevron-down': '▾' }[path.split('/').pop().replace('.svg', '')]; if (glyph) e.child(glyph); return e; }, ScrollHandle: { new: () => ({ requests: [], scroll_to_item(index) { this.requests.push(index); } }) }, div: () => new Element(), h_flex: () => new Element().flex().flex_row(), v_flex: () => new Element().flex().flex_col() };
+// Like Herdr: cx.spawn starts the task at once, in the caller's phase, up to its first await.
+// A task started from render therefore runs its first part during render (where cx.notify() throws).
+export function spawnNow(fn, cx) { return Promise.resolve(fn(cx)); }
 export function context() {
-  const stats = { focus: 0, notify: 0, stop: 0 }, timers = [], tasks = [];
-  const cx = { focus_handle: () => ({ focus: () => stats.focus++ }), notify: () => {
+  const stats = { focus: 0, notify: 0, stop: 0, focused: null }, handles = [], timers = [], tasks = [];
+  const cx = { focus_handle: () => { const id = handles.length; const h = { id, focus: () => { stats.focus++; stats.focused = id; }, is_focused: () => stats.focused === id, release: () => true }; handles.push(h); return h; }, notify: () => {
     if (cx.phase === 'render') throw Error('cx.notify() is not allowed during the `render` phase; request a re-render from an event handler instead');
     stats.notify++; }, stop_propagation: () => stats.stop++,
-    timer: { after: (ms, callback) => { assert.equal(ms, 2000); timers.push(callback); } }, spawn: fn => { tasks.push(Promise.resolve().then(() => fn(cx))); } };
+    timer: { after: (ms, callback) => { assert.equal(ms, 2000); timers.push(callback); } }, spawn: fn => { tasks.push(spawnNow(fn, cx)); } };
   return { cx, stats, timers, tasks };
 }
 export const flatten = e => e instanceof Element ? [e, ...e.children.flatMap(flatten)] : [];

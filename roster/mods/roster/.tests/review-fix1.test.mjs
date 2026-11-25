@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRosterView } from '../view.js';
 import { GitIdentities, MachineOs, verifyFolder, readyNow, OS_RELEASE } from '../spaces.js';
-import { fakeHost, terminal, kit, context, appOf, flatten, layoutHostUnused } from './sidebar-fixtures.mjs';
+import { spawnNow, fakeHost, terminal, kit, context, appOf, flatten, layoutHostUnused } from './sidebar-fixtures.mjs';
 
 // Regressions for the PR #26 review (round 1): passive remote probes (D8), the folder
 // dialog's keyboard, and the first Needs you arrival's pulse. Neutral sample data.
@@ -172,19 +172,25 @@ function dialog() {
   const Type = createRosterView(kit, appOf(f.host), { host: f.host, layoutHost: layoutHostUnused, exec, pickFolder: async () => '/home/sample/work' });
   const v = new Type(), c = context();
   c.cx.timer.every = () => {}; c.cx.timer.after = () => {};
-  c.cx.spawn = fn => { c.tasks.push(Promise.resolve().then(() => fn(c.cx))); };
+  c.cx.spawn = fn => { c.tasks.push(spawnNow(fn, c.cx)); };
   v.init({}, c.cx);
   // The fake input reports focus like gpui-base: focus() fires its focus handler.
   let inputFocus = 0;
-  v.pathInput.focus = () => { inputFocus++; v.pathInput.handlers.focus?.({}, c.cx); };
+  const mount = () => {
+    if (v.pathInput && !v.pathInput.simulatedFocus) {
+      v.pathInput.simulatedFocus = true;
+      const input = v.pathInput; input.focus = () => { inputFocus++; input.handlers.focus?.({}, c.cx); };
+    }
+    return v.render(c.cx);
+  };
   const key = k => { const before = c.stats.stop; v.key({ keystroke: k }, c.cx); v.render(c.cx); return c.stats.stop > before; };
-  return { f, v, c, key, render: () => v.render(c.cx), inputFocus: () => inputFocus };
+  return { f, v, c, key, render: mount, inputFocus: () => inputFocus };
 }
 const tabTo = (d, target, max = 12) => { for (let n = 0; n < max && d.v.newSpaceCursor !== target; n++) d.key('tab'); return d.v.newSpaceCursor; };
 
 test('keyboard only: open on a remote machine, type a path, check it and create the Space', async () => {
   const d = dialog(); d.render();
-  d.v.openNewSpace('edge', d.c.cx); d.render();
+  d.v.handle.focus(); d.v.openNewSpace('edge', d.c.cx); d.render(); await flush();
   assert.equal(d.inputFocus(), 1, 'the path field takes the keyboard on open');
   assert.equal(d.v.newSpaceCursor, 'new-space:path'); assert.equal(d.v.inputFocused, true);
   // The field keeps its own keys: arrows, Home/End and Enter are not taken by Roster.
@@ -219,7 +225,7 @@ test('keyboard only: Cancel and Esc close the dialog and change nothing', async 
   for (const how of ['cancel', 'escape', 'escape-in-field']) {
     const d = dialog(); d.render();
     d.v.openNewSpace('edge', d.c.cx); d.render();
-    if (how === 'cancel') { d.key('tab'); assert.equal(tabTo(d, 'new-space:cancel'), 'new-space:cancel'); d.key('enter'); }
+    if (how === 'cancel') { d.key('shift-tab'); assert.equal(d.v.newSpaceCursor, 'new-space:cancel'); d.key('enter'); }
     else { if (how === 'escape') d.key('tab'); d.key('escape'); }
     assert.equal(d.v.newSpace, null, how); assert.deepEqual(d.f.calls, [], how);
   }
@@ -227,14 +233,14 @@ test('keyboard only: Cancel and Esc close the dialog and change nothing', async 
 
 // ---- The first arrival pulses even before the first timer tick ----
 
-test('the reviewer timing: empty at 0 ms, a new item at 500 ms, the first tick at 1000 ms pulses; no replay', () => {
+test('the reviewer timing: empty at 0 ms, a new item at 500 ms, the first tick at 1000 ms pulses; no replay', async () => {
   const f = fakeHost([terminal('t1', 'idle', { created_ms: 100, labels: { 'herdr.role': 'developer' } })]);
   const Type = createRosterView(kit, appOf(f.host), { host: f.host, layoutHost: layoutHostUnused, initialView: 'status', storage: null });
   const v = new Type(), c = context(), every = [], after = [];
   c.cx.timer.every = (ms, fn) => every.push(fn); c.cx.timer.after = (ms, fn) => after.push(fn);
   v.init({}, c.cx);
   const bell = () => byId(v.render(c.cx), 'group-icon:' + JSON.stringify(['attention']));
-  v.render(c.cx);                                   // 0 ms: nothing pending
+  v.render(c.cx); await flush();                                   // 0 ms: nothing pending
   f.values.terminals = f.values.terminals.map(t => ({ ...t, status: 'blocked' }));
   v.render(c.cx);                                   // 500 ms: the item arrives and is drawn
   assert.equal(c.stats.notify, 0, 'render asked for no redraw');

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRosterView } from '../view.js';
 import { folderSuggestions, matchingSpace } from '../spaces.js';
-import { fakeHost, terminal, kit, context, appOf, flatten, textOf, layoutHostUnused } from './sidebar-fixtures.mjs';
+import { spawnNow, fakeHost, terminal, kit, context, appOf, flatten, textOf, layoutHostUnused } from './sidebar-fixtures.mjs';
 
 const ok = stdout => ({ code: 0, stdout, stderr: '' });
 const NO_REPO = { code: 128, stdout: '', stderr: 'fatal: not a git repository' };
@@ -25,7 +25,7 @@ function setup({ picked = '/home/sample/work', git = REPOS, hang = false } = {})
   const Type = createRosterView(kit, app, { host: f.host, layoutHost: layoutHostUnused, exec, pickFolder: async o => { picks.push(o); return picked; } });
   const view = new Type(), c = context(), every = [];
   c.cx.timer.every = (ms, fn) => every.push(fn); c.cx.timer.after = () => {};
-  c.cx.spawn = fn => { c.tasks.push(Promise.resolve().then(() => fn(c.cx))); };
+  c.cx.spawn = fn => { c.tasks.push(spawnNow(fn, c.cx)); };
   view.init({}, c.cx);
   return { f, view, ...c, execs, picks, every, render: () => view.render(c.cx), click: (tree, id) => byId(tree, id).attributes.on_click[0]({}, c.cx),
     learn: async () => { every.forEach(fn => fn(c.cx)); await settle(); await settle(); } };
@@ -123,8 +123,8 @@ test('Cancel, × and Esc change nothing; typing in the dialog never triggers Ros
   const cursor = s.view.controller.cursor, state = JSON.stringify(s.view.controller.state);
   for (const key of ['d', 'down', 'enter', 'up']) s.view.key({ keystroke: key }, s.cx);
   assert.equal(s.view.reader, null); assert.equal(s.view.controller.cursor, cursor); assert.equal(JSON.stringify(s.view.controller.state), state);
-  // List clicks are ignored while it is open.
-  s.click(tree, 'space:s-local'); assert.deepEqual(s.f.calls, []);
+  // Surrounding rows remain usable; the form does not block Space navigation.
+  s.click(tree, 'space:s-local'); assert.deepEqual(s.f.calls, [['space.select', { id: 's-local' }]]); s.f.calls.length = 0;
   s.click(tree, 'new-space:cancel'); assert.equal(s.view.newSpace, null);
   tree = s.render(); s.click(tree, 'spaces:new'); s.view.key({ keystroke: 'escape' }, s.cx);
   assert.equal(s.view.newSpace, null); assert.deepEqual(s.f.calls, []); assert.deepEqual(s.execs, []);

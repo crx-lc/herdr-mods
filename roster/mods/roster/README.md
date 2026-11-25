@@ -6,96 +6,149 @@ Read ~/.config/herdr-app/AGENTS.md, then add this mod: https://github.com/crx-lc
 
 # Roster
 
-Roster is an opt-in sidebar with Projects and Status views. It starts with
-`place:none`: installation alone adds no panel or layout change. The current
-Desktop adapter displays provisional terminal rows, native status, validated
-role/work-item labels and GitHub/Azure DevOps badges with declared accessibility
-names. Unknown identity, project and execution context stay explicit. Counts describe observed identities,
-not a verified census across aliases.
-
-**Current limits:** stock Desktop snapshots do not independently establish permanent
-Core identity or uninterrupted remote connection generations. Production therefore
-supplies empty Core mappings, documents, routes, scopes and correlations. **Open
-terminal actions and authoritative delegation waiting are disabled by default.**
-Core-based project/context mappings remain unbound. Equal names or aliases do not
-establish identity. This is a passive fallback from [PR #19](https://github.com/crx-lc/herdr-mods/pull/19) for [#10](https://github.com/crx-lc/herdr-mods/issues/10), not proof
-that every original acceptance criterion is met.
+Roster is an opt-in sidebar with Spaces, Projects and Status tabs. It starts with
+`place:none`: installation alone adds no panel or layout change. Terminal identity,
+project and execution context remain provisional or unknown where the host cannot
+prove them. Native session navigation uses the current exact terminal/pane snapshot;
+it never selects a terminal by its display name. Authoritative delegation waiting
+still requires independent admitted evidence that the stock adapter does not supply.
 
 ## Using the sidebar
 
-The [external Windows R3 report](https://github.com/crx-lc/herdr-mods/issues/21#issuecomment-7083288510) validated runtime source `929d85903dc0b32e2fe05b4b98e8d258c63b7f74` on Windows 11 Pro 10.0.26300, stock Desktop 0.1.16, hc 0.1.21, Node 26.13.1 and tsc 7.0.2. At 100% OS scale the slot was 330×350 physical pixels: zoom 1 uses 330×350 logical, zoom 1.1 uses 300×318 logical. The report records 53 pass, 1 fail, 4 not verifiable, and isolation 3/3. Toolbar return, reader paging, machine/context fit, Options, scrolling and selected-slot opt-in/undo/restart passed the described presentation checks at that source head. Repo tests were 416 total, 415 pass and one optional skip; package inventory had 21 files, typecheck and native check passed, 16 sample states passed and 22 deliberate breaks were detected. This packaging changes only documentation and preview images; runtime files remain byte-identical to that source. Windows did not run on the later packaging commit. Raw private logs were not independently audited here.
+Spaces shows Herdr's Spaces under their machines. Projects groups observed sessions
+by their current Space or independently verified project/parent association; Status
+groups sessions by reported status. Done starts folded. Global **Needs you** stays
+above the tabs, outside the main scrolling list, including when filters hide the
+same session elsewhere. Its repeated group row is an echo of the same session.
 
-**Remaining criteria:** stock Windows UIA exposes no Roster labels; Narrator was not run. Production exact Open/Peek (local, remote and pane-less), authoritative Waiting, private project images and finished rows were not verifiable. Injected route and waiting positives are UI test fixtures, not production capability proof. Issue #21 remains open; no full release acceptance or scope waiver is claimed. Stock Desktop 0.1.16 overlay shows only toolbar and Options; selected Agents-slot opt-in is the tested path.
+**Details**, **Options** and **Open folder as Space** share one disclosure state:
+opening one closes the other. Click the same trigger again to close it. These are
+inline panels, with surrounding rows still usable; none covers the sidebar.
 
-The native tooltip can clip at the window edge; D or pointer Info/Details supplies the complete in-panel reading path. Tested common Unicode and page boundaries preserved text without clipping. Stock fonts displayed regional-indicator components rather than flags, tag sequences as a black flag, and ZWJ sequences as components; lone CR was invisible. These rendering limits are distinct from text loss. The pagination is not full UAX #29.
+- Info (ⓘ), D on a session control, or the footer's Details opens Agent Details
+  directly below that exact row inside its group. The row stays mounted. Current
+  host-reported/verified facts appear first; Technical details expands IDs and paths.
+  Listed Stale/Unknown, disconnected and missing-machine rows remain readable with
+  an unavailable-action reason; unknown identity and missing facts remain unknown. The row name retains its exact
+  guarded native activation. Opening/closing Details does not activate a terminal;
+  **Go to terminal** is a separate explicit action using the same fresh host checks.
+- Options expands immediately below the tab toolbar. It retains independent
+  Machine/Context filters, motion preference and existing Agents-slot controls.
+  Active filters always have a reset. Choosing a filter keeps Options open.
+- A machine's + expands the folder form below that machine's header, showing its
+  exact target machine. The toolbar + uses the shown Space's machine and places
+  the form at that machine; with only this computer listed it sits below the toolbar.
+  Choose folder uses Herdr's unchanged native picker locally. Remote targets use
+  a path field or host-reported suggestions. Checking a path performs the existing
+  bounded read-only Git checks on that machine. Only explicit **Create Space**,
+  **Open existing Space**, **Create another Space**, or the final **Create anyway**
+  action can create/open anything. An unverified folder requires a separate explicit
+  confirmation. Cancel, Esc and a toggled trigger create/open nothing.
 
-Projects groups known project memberships and verified parent relationships;
-otherwise rows appear under explicit Unassigned groups. Status separates Needs
-you, contextual Child needs you, Working, Done, Idle, Offline, Stale and Unknown.
-Only terminals in the current snapshot are displayed; vanished observations are
-omitted, including superseded incarnations at a reused address. No finished state
-is invented. Done starts folded. No supplementary terminal history is acquired.
+Up/Down and Tab/Shift-Tab traverse visible controls in visual order, including
+surrounding rows and inline actions; Enter/Space activates the selected control.
+Herdr's own Tab binding moves native focus before a mod hears the key, so Roster
+binds Tab and Shift-Tab to actions of its own under its `Roster` key context.
+Tab at the last control and Shift-Tab at the first hand on to native focus traversal
+(the window's next or previous tab stop) without wrapping or forcing terminal focus.
+GPUI also clicks a focused trigger on Enter or Space; that click is ignored once
+after the key already activated it, so Enter on the + after Esc reopens the form.
+The real path input keeps its editing keys and Enter checks the path; Tab leaves
+it. Focus is requested after mounting; editing-key ownership starts only on an actual
+focus event. Reopening with Enter after Esc also requests the field when the exact
+current machine trigger holds focus; another control or pane does not authorize it.
+Failed requests leave sidebar keys usable. Home/End and PageUp/PageDown read the panel's scrollable content when the input
+is not editing. Esc closes the panel and focuses the exact surviving trigger via
+its retained native focus handle; if the target disappeared, Projects is the stable
+fallback. Automatic target removal returns focus only when a native focus handle
+or the input's actual focus event says Roster holds the keyboard; visual selection
+alone never authorizes taking focus from a terminal. Native keyboard routing,
+input Esc propagation and focus return still require final Windows validation.
 
-Projects/Status, group and child folds, and independent Machine/Context filters
-change only the sidebar. Open **Options** for filters and Agents-slot controls.
-Unfiltered dimensions with only one available value have no redundant selector;
-when a filter is active, its reset stays available. Global Needs you survives filters and folds; an entry
-outside filters explains why it cannot be opened. Contextual Child needs you
-creates no second actionable parent. Provider badges represent work items, never
-an LLM or group. Rows keep a neutral project monogram and inline provider/state
-chips on their title line. Separate Project and verified Parent lines extend
-beneath the chips. The last line gives machine/route and execution context equal,
-independently bounded columns. It abbreviates an unknown host to Local route or
-Route <alias>; an alias does not verify a host. Full host-unknown and unverified-identity
-diagnostics remain in Details and full hover text.
-Only the projected verified parent supplies a name; missing relationships show
-Not reported or Unknown with the existing resolution. Unassigned projects,
-unknown hosts remain explicit in full details and unknown contexts stay visible. Long row lines ellipsize
-independently; full values are available through Details. Info is a sibling of
-the terminal control and never opens the terminal. Provider markers remain
-separate from project images.
+Panels preserve group folds, list handles and stable row containers. Opening Details
+or a folder form requests a minimal reveal of its owning direct list child after
+render, plus its first inner control (a remote form's focused path field). Herdr runs
+a task started from render at once, inside render, where `cx.notify()` throws: the
+post-render task awaits once before it reveals, redraws or requests focus. Already visible children stay put through the
+supported ScrollHandle API; close adds no compensating jump. Other viewports retain
+their offsets. Actual external Space selection changes reveal promptly from a
+post-render task, including return from Projects/Status and a changed drawn position
+of the same active Space. Folds, unrelated refreshes and panel layout changes do not
+request a selection reveal. Changes observed during inspection are consumed without scrolling
+and are never replayed when a panel closes. Details and
+the folder form use a bounded 112px internal vertical scrollbar (96px for pinned
+Details); the folder form shrinks (to 60px at least) so it fits the visible list with
+its machine header, measured with `on_size_change` (window px, divided by the zoom). In a
+list too short for both, the form becomes its own list row, at most the list's height, and
+revealing it shows the focused path field while the header may scroll off; Options retains its 52px viewport. Long values/actions wrap, with invisible
+wrap opportunities in tokens longer than 24 code points. Accessible labels and
+native action arguments retain the original text. These are compact-layout provisions,
+not evidence of native fit or Unicode shaping. No new screenshot is claimed.
 
-Click gives the sidebar focus. Up/Down selects controls; Enter activates the
-selected control. Normal row Enter keeps its guarded Open semantics. D on a row,
-Info or child-fold control opens the local reader, as do Enter/click on Info or
-the footer's Details (D). The disabled reason retains its own 16px line above a
-16px summary/Details line (32px total); enabled selections use 16px. Full contextual
-hover uses the same facts/reason mapping as the reader, including full waiting
-text even when expanded children use compact Waiting. Native tooltips can clip
-at the window edge; use Info/Details to read every field.
+A panel binds to the exact current projection instance and observed terminal
+incarnation/process/run and observed machine identity/availability, including a
+currently absent machine record. Folder actions require the exact unique ready
+machine (null means this computer). A remote machine named `local` has a separate
+key. Removal, replacement or an observed availability change hides an open panel
+and cancels its state in a subsequent event/task. Opening a new read-only inspection
+of a currently unavailable row is permitted. Ambiguous raw occurrences show an
+explicit Details-unavailable reason instead of a focusable Info trigger. View/filter/fold changes close Details;
+unchanged refreshes do not. Old action callbacks recheck the panel owner, current
+machine, path and proof. Existing Space actions recapture the model and reject a
+changed target. Late picker/check answers cannot enter a replacement panel.
+The public machine API supplies no durable Core/reconnection identity, so no claim
+is made about an unobserved disconnect/replacement between host snapshots. Native
+commands remain the final authority; unsupported identity facts are never invented.
 
-**Details at opening** replaces the content below the toolbar with a captured,
-nonpersistent snapshot of that exact projection instance. Each page shows one
-literal field or its continuation: name, project, verified parent, machine/route,
-context, state, full waiting text when present, work-item/project provider,
-action availability, outside-filter reasons and identity diagnostic. Left/Up and
-Previous go back, Right/Down and Next go forward, Home/End jump first/last, and
-Esc/Back returns to the same surviving control and reveals its row. If that
-instance vanished, return safely to Projects; identical names never rebind it.
-Enter in the reader only operates a reader control and cannot Open a terminal.
-Toolbar clicks close the reader and keep the clicked toolbar cursor/highlight.
-View/filter/fold or Options state transitions cancel origin returns, including a
-Back/Esc return queued before the next render. Unhandled keys
-retain host behavior. The existing explicit focus command still focuses this copy;
-there are no new global keys, overlays or terminal-input changes.
+## Validation and screenshots
 
-Pages preserve every source character, including whitespace and blank lines,
-with at most 64 Unicode code points and three line breaks (CRLF, lone CR or LF) per page;
-there is no total-length clipping. Feasible boundaries preserve regional-indicator
-pairs, emoji tag sequences, CRLF, and common combining/variation/skin-tone/ZWJ
-sequences without Intl. Oversized graphemes split within the fixed budget to
-guarantee progress; this is not a full Unicode grapheme algorithm or font-shaping
-guarantee. Fresh 12px wrapped literal text uses the panel
-width, without ellipsis or clamping. Only the active page is rendered. This
-budget was tested in the R3 report at both zooms, subject to the stock font limits above. The normal-list planning budget is 148px fixed; the reported native worst case showed two full rows and a heading at both zooms.
+Issue #21 was accepted separately; its historical [Windows R3 report](https://github.com/crx-lc/herdr-mods/issues/21#issuecomment-7083288510)
+covered runtime `929d85903dc0b32e2fe05b4b98e8d258c63b7f74`. The repository's preview PNGs
+retain that historical neutral Windows capture provenance. They do not show these
+inline changes. Native navigation/Spaces polish subsequently merged in PR #26;
+this candidate does not infer Windows acceptance for #29 from either earlier result.
 
-With independently verified injected evidence, the actual merged navigation guard
-maps eligible explicit actions to `pane.focus {terminal:exactAddress}` or
-`terminal.peek {terminal:exactAddress}`. It checks the current model pane snapshot
-and its completeness, generation, readiness, identity and current view state.
-Activation recaptures the six getters once; old callbacks, observed disconnects
-and changed model routes fail closed. The shipped adapter cannot supply these
-proofs, and no experimental Core reader is bundled.
+**Issue #29 Windows validation is pending on the final candidate.** Linux Node tests
+and a package inventory do not prove GPUI geometry, pointer hit testing, focus,
+scroll offsets, native picker behavior or accessibility. No installed App/types are
+available in this implementation environment, so App check and typecheck were not run.
+At a neutral 330×350 sidebar, record final commit SHA, installed file hashes, Desktop/
+Core version, OS scale and zoom; verify at zoom 1 and 1.1:
+
+1. Details is immediately below its exact row in Projects, Status and pinned Needs
+   you in all tabs. Test duplicate names, pending echoes and Info/D/footer on listed
+   Stale/Unknown, loading/disconnected/missing-machine and unknown-lifecycle rows.
+   Unavailable rows explain why actions are disabled; existing live inspections close
+   on disconnect/replacement before a new unavailable inspection can be opened.
+2. Info/D/toggle/Esc do not focus/open a terminal; row-name activation still targets
+   the exact local/remote/pane-less session. Panel actions cannot activate a row.
+3. Tab/Shift-Tab and arrows reach surrounding rows and all actions. Check actual
+   focus, not selection tint; Esc returns to exact Info/footer/machine +/Options.
+   Tab forward past the last and backward past the first must leave Roster through
+   native traversal, including from a folder panel; confirm input editing after real
+   focus and usable arrows/Enter/Space when input focus fails. Repeat + → input → Esc
+   → Enter and verify typing enters the path with root focus false and trigger focus
+   true; moving to another control or pane before the task must not steal focus.
+4. Scroll a long list; open/close each panel without resetting its offset/folds.
+   Open at the bottom main row and third/bottom pinned alert: panel and close/Cancel
+   must be visible, with the trigger visible where feasible. Check all three tabs,
+   exact owning viewport and no unrelated offset changes. Needs you stays pinned.
+   External active-Space changes reveal promptly without a panel; changes during
+   inspection must not cause a delayed jump on close, refresh or the next timer.
+   Change selection in both Projects and Status, return to Spaces, then insert/reorder
+   above the same active Space: reveal promptly once at its fresh position. Folding,
+   unchanged refresh and opening/closing panels must not cause unrelated jumps.
+5. Read long names, paths, URLs, multiline/Unicode facts and Technical details;
+   use both internal scroll and keyboard reading without horizontal clipping.
+6. Local/remote folder target and validation are visible. Expand/toggle/Cancel/Esc,
+   including Esc in the input/native picker, create nothing. Test explicit verified,
+   unverified-confirmed, existing and duplicate actions; check the exact machine/path.
+7. Remove/restart a target, filter/fold/switch tabs, disconnect/remove a machine and
+   deliver a late picker/check result. Panels close without rebinding or stale actions;
+   focus falls back safely without stealing terminal input.
+8. Open each panel from every other kind; only one remains. Confirm native Herdr
+   dialogs retain their behavior. Record screenshots, actual focus/scroll observations
+   and failures per state. UIA/Narrator remains the separate #28 tracker.
 
 ## Selected Agents-slot opt-in and undo
 
@@ -253,7 +306,7 @@ the current scope; the old Phase 2/#18 gate is retired.
 ## Package inventory and acceptance evidence
 
 From the repository root, run `node scripts/roster-package.mjs`. It prints the
-sorted, repository-relative paths of the 21 installed-folder files that would
+sorted, repository-relative paths of the 50 installed-folder files that would
 ship. It only reads the repository package; it never copies, installs, syncs,
 loads mod code or consults a live App home. No destination options are accepted.
 This is a separate inventory policy, not a dry run of `scripts/sync.mjs` (whose

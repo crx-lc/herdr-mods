@@ -158,14 +158,14 @@ test('a worktree whose main checkout has no Space stays a regular row', async ()
   assert.equal(byId(tree, 'space-tree:s-wt'), undefined); assert.ok(byId(tree, 'space-avatar:s-wt'));
 });
 
-test('the active Space is brought into view once when it or its place changes', () => {
+test('the active Space is revealed promptly by a post-render task on selection change', async () => {
   const d = desk(), s = view(d);
-  s.render();
+  s.render(); await settle();
   assert.deepEqual(s.v.rowScroll.requests, [1], 'header, then Main');
-  s.render(); assert.deepEqual(s.v.rowScroll.requests, [1], 'unchanged: no new request');
-  d.f.values.spaces = d.f.values.spaces.map(x => ({ ...x, active: x.id === 'edge/s-r' })); s.render();
+  s.render(); await settle(); assert.deepEqual(s.v.rowScroll.requests, [1], 'unchanged: no new request');
+  d.f.values.spaces = d.f.values.spaces.map(x => ({ ...x, active: x.id === 'edge/s-r' })); s.render(); await settle();
   assert.deepEqual(s.v.rowScroll.requests, [1, 5], 'machine headers count as rows');
-  const notifies = s.stats.notify; s.render(); assert.equal(s.stats.notify, notifies);
+  const notifies = s.stats.notify; s.render(); await settle(); assert.equal(s.stats.notify, notifies);
 });
 
 test('state queries are read-only and fetch nothing; each answer only counts when its query succeeded', () => {

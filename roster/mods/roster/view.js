@@ -1,7 +1,8 @@
+import { machineAnchor, rowAnchor, sameDisclosure, returnControl, folderActionAllowed, panelText, spaceAnchor } from './disclosure.js';
 import { Controller } from './controller.js';
 import { LayoutOptIn } from './layout.js';
 import { desktopHost, desktopLayoutHost } from './desktop.js';
-import { spaceRows, spaceFill, spacePlace, GitIdentities, MachineOs, folderSuggestions, matchingSpace, verifyFolder } from './spaces.js';
+import { spaceRows, machineKey, spaceFill, spacePlace, GitIdentities, MachineOs, folderSuggestions, matchingSpace, verifyFolder, spaceObservation } from './spaces.js';
 import { actionReason, rowContext, detailLabel, hoverText, reasonText, agentFacts, homeRelative } from './detail.js';
 import { terminalKind } from './runtime.js';
 import { reducedMotion, readStored, writeStored, Arrivals, PULSE } from './motion.js';
@@ -10,6 +11,14 @@ import { reducedMotion, readStored, writeStored, Arrivals, PULSE } from './motio
 export const STATUS_ICONS = Object.freeze({ 'Needs you': 'bell', 'Child needs you': 'bell-dot', Working: 'working', Done: 'check-circle', Idle: 'pause-circle', Offline: 'offline', Stale: 'clock', Unknown: 'help-circle' });
 // Stock-style working spinner frames, drawn natively by frames().
 export const WORKING_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+// Tab and Shift-Tab inside Roster. Herdr's own Tab binding moves native focus before
+// on_key_down hears the key; a binding of Roster's own, deeper in, comes first.
+export const TAB_ACTIONS = Object.freeze({ next: 'roster_tab_next', prev: 'roster_tab_prev' });
+// The inline folder form: its full height, the least it shrinks to under its machine header,
+// and the least it takes as a row of its own in a list too short for both (the path field).
+export const FOLDER = Object.freeze({ height: 112, min: 60, least: 36 });
+// The one group header's measures (see groupHeader in render).
+const HEADER = Object.freeze({ height: 30, iconSize: 18, titleSize: 13, chevron: 11, gapAbove: 8 });
 export function timerDeadline(cx, promise) {
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -30,6 +39,7 @@ export function createRosterView(kit, app, options = {}) {
   return class Roster extends View {
     init(_props, cx) {
       this.handle = cx.focus_handle();
+      this.triggerHandles = new Map([['mode:projects', cx.focus_handle()]]); this.panelScroll = ScrollHandle.new(); this.panel = null;
       this.rowScroll = ScrollHandle.new();
       this.optionsScroll = ScrollHandle.new();
       // The pinned Needs you list scrolls on its own, outside the tabs' list.
@@ -42,15 +52,15 @@ export function createRosterView(kit, app, options = {}) {
       this.controls = []; this.message = ''; this.selection = null; this.reading = false; this.toolsOpen = false;
       // Where the cursor was when an event last placed it; Up/Down resume there if its row vanishes.
       this.cursorAt = null;
-      // "Open folder as Space…": a retained path field for remote machines, made once here.
+      // "Open folder as Space…": each owner gets its own retained remote path field.
       this.newSpace = null;
-      this.pathInput = typeof InputState?.new === 'function' ? InputState.new({ placeholder: 'Folder on that machine' }) : null;
-      this.pathInput?.on?.('submit', (_e, cx) => { if (this.newSpace) this.checkFolder(this.pathInput.value(), cx); });
-      // The dialog knows when its path field holds the keyboard, so the field keeps its keys.
-      this.pathInput?.on?.('focus', () => { this.inputFocused = true; if (this.newSpace) this.newSpaceCursor = 'new-space:path'; });
-      this.pathInput?.on?.('blur', () => { this.inputFocused = false; });
+      this.pathInput = null; this.inputFocused = false;
+      // Tab within Roster (TAB_ACTIONS); without bindings, key() still hears Tab as a key.
+      try { cx.bind_keys?.([{ keystroke: 'tab', action: TAB_ACTIONS.next, context: 'Roster' },
+        { keystroke: 'shift-tab', action: TAB_ACTIONS.prev, context: 'Roster' }]); } catch { /* Keys stay with on_key_down. */ }
+      this.keyEcho = null; this.listHeight = 0;
       // D8: whether Herdr reports a machine ready right now, from a fresh machines().
-      this.isReady = machine => (this.controller.host.machines() ?? []).some(m => (m?.name ?? null) === machine && m?.layout === 'ready');
+      this.isReady = machine => machineAnchor(machine, this.controller.host.machines() ?? []) !== null;
       if (!app.checking()) cx.spawn(async cx => {
         for (;;) { if (await app.nextCommand() === 'focus') this.focus(cx); }
       });
@@ -68,7 +78,7 @@ export function createRosterView(kit, app, options = {}) {
         this.machineReady = new Map();
       }
       // One gentle 1s timer: the Needs you arrival check, and the Spaces probes when there are any.
-      if (ticking) cx.timer.every(1000, cx => { this.watchArrivals(cx); if (this.machineReady) this.pollGit(cx); });
+      if (ticking) cx.timer.every(1000, cx => { this.reconcilePanel(cx); this.watchArrivals(cx); if (this.machineReady) this.pollGit(cx); });
     }
     // Watch readiness in every tab; ask about Spaces' folders on ready machines while Spaces
     // is shown; redraw on answers.
@@ -113,6 +123,7 @@ export function createRosterView(kit, app, options = {}) {
       if (control?.rowIndex != null) this.rowScroll.scroll_to_item(control.rowIndex);
       if (control?.optionIndex != null) this.optionsScroll.scroll_to_item(control.optionIndex);
       if (control?.pinnedIndex != null) this.pinnedScroll.scroll_to_item(control.pinnedIndex);
+      if (control?.panelIndex != null) this.panelScroll.scroll_to_item(control.panelIndex);
     }
     // Render never changes state or asks for a redraw (GPUI throws on cx.notify() there).
     // Everything below that moves the cursor, scrolls or closes Details runs in an event.
@@ -121,145 +132,267 @@ export function createRosterView(kit, app, options = {}) {
       const index = this.controls.findIndex(control => control.key === key);
       this.cursorAt = index < 0 ? null : { key, index };
     }
-    // Details stay open only while the view they were opened over is unchanged.
-    activeReader() {
+    activeReader(projection = this.controller.projection) {
       const reader = this.reader;
-      return reader && reader.state === JSON.stringify(this.controller.state) && reader.toolsOpen === this.toolsOpen ? reader : null;
+      const i = projection?.instances.find(i => i.key === reader?.sourceKey);
+      return reader && reader.state === JSON.stringify(this.controller.state)
+        && rowAnchor(i, this.controller.feed.snapshot) === reader.anchor ? reader : null;
     }
-    // "Open folder as Space…": nothing is created until a final, explicit choice. Cancel
-    // and Esc change nothing.
-    openNewSpace(machine, cx) {
-      this.closeDetails(cx, false);
-      this.newSpace = { machine: machine ?? null, folder: null, check: null, confirmUnverified: false };
-      this.pathInput?.set_value?.('');
-      // The keyboard starts where the work starts: the path field on a remote machine,
-      // Choose folder… on this computer.
-      if (this.newSpace.machine && this.pathInput) { this.newSpaceCursor = 'new-space:path'; this.pathInput.focus?.(); }
-      else this.newSpaceCursor = 'new-space:pick';
+    // The same event path owns all Roster disclosures. Native picker/dialogs stay native.
+    dismissPanel(cx, restore = true) {
+      const panel = this.panel;
+      if (panel) this.observedSpace = this.currentSpaceObservation();
+      this.panel = null; this.reader = null; this.newSpace = null; this.toolsOpen = false;
+      const oldInput = this.pathInput; this.pathInput = null; oldInput?.release?.();
+      this.readerControls = []; this.inputFocused = false; this.inputRequest = null; this.newSpaceCursor = null;
+      if (restore && panel) {
+        const projection = this.controller.render();
+        const available = this.controls.filter(control => !control.instance || projection.instances.some(i => i.key === control.instance.key));
+        // A missing machine's old controls cannot receive a return.
+        const ready = panel.kind !== 'folder' || machineAnchor(panel.machine, this.controller.host.machines());
+        const key = returnControl(ready ? panel.returnKey : null, available);
+        this.place(key);
+        (this.triggerHandles.get(key) ?? this.handle).focus();
+      }
       cx.notify();
     }
-    closeNewSpace(cx) { this.newSpace = null; this.newSpaceCursor = null; this.inputFocused = false; this.handle.focus(); cx.notify(); }
-    // Moves the dialog's keyboard cursor; the path field takes real keyboard focus.
+    beginPanel(kind, anchor, returnKey, cx, extra = {}) {
+      if (!anchor) return false;
+      const same = sameDisclosure(this.panel, kind, anchor);
+      this.dismissPanel(cx, false);
+      if (same) { this.place(returnKey); (this.triggerHandles.get(returnKey) ?? this.handle).focus(); return false; }
+      for (const [key, handle] of this.triggerHandles) if (key !== 'mode:projects' && !this.controls.some(control => control.key === key)) { handle.release?.(); this.triggerHandles.delete(key); }
+      if (!this.triggerHandles.has(returnKey)) this.triggerHandles.set(returnKey, cx.focus_handle());
+      this.panelRead = 0;
+      this.panel = { kind, anchor, returnKey, revealPending: true, ...extra };
+      return true;
+    }
+    reconcilePanel(cx) {
+      if (!this.panel) return;
+      const projection = this.controller.render();
+      if ((this.reader && !this.activeReader(projection)) || (this.newSpace && !this.activeNewSpace())) this.invalidatePanel(cx);
+    }
+    invalidatePanel(cx) {
+      // Only actual native focus (or the input's focus event) authorizes a focus return.
+      const held = this.inputFocused || this.handle.is_focused?.() === true
+        || [...this.triggerHandles.values()].some(handle => handle.is_focused?.() === true);
+      this.dismissPanel(cx, false); this.place('mode:projects');
+      if (held) this.triggerHandles.get('mode:projects').focus();
+    }
+    activeNewSpace() {
+      return this.newSpace && this.controller.state.view === 'spaces'
+        && machineAnchor(this.newSpace.machine, this.controller.host.machines()) === this.newSpace.anchor;
+    }
+    openNewSpace(machine, cx, returnKey = 'spaces:new') {
+      machine = machine ?? null;
+      const anchor = machineAnchor(machine, this.controller.host.machines());
+      if (!this.beginPanel('folder', anchor, returnKey, cx, { machine })) return;
+      this.newSpace = { machine, anchor, returnKey, folder: null, check: null, confirmUnverified: false };
+      this.makePathInput();
+      // The real input keeps editing keys; Tab can leave the inline form for surrounding rows.
+      this.newSpaceCursor = machine && this.pathInput ? 'new-space:path' : 'new-space:pick';
+      this.place(this.newSpaceCursor);
+      if (machine && this.pathInput) this.requestInputFocus();
+      cx.notify();
+    }
+    makePathInput() {
+      const owner = this.newSpace;
+      const input = typeof InputState?.new === 'function' ? InputState.new({ placeholder: 'Folder on that machine' }) : null;
+      this.pathInput = input;
+      const current = () => this.newSpace === owner && this.pathInput === input && this.activeNewSpace();
+      input?.on?.('change', (_e, cx) => {
+        if (!current()) return;
+        if (owner.folder && input.value().trim() !== owner.folder) {
+          owner.folder = null; owner.check = null; owner.confirmUnverified = false; cx.notify();
+        }
+      });
+      input?.on?.('submit', (_e, cx) => { if (current()) this.checkFolder(input.value(), cx); });
+      input?.on?.('focus', () => {
+        if (!current()) return;
+        // A native focus event also covers clicking back into the mounted field.
+        this.inputFocused = true; this.newSpaceCursor = 'new-space:path'; this.place('new-space:path');
+      });
+      input?.on?.('blur', () => { if (this.pathInput === input) this.inputFocused = false; });
+    }
+    requestInputFocus() {
+      this.inputFocused = false;
+      this.inputRequest = { owner: this.newSpace, input: this.pathInput };
+    }
+    // Render supplies fresh direct-child indices; native requests execute in a task.
+    afterRender(cx, panel, controls, selection) {
+      this.observeSpace(selection, cx);
+      if (this.panel !== panel || !panel) return;
+      this.reconcilePanel(cx);
+      if (this.panel !== panel) return;
+      if (panel.revealPending) {
+        panel.revealPending = false;
+        // A remote folder form's first control is its focused path field: that is what must show.
+        const firstKey = panel.kind === 'details' ? 'details:close'
+          : panel.kind === 'folder' ? (controls.some(c => c.key === 'new-space:path') ? 'new-space:path' : 'new-space:cancel') : null;
+        const first = controls.find(c => c.key === firstKey);
+        if (first) { this.reveal(first); cx.notify(); }
+      }
+      const request = this.inputRequest;
+      this.inputRequest = null;
+      if (request && this.newSpace === request.owner && this.pathInput === request.input
+        && this.controller.cursor === 'new-space:path'
+        && (this.handle.is_focused?.() === true
+          || (controls.some(control => control.key === panel.returnKey)
+            && this.triggerHandles.get(panel.returnKey)?.is_focused?.() === true))) {
+        // Failure or no focus event leaves normal sidebar keys usable.
+        try { request.input?.focus?.(); } catch { this.inputFocused = false; }
+      }
+    }
+    closeNewSpace(cx) { this.dismissPanel(cx); }
     placeNewSpace(control, cx) {
-      this.newSpaceCursor = control.key;
-      if (control.input) this.pathInput?.focus?.();
+      this.newSpaceCursor = control.key; this.place(control.key);
+      if (control.input) { this.requestInputFocus(); try { this.pathInput?.focus?.(); } catch { /* Await actual focus. */ } }
       else { this.inputFocused = false; this.handle.focus(); }
       cx.notify();
     }
     // This computer: Herdr's native folder picker.
     async chooseLocalFolder(cx) {
       const pick = options.pickFolder ?? app.pickFolder;
-      if (typeof pick !== 'function' || !this.newSpace) return;
-      const folder = await pick({ prompt: 'Open as Space' });
-      if (folder && this.newSpace) this.checkFolder(folder, cx); else cx.notify();
+      const ns = this.newSpace;
+      if (typeof pick !== 'function' || !ns || !this.activeNewSpace()) return;
+      let folder;
+      try { folder = await pick({ prompt: 'Open as Space' }); }
+      catch { if (this.newSpace === ns) { this.message = 'Folder picker unavailable'; cx.notify(); } return; }
+      if (folder && this.newSpace === ns && this.activeNewSpace()) this.checkFolder(folder, cx); else cx.notify();
     }
     // Verify with the two read-only identity queries; a negative answer is "Not verified".
     checkFolder(folder, cx) {
       const ns = this.newSpace, target = typeof folder === 'string' ? folder.trim() : '';
-      if (!ns || !target) return;
+      if (!ns || !this.activeNewSpace()) return;
+      if (!target || /[\x00-\x1f\x7f]/.test(target)) {
+        Object.assign(ns, { folder: null, check: null, confirmUnverified: false });
+        this.message = 'Choose a nonempty folder without control characters'; cx.notify(); return;
+      }
       Object.assign(ns, { folder: target, check: { status: 'checking' }, confirmUnverified: false });
       cx.notify();
       const exec = options.exec ?? app.exec;
-      if (typeof exec !== 'function') { ns.check = { status: 'unsure' }; return; }
+      if (typeof exec !== 'function') { ns.check = { status: 'unsure' }; cx.notify(); return; }
       cx.spawn(async cx => {
         const result = await verifyFolder(exec, ns.machine, target, (ms, fn) => cx.timer.after(ms, fn), 12000, this.isReady);
-        if (this.newSpace === ns && ns.folder === target) { ns.check = result; cx.notify(); }
+        if (this.newSpace === ns && ns.folder === target) {
+          if (!this.activeNewSpace()) this.dismissPanel(cx, false);
+          else { ns.check = result; cx.notify(); }
+        }
       });
     }
-    createSpace(cx) {
-      const ns = this.newSpace;
-      if (!ns?.folder) return;
-      this.controller.host.run('space.new', { machine: ns.machine ?? '', folder: ns.folder });
+    createSpace(cx, ns = this.newSpace, folder = ns?.folder, confirmed = false) {
+      if (app.checking() || this.newSpace !== ns || !this.activeNewSpace()
+        || (ns.machine && this.pathInput && this.pathInput.value().trim() !== folder)
+        || !folderActionAllowed(ns, machineAnchor(ns?.machine, this.controller.host.machines()), folder, confirmed)) return;
+      this.controller.host.run('space.new', { machine: ns.machine ?? '', folder });
       this.closeNewSpace(cx);
     }
-    // Agent details open as a compact modal over the list. The list stays mounted under
-    // it, so its scroll position and expanded groups never change.
+    openExistingSpace(ns, folder, existing, expectedAnchor, cx) {
+      if (app.checking() || this.newSpace !== ns || !this.activeNewSpace()
+        || (ns.machine && this.pathInput && this.pathInput.value().trim() !== folder)
+        || !folderActionAllowed(ns, machineAnchor(ns.machine, this.controller.host.machines()), folder)) return;
+      this.controller.observe();
+      const snapshot = this.controller.feed.snapshot;
+      const current = matchingSpace(ns.machine, ns.check.top, snapshot.spaces, snapshot.panes, (m, f) => this.git?.lookup(m, f) ?? null);
+      if (!current || current.id !== existing.id || spaceAnchor(current, snapshot.panes) !== expectedAnchor) return;
+      this.controller.host.run('space.select', { id: current.id }); this.closeNewSpace(cx);
+    }
     openDetails(control, cx) {
       if (!control?.instance) return;
-      this.reader = { sourceKey: control.instance.key, returnKey: control.key,
-        state: JSON.stringify(this.controller.state), toolsOpen: this.toolsOpen, technical: false };
-      this.readerCursor = null; this.readerControls = [];
+      const projection = this.controller.render();
+      const instance = projection.instances.find(i => i.key === control.instance.key);
+      const anchor = rowAnchor(instance, this.controller.feed.snapshot);
+      if (!anchor || (control.anchor && anchor !== control.anchor)) { this.message = 'Details unavailable: the exact listed instance changed or is ambiguous'; cx.notify(); return; }
+      if (!this.beginPanel('details', anchor, control.key, cx)) return;
+      this.reader = { sourceKey: instance.key, returnKey: control.key, anchor,
+        state: JSON.stringify(this.controller.state), technical: false };
+      this.readerCursor = 'details:close'; this.place('details:close'); this.readerControls = [];
       cx.notify();
     }
-    closeDetails(cx, returnToOrigin = true) {
-      const reader = this.reader;
-      if (!reader) return;
-      this.reader = null; this.readerControls = [];
-      // Esc/× keep the list's controls; a view, filter or Options change makes them stale.
-      if (returnToOrigin) this.returnTo(reader); else this.controls = [];
-      cx.notify();
+    closeDetails(cx, returnToOrigin = true) { if (this.reader) this.dismissPanel(cx, returnToOrigin); }
+    // True once for the native click GPUI sends a focused trigger after key() activated it.
+    takeKeyEcho(key) {
+      const echo = this.keyEcho === key;
+      if (echo) this.keyEcho = null;
+      return echo;
     }
-    // Esc or ×: the cursor goes back to the exact control the modal was opened from, on the
-    // same row, if that row is still listed; otherwise to Projects. No scrolling.
-    returnTo(reader) {
-      const c = this.controller, projection = c.render();
-      const instance = projection.instances.find(i => i.kind === 'terminal' && i.key === reader.sourceKey);
-      if (!instance) { this.place('mode:projects'); return; }
-      const parent = c.feed.reduced.rows.some(r => r.parent?.associationKey && r.parent.associationKey === instance.row.associationKey);
-      const key = reader.returnKey === 'fold:' + reader.sourceKey && !parent ? reader.sourceKey : reader.returnKey;
-      if (key === 'details:open') this.footerSourceKey = reader.sourceKey;
-      c.cursor = key; this.cursorAt = { key, index: null };
+    // At either end, Tab goes on to the window's next tab stop, as Herdr's own binding does.
+    leave(step) {
+      const surface = options.window ?? globalThis.window;
+      try { if (step > 0) surface?.focus_next?.(); else surface?.focus_prev?.(); } catch { /* Nothing else to reach. */ }
     }
-    key(event, cx) {
+    // The visible list's height; the folder form fits it with its machine header.
+    // on_size_change reports window px; the form's heights are written at zoom 1.
+    measureList(size, cx) {
+      const settings = typeof app.settings === 'function' ? app.settings() : null;
+      const zoom = Number(settings?.zoom) > 0 ? Number(settings.zoom) : 1;
+      const height = Math.floor((size?.height ?? 0) / zoom);
+      if (!(height > 0) || height === this.listHeight) return;
+      this.listHeight = height;
+      if (this.panel?.kind === 'folder') { this.panel.revealPending = true; cx.notify(); }
+    }
+    // True when the header and the least form don't fit the list together.
+    folderApart(above) { return this.listHeight > 0 && this.listHeight < above + FOLDER.min; }
+    folderHeight(above) {
+      const room = this.listHeight;
+      if (!(room > 0)) return FOLDER.height;
+      // A form of its own takes at most the whole list, so revealing it shows all of it.
+      if (this.folderApart(above)) return Math.max(FOLDER.least, Math.min(FOLDER.height, room));
+      return Math.max(FOLDER.min, Math.min(FOLDER.height, Math.floor(room - above)));
+    }
+    key(event, cx, traversal = false) {
       const chord = event.keystroke;
-      if (this.newSpace) {
-        // The dialog has its own order: Tab, Shift-Tab and the arrows move through its
-        // controls (the path field is one stop), Enter or Space activates, Esc closes.
-        // While the path field holds the keyboard it keeps its own keys (editing, arrows,
-        // Enter submits through its own handler); only Tab and Shift-Tab leave it.
-        if (chord === 'escape') { cx.stop_propagation(); this.closeNewSpace(cx); return; }
-        const controls = this.readerControls, at = controls.findIndex(k => k.key === this.newSpaceCursor);
-        const back = ['shift-tab', 'up', 'left'].includes(chord), forward = ['tab', 'down', 'right'].includes(chord);
-        if (this.inputFocused && chord !== 'tab' && chord !== 'shift-tab') return;
-        if ((back || forward) && controls.length) {
-          cx.stop_propagation();
-          const step = back ? -1 : 1, next = at < 0 ? (back ? controls.length - 1 : 0) : (at + step + controls.length) % controls.length;
-          this.placeNewSpace(controls[next], cx);
-        } else if ((chord === 'enter' || chord === 'space') && at >= 0) {
-          cx.stop_propagation();
-          controls[at].activate(cx);
-        }
-        return;
-      }
-      // Details left over from a changed view are dropped here, in the event, not in render.
-      if (this.reader && !this.activeReader()) { this.reader = null; this.readerControls = []; }
-      if (this.reader) {
-        const controls = this.readerControls, at = controls.findIndex(i => i.key === this.readerCursor);
-        if (chord === 'escape') this.closeDetails(cx);
-        else if (['up', 'down', 'left', 'right'].includes(chord) && controls.length) {
-          const step = ['up', 'left'].includes(chord) ? -1 : 1;
-          this.readerCursor = controls[at < 0 ? (step > 0 ? 0 : controls.length - 1) : (at + step + controls.length) % controls.length].key;
-          cx.notify();
-        } else if (chord === 'enter') (at < 0 ? controls[0] : controls[at])?.activate(cx);
-        else return;
-        cx.stop_propagation();
-        return;
+      const previousPanel = this.panel;
+      this.keyEcho = null;
+      this.reconcilePanel(cx);
+      if (chord === 'escape' && previousPanel && !this.panel) { this.place('mode:projects'); this.triggerHandles.get('mode:projects').focus(); cx.stop_propagation(); cx.notify(); return; }
+      if (chord === 'escape' && this.panel) { cx.stop_propagation(); this.dismissPanel(cx); return; }
+      if (this.inputFocused && chord !== 'tab' && chord !== 'shift-tab') return;
+      if (this.panel && ['home', 'end', 'pageup', 'pagedown'].includes(chord)) {
+        const total = this.panelItems ?? 0;
+        this.panelRead = chord === 'home' ? 0 : chord === 'end' ? Math.max(0, total - 1)
+          : Math.max(0, Math.min(total - 1, (this.panelRead ?? 0) + (chord === 'pageup' ? -1 : 1)));
+        (this.toolsOpen ? this.optionsScroll : this.panelScroll).scroll_to_item(this.panelRead); cx.stop_propagation(); return;
       }
       if (chord === 'd') {
         const selected = this.controls.find(i => i.key === this.controller.cursor);
         if (!selected?.instance) return;
         cx.stop_propagation(); this.openDetails(selected, cx); return;
       }
-      if (!['up', 'down', 'enter'].includes(chord)) return;
-      cx.stop_propagation();
+      if (!['up', 'down', 'tab', 'shift-tab', 'enter', 'space'].includes(chord)) return;
       const c = this.controller, controls = this.controls, count = controls.length;
-      // Enter acts only on the exact control under the cursor. If that row vanished, Enter
-      // does nothing: a neighbour is never activated in its place.
-      if (chord === 'enter') controls.find(i => i.key === c.cursor)?.activate(cx);
+      const at = controls.findIndex(i => i.key === c.cursor);
+      // At either boundary let native Tab traversal leave this sidebar.
+      if ((chord === 'tab' && (count === 0 || at === count - 1))
+        || (chord === 'shift-tab' && (count === 0 || at === 0))) { if (traversal) this.leave(chord === 'tab' ? 1 : -1); return; }
+      cx.stop_propagation();
+      if (chord === 'enter' || chord === 'space') {
+        const control = controls.find(i => i.key === c.cursor);
+        // A focused trigger also gets GPUI's keyboard click; that echo must not toggle it back.
+        if (control && this.triggerHandles.get(control.key)?.is_focused?.() === true) this.keyEcho = control.key;
+        control?.activate(cx);
+      }
       else if (count) {
-        const index = controls.findIndex(i => i.key === c.cursor), step = chord === 'up' ? -1 : 1;
+        const index = controls.findIndex(i => i.key === c.cursor), step = ['up', 'shift-tab'].includes(chord) ? -1 : 1;
         let next;
         if (index >= 0) next = (index + step + count) % count;
         else if (this.cursorAt?.key === c.cursor && this.cursorAt.index != null) {
-          // The selected row vanished: resume beside where it was.
           const at = Math.min(this.cursorAt.index, count - 1);
           next = step > 0 ? at : Math.max(0, Math.min(this.cursorAt.index, count) - 1);
         } else next = step > 0 ? 0 : count - 1;
-        this.place(controls[next].key);
-        if (controls[next].key === 'details:open') this.footerSourceKey = controls[next].instance?.key ?? this.footerSourceKey;
-        this.reveal(controls[next]);
+        const control = controls[next];
+        this.place(control.key); this.newSpaceCursor = control.key; this.readerCursor = control.key;
+        if (control.input) { this.requestInputFocus(); try { this.pathInput?.focus?.(); } catch { /* No focus event: keep sidebar keys. */ } }
+        else { this.inputFocused = false; this.handle.focus(); }
+        this.reveal(control);
       }
       cx.notify();
+    }
+    // A bounded shared inline surface. It is a sibling below its trigger, never absolute.
+    disclosure(id, theme, { v, muted }, height = 112) {
+      return v().id(id).h(height).flex_none().min_w(0).min_h(0).overflow_y_scrollbar().track_scroll(this.panelScroll)
+        .p(6).gap(3).rounded(6).bg(theme.raised ?? theme.surface).border(1).border_color(theme.border ?? muted)
+        .on_click((_e, cx) => cx.stop_propagation());
     }
     // Herdr's Spaces, in the stock list's order and look. A click selects the Space natively.
     renderSpaces(body, theme, { click, change, labelText, h, fg, muted, groupHeader }) {
@@ -268,29 +401,49 @@ export function createRosterView(kit, app, options = {}) {
       const identityOf = space => this.git?.lookup(space.machine ?? null, spacePlace(space, snapshot.panes)) ?? null;
       const rows = spaceRows({ spaces: snapshot.spaces, machines: snapshot.machines }, { colors, folds: c.state.folds, identityOf });
       // The list scrolls by its direct children; count them to find the active row's place.
-      let drawn = 0, activeAt = -1, activeId = null;
+      let drawn = 0, activeAt = -1, activeId = snapshot.spaces?.find(sp => sp.active)?.id ?? null;
       const add = element => { body.child(element); drawn++; };
+      if (this.activeNewSpace() && !rows.some(row => row.kind === 'machine' && row.machine === this.newSpace.machine)) {
+        const before = this.controls.length;
+        add(this.renderNewSpace(theme, { labelText, h, v: () => v_flex(), fg, muted }, 0));
+        for (const control of this.controls.slice(before)) control.rowIndex = drawn - 1;
+      }
       for (const row of rows) {
         if (row.kind === 'machine') {
           // As in the stock list: icon, name, state when not connected, then +, the
           // connection dot and the fold chevron last.
-          const dim = theme.dim ?? muted, newSpace = cx => this.openNewSpace(row.machine, cx);
+          const before = this.controls.length;
+          const trigger = 'machine-add:' + row.key;
+          const dim = theme.dim ?? muted, newSpace = cx => this.openNewSpace(row.machine, cx, trigger);
           // The OS icon when known (PRETTY_NAME in the tooltip), else the generic machine icon.
           const os = this.os?.lookup(row.machine) ?? null;
           const extras = [];
           if (!row.ready) extras.push(div().id('machine-note:' + row.key).flex_none().child(row.loading ? 'loading' : 'not connected'));
-          else extras.push(h().id('machine-add:' + row.key).flex_none().px(4).rounded(4).cursor_pointer()
+          else extras.push(click(trigger, 'Open folder as Space on ' + row.label, newSpace).flex_none().px(4).rounded(4).cursor_pointer()
             .hover(el => el.bg(theme.hover ?? theme.raised).text_color(fg)).tooltip('New space on ' + (row.machine ?? 'this computer'))
             .accessibility_label('New space on ' + row.label)
-            .on_click((_e, cx) => { cx.stop_propagation(); if (!this.reader && !this.newSpace) newSpace(cx); }).child('+'));
+            .child('+'));
           extras.push(div().id('machine-state:' + row.key).size(6).rounded(3).flex_none().bg(row.ready ? theme.ansi2 ?? theme.working ?? fg : dim));
-          add(groupHeader(row.key, row.label + (row.collapsed ? ', folded' : ''), row.label,
+          const header = groupHeader(row.key, row.label + (row.collapsed ? ', folded' : ''), row.label,
             change({ type: 'fold', key: row.key, collapsed: !row.collapsed }),
             { icon: os?.icon ?? (row.machine ? 'server' : 'monitor'), collapsed: row.collapsed, extras, first: row === rows[0],
-              tooltip: [row.label, os?.tooltip, row.machine ? (row.ready ? 'connected' : row.loading ? 'loading' : 'not connected') : null].filter(Boolean).join(' · ') }));
-          if (!row.collapsed && row.count === 0 && row.ready) add(click('spaces:new:' + (row.machine ?? 'local'), 'New space on ' + row.label, newSpace)
+              tooltip: [row.label, os?.tooltip, row.machine ? (row.ready ? 'connected' : row.loading ? 'loading' : 'not connected') : null].filter(Boolean).join(' · ') });
+          const headerControl = this.controls.pop();
+          this.controls.splice(row.ready ? this.controls.length - 1 : this.controls.length, 0, headerControl);
+          const block = v_flex().id('machine-block:' + row.key).flex_none().min_w(0).child(header);
+          // Below its header (and the gap above a later header), the form still fits the list.
+          // In a list too short for both it is a row of its own that the list can show whole,
+          // focused field included; the header may then scroll off.
+          const above = HEADER.height + (row === rows[0] ? 0 : HEADER.gapAbove);
+          const formHere = this.activeNewSpace() && this.newSpace.machine === row.machine, apart = formHere && this.folderApart(above);
+          const form = () => this.renderNewSpace(theme, { labelText, h, v: () => v_flex(), fg, muted }, above);
+          if (formHere && !apart) block.child(form());
+          for (const control of this.controls.slice(before)) control.rowIndex = drawn;
+          add(block);
+          if (apart) { const at = this.controls.length; add(form()); for (const control of this.controls.slice(at)) control.rowIndex = drawn - 1; }
+          if (!row.collapsed && row.count === 0 && row.ready) { add(click('spaces:new:' + machineKey(row.machine), 'New space on ' + row.label, cx => this.openNewSpace(row.machine, cx, 'spaces:new:' + machineKey(row.machine)))
             .h(28).flex_none().px(8).gap(7).rounded(7).text_size(12).text_color(dim).cursor_pointer()
-            .hover(el => el.bg(theme.hover ?? theme.raised).text_color(fg)).child(icon('plus', 12)).child('New space there'));
+            .hover(el => el.bg(theme.hover ?? theme.raised).text_color(fg)).child(icon('plus', 12)).child('New space there')); this.controls.at(-1).rowIndex = drawn - 1; }
           continue;
         }
         const element = click(row.key, 'Space ' + row.name + (row.machine ? ' on ' + row.machine : '') + (row.tree ? ', worktree' : '') + (row.active ? ', shown' : ''),
@@ -314,111 +467,138 @@ export function createRosterView(kit, app, options = {}) {
           if (tail.behind) marks.child(div().id('space-behind:' + row.id).text_color(theme.ansi1 ?? theme.blocked ?? fg).child('↓' + tail.behind));
           element.child(marks);
         }
+        this.controls.at(-1).rowIndex = drawn;
         if (row.active) { activeAt = drawn; activeId = row.id; }
         add(element);
       }
       if (!rows.length) body.child(labelText('No Spaces', 12, muted).p(6));
-      // As the stock list does: when the active Space or its place changes, ask the list
-      // to bring it into view. A visible row stays put. The one render-time request here:
-      // a scroll request only, no state change and no redraw.
-      if (activeId !== this.revealed?.id || activeAt !== this.revealed?.at) {
-        this.revealed = { id: activeId, at: activeAt };
-        if (activeAt >= 0) this.rowScroll.scroll_to_item(activeAt);
+      this.spaceReveal = { ...this.currentSpaceObservation(snapshot), id: activeId, at: activeAt };
+    }
+    currentSpaceObservation(snapshot = null) {
+      const host = this.controller.host;
+      snapshot ??= { spaces: host.spaces(), machines: host.machines(), panes: host.panes() };
+      return spaceObservation(snapshot, { view: this.controller.state.view, folds: this.controller.state.folds,
+        identityOf: space => this.git?.lookup(space.machine ?? null, spacePlace(space, snapshot.panes)) ?? null });
+    }
+    observeSpace(next, cx) {
+      const current = this.currentSpaceObservation();
+      // Refuse a queued render even if its active id survived a reorder or fold.
+      if (!next || next.id !== current.id || next.view !== current.view
+        || next.at !== current.at || next.order !== current.order) return;
+      const previous = this.observedSpace;
+      const changed = next.id !== previous?.id || next.view !== previous?.view
+        || (next.at !== previous?.at && next.position !== previous?.position);
+      // Inspection consumes the newest position too; closing has no pending jump.
+      this.observedSpace = next;
+      if (changed && !this.panel && next.view === 'spaces' && next.at >= 0) {
+        const control = this.controls.find(c => c.key === 'space:' + next.id);
+        if (control?.rowIndex === next.at) { this.rowScroll.scroll_to_item(next.at); cx.notify(); }
       }
     }
-    renderNewSpace(theme, { labelText, h, v, fg, muted }) {
+    renderNewSpace(theme, { labelText, h, v, fg, muted }, above = 0) {
       const c = this.controller, ns = this.newSpace, snapshot = c.feed.snapshot ?? {};
       this.readerControls = [];
+      let panelIndex = 0;
+      labelText = (value, size, color = fg) => div().min_w(0).flex_none().whitespace_normal().text_size(size).text_color(color).child(panelText(value));
       const control = (key, label, text, activate, color = fg) => {
-        this.readerControls.push({ key, label, activate });
-        return h().id(key).h(22).flex_none().px(6).rounded(4).accessibility_label(label).tooltip(label).cursor_pointer()
+        const owner = this.panel;
+        const guarded = cx => { this.reconcilePanel(cx); if (this.panel === owner) activate(cx); };
+        const item = { key, label, activate: guarded, panelIndex };
+        this.readerControls.push(item); this.controls.push(item);
+        return h().id(key).min_h(22).flex_none().px(6).rounded(4).accessibility_label(label).tooltip(label).cursor_pointer()
           .bg(this.newSpaceCursor === key && !this.inputFocused ? theme.selected ?? theme.hover ?? theme.surface : theme.raised ?? theme.surface)
           .hover(el => el.bg(theme.hover ?? theme.selected ?? theme.surface))
-          .on_click((_e, cx) => { cx.stop_propagation(); this.newSpaceCursor = key; activate(cx); }).child(labelText(text, 12, color));
+          .on_click((_e, cx) => { cx.stop_propagation(); this.newSpaceCursor = key; this.place(key); this.focus(cx); guarded(cx); }).min_w(0).child(div().min_w(0).flex_1().whitespace_normal().text_size(12).text_color(color).child(panelText(text)));
       };
+      const drawnFolder = ns.folder, drawnCheck = ns.check;
       const machineLabel = ns.machine ?? 'This computer';
       const shown = folder => ns.machine ? folder : homeRelative(folder, typeof app.home === 'function' ? app.home() : null, true);
-      const box = v().id('roster-new-space').absolute().top(0).left(0).right(0).p(8).gap(4).rounded(8)
-        .bg(theme.raised ?? theme.surface).border(1).border_color(theme.border ?? muted).accessibility_label('Open folder as Space')
-        .on_click((_e, cx) => cx.stop_propagation());
-      box.child(h().h(22).flex_none().gap(6).child(labelText('Open folder as Space', 12, fg).font_semibold().flex_1())
-        .child(control('new-space:cancel', 'Cancel (Esc): nothing is created', '×', cx => this.closeNewSpace(cx))));
-      box.child(labelText('Machine: ' + machineLabel, 12, fg).id('new-space:machine'));
-      if (!ns.machine) box.child(control('new-space:pick', 'Choose a folder on this computer', 'Choose folder…', cx => { this.chooseLocalFolder(cx); }));
+      const box = this.disclosure('roster-new-space', theme, { v, muted }, this.folderHeight(above)).accessibility_label('Open folder as Space');
+      const append = el => { box.child(el); panelIndex++; return box; };
+      append(h().h(22).flex_none().gap(6).child(labelText('Open folder as Space', 12, fg).font_semibold().flex_1())
+        .child(control('new-space:cancel', 'Cancel (Esc): nothing is created', 'Cancel', cx => this.closeNewSpace(cx))));
+      append(div().min_w(0).flex_none().whitespace_normal().text_size(12).child(panelText('Machine: ' + machineLabel)).id('new-space:machine'));
+      if (!ns.machine) append(control('new-space:pick', 'Choose a folder on this computer', 'Choose folder…', cx => { this.chooseLocalFolder(cx); }));
       else {
         // A typed path on that machine, or one of the folders Herdr already reports there.
-        if (this.pathInput) this.readerControls.push({ key: 'new-space:path', label: 'Folder on ' + machineLabel, input: true, activate: () => this.pathInput.focus?.() });
-        if (this.pathInput) box.child(h().flex_none().gap(4).child(Input.new(this.pathInput).id('new-space:path').h(24).flex_1().text_size(12))
+        if (this.pathInput) { const input = { key: 'new-space:path', label: 'Folder on ' + machineLabel, input: true, panelIndex, activate: () => { try { this.pathInput?.focus?.(); } catch { /* No focus event: sidebar keys stay usable. */ } } }; this.readerControls.push(input); this.controls.push(input); }
+        if (this.pathInput) append(h().flex_none().gap(4).child(Input.new(this.pathInput).id('new-space:path').h(24).min_w(0).flex_1().text_size(12))
           .child(control('new-space:check', 'Check this folder on ' + machineLabel, 'Check', cx => this.checkFolder(this.pathInput.value(), cx))));
         const tops = [...(this.git?.cache ?? new Map()).entries()].filter(([key, e]) => JSON.parse(key)[0] === ns.machine && e.status === 'repo').map(([, e]) => e.top);
         const suggestions = folderSuggestions(ns.machine, snapshot.panes, tops);
-        if (suggestions.length) box.child(labelText('Folders on ' + machineLabel, 10, muted));
-        suggestions.forEach((folder, n) => box.child(control('new-space:suggest:' + n, 'Use ' + folder, folder, cx => { this.pathInput?.set_value?.(folder); this.checkFolder(folder, cx); }, muted)));
+        if (suggestions.length) append(labelText('Folders on ' + machineLabel, 10, muted));
+        suggestions.forEach((folder, n) => append(control('new-space:suggest:' + n, 'Use ' + folder, folder, cx => { this.pathInput?.set_value?.(folder); this.checkFolder(folder, cx); }, muted)));
       }
       if (ns.folder) {
-        box.child(labelText('Folder: ' + shown(ns.folder), 12, fg).id('new-space:folder').whitespace_normal());
+        append(div().min_w(0).flex_none().text_size(12).child(panelText('Folder: ' + shown(ns.folder))).id('new-space:folder').whitespace_normal());
         const check = ns.check ?? { status: 'checking' };
-        if (check.status === 'checking') box.child(labelText('Checking…', 11, muted).id('new-space:status'));
+        if (check.status === 'checking') append(labelText('Checking…', 11, muted).id('new-space:status'));
         else if (check.status === 'repo') {
-          box.child(labelText('Verified checkout: ' + shown(check.top), 11, muted).id('new-space:status').whitespace_normal());
+          append(div().min_w(0).flex_none().text_size(11).text_color(muted).child(panelText('Verified checkout: ' + shown(check.top))).id('new-space:status').whitespace_normal());
           const existing = matchingSpace(ns.machine, check.top, snapshot.spaces, snapshot.panes, (m, f) => this.git?.lookup(m, f) ?? null);
           if (existing) {
-            box.child(control('new-space:open-existing', 'Open the existing Space ' + existing.name, 'Open existing Space “' + existing.name + '”', cx => {
-              c.host.run('space.select', { id: existing.id }); this.closeNewSpace(cx); }));
-            box.child(control('new-space:duplicate', 'Create another Space for the same checkout', 'Create another Space here', cx => this.createSpace(cx), muted));
-          } else box.child(control('new-space:create', 'Create a Space on ' + machineLabel + ' in this folder', 'Create Space', cx => this.createSpace(cx)));
+            append(control('new-space:open-existing', 'Open the existing Space ' + existing.name, 'Open existing Space “' + existing.name + '”', cx => {
+              if (ns.check === drawnCheck) this.openExistingSpace(ns, drawnFolder, existing, spaceAnchor(existing, snapshot.panes), cx); }));
+            append(control('new-space:duplicate', 'Create another Space for the same checkout', 'Create another Space here', cx => { if (ns.check === drawnCheck) this.createSpace(cx, ns, drawnFolder); }, muted));
+          } else append(control('new-space:create', 'Create a Space on ' + machineLabel + ' in this folder', 'Create Space', cx => { if (ns.check === drawnCheck) this.createSpace(cx, ns, drawnFolder); }));
         } else {
           // Git said no or could not answer: that does not mean the folder is missing.
-          box.child(labelText('Not verified: Git did not confirm a checkout here; the folder may still exist.', 11, muted).id('new-space:status').whitespace_normal());
-          if (!ns.confirmUnverified) box.child(control('new-space:unverified', 'Create a Space in a folder that is not verified', 'Create in unverified folder…',
+          append(labelText('Not verified: Git did not confirm a checkout here; the folder may still exist.', 11, muted).id('new-space:status').whitespace_normal());
+          if (!ns.confirmUnverified) append(control('new-space:unverified', 'Create a Space in a folder that is not verified', 'Create in unverified folder…',
             cx => { ns.confirmUnverified = true; cx.notify(); }, muted));
-          else box.child(labelText('Create a Space on ' + machineLabel + ' in ' + shown(ns.folder) + ' anyway?', 11, fg).id('new-space:confirm-text').whitespace_normal())
-            .child(control('new-space:confirm', 'Create the Space in the unverified folder', 'Create anyway', cx => this.createSpace(cx)));
+          else { append(labelText('Create a Space on ' + machineLabel + ' in ' + shown(ns.folder) + ' anyway?', 11, fg).id('new-space:confirm-text').whitespace_normal());
+            append(control('new-space:confirm', 'Create the Space in the unverified folder', 'Create anyway', cx => { if (ns.check === drawnCheck) this.createSpace(cx, ns, drawnFolder, true); })); }
         }
       }
+      this.panelItems = panelIndex;
       return box;
     }
-    renderModal(reader, projection, theme, { labelText, h, v, fg, muted }) {
+    renderDetails(reader, projection, theme, { labelText, h, v, fg, muted }) {
       const c = this.controller;
       this.readerControls = [];
+      let panelIndex = 0;
+      labelText = (value, size, color = fg) => div().min_w(0).flex_none().whitespace_normal().text_size(size).text_color(color).child(panelText(value));
       const control = (key, label, text, activate, color = fg) => {
-        this.readerControls.push({ key, label, activate });
-        return h().id(key).h(22).flex_none().px(6).rounded(4).accessibility_label(label).tooltip(label)
+        const owner = this.panel;
+        const guarded = cx => { this.reconcilePanel(cx); if (this.panel === owner) activate(cx); };
+        const item = { key, label, activate: guarded, panelIndex };
+        this.readerControls.push(item); this.controls.push(item);
+        return h().id(key).min_h(22).flex_none().px(6).rounded(4).accessibility_label(label).tooltip(label)
           .bg(this.readerCursor === key ? theme.selected ?? theme.raised : theme.raised ?? theme.surface)
           .hover(el => el.bg(theme.hover ?? theme.selected ?? theme.surface))
-          // A click on the modal stops here; GPUI would otherwise also deliver it to the row beneath.
-          .on_click((_e, cx) => { cx.stop_propagation(); this.readerCursor = key; this.focus(cx); activate(cx); })
-          .child(labelText(text, 12, color));
+          // Panel actions stop propagation; row activation is a separate sibling.
+          .on_click((_e, cx) => { cx.stop_propagation(); this.readerCursor = key; this.place(key); this.focus(cx); guarded(cx); })
+          .min_w(0).child(div().min_w(0).flex_1().whitespace_normal().text_size(12).text_color(color).child(panelText(text)));
       };
-      const box = v().id('roster-details').absolute().top(0).left(0).right(0).p(8).gap(3).rounded(8)
-        .bg(theme.raised ?? theme.surface).border(1).border_color(theme.border ?? muted).accessibility_label('Agent details')
-        .on_click((_e, cx) => cx.stop_propagation());
-      box.child(h().h(22).flex_none().gap(6)
+      const box = this.disclosure('roster-details', theme, { v, muted }, projection.instances.some(i => i.key === reader.sourceKey && i.pinned) ? 96 : 112).accessibility_label('Agent details');
+      const append = el => { box.child(el); panelIndex++; return box; };
+      append(h().h(22).flex_none().gap(6)
         .child(labelText('Agent details', 12, fg).font_semibold().flex_1())
         .child(control('details:close', 'Close agent details (Esc)', '×', cx => this.closeDetails(cx))));
       const instance = projection.instances.find(i => i.kind === 'terminal' && i.key === reader.sourceKey);
-      if (!instance) return box.child(labelText('This agent is no longer listed.', 12, muted));
+      if (!instance) return append(labelText('This agent is no longer listed.', 12, muted));
       const facts = agentFacts(instance, { snapshot: c.feed.snapshot ?? {}, rows: c.feed.reduced.rows,
         home: typeof app.home === 'function' ? app.home() : null });
       // Label and full value; values wrap and are never cut.
       const line = (field, size = 12, color = fg) => {
         const value = field.href
-          ? control('details:link', 'Open ' + field.label + ' ' + field.value, field.value, cx => cx.open_url(field.href), theme.accent ?? fg)
-          : div().min_w(0).flex_1().whitespace_normal().text_size(size).text_color(color).child(field.value);
-        return h().id('detail:' + field.id).min_h(18).flex_none().gap(6).items_start()
-          .child(div().w(92).flex_none().text_size(11).text_color(muted).child(field.label)).child(value);
+          ? control('details:link', 'Open ' + field.label + ' ' + field.value, field.value, cx => cx.open_url(field.href), theme.accent ?? fg).w_full()
+          : div().min_w(0).flex_none().whitespace_normal().text_size(size).text_color(color).accessibility_label(field.value).child(panelText(field.value));
+        return v().id('detail:' + field.id).min_h(18).min_w(0).flex_none().gap(1)
+          .child(div().flex_none().text_size(11).text_color(muted).child(field.label)).child(value);
       };
-      for (const field of facts.fields) box.child(line(field));
+      for (const field of facts.fields) append(line(field));
       // The terminal action passes the same click-time check as the row.
-      if (instance.navigation.enabled) box.child(control('details:go', 'Go to terminal: ' + instance.row.displayLabel, 'Go to terminal', cx => {
+      if (instance.navigation.enabled) append(control('details:go', 'Go to terminal: ' + instance.row.displayLabel, 'Go to terminal', cx => {
         const plan = c.activate(projection, instance.key);
         if (plan.enabled) this.closeDetails(cx, false);
         else { this.message = reasonText(plan.reason); this.openMessage = true; cx.notify(); }
       }));
-      else box.child(labelText(actionReason(instance), 11, muted).id('details:unavailable').whitespace_normal());
-      box.child(control('details:technical', (reader.technical ? 'Hide' : 'Show') + ' technical details',
+      else append(labelText(actionReason(instance), 11, muted).id('details:unavailable').whitespace_normal());
+      append(control('details:technical', (reader.technical ? 'Hide' : 'Show') + ' technical details',
         (reader.technical ? '▾ ' : '▸ ') + 'Technical details', cx => { reader.technical = !reader.technical; cx.notify(); }, muted));
-      if (reader.technical) for (const field of facts.technical) box.child(line(field, 11, muted));
+      if (reader.technical) for (const field of facts.technical) append(line(field, 11, muted));
+      this.panelItems = panelIndex;
       return box;
     }
     render(cx) {
@@ -426,20 +606,26 @@ export function createRosterView(kit, app, options = {}) {
       const c = this.controller;
       // this.controls is this render's output: the callbacks key events use. Nothing else is written.
       this.controls = [];
+      this.spaceReveal = this.currentSpaceObservation(c.feed.snapshot);
       const parents = new Set(c.feed.reduced.rows.map(r => r.parent?.associationKey).filter(Boolean));
       const fg = theme.foreground ?? theme.text;
       const muted = theme.muted ?? fg;
       const v = () => v_flex();
       const h = () => h_flex().items_center();
       const labelText = (value, size, color = fg) => div().min_w(0).truncate().text_size(size).text_color(color).child(value);
-      // Controls drawn in the list ignore clicks while the details modal is open over it.
-      let listPhase = false;
       const click = (key, label, activate, column = false) => {
-        const inList = listPhase;
+
         this.controls.push({ key, label, activate });
-        return (column ? v() : h()).id(key).min_w(0).px(6).rounded(4).accessibility_label(label)
+        const element = (column ? v() : h()).id(key).min_w(0).px(6).rounded(4).accessibility_label(label)
           .bg(c.cursor === key ? theme.selected ?? theme.raised : theme.surface)
-          .on_click((_e, cx) => { if (inList && (this.reader || this.newSpace)) return; this.place(key); this.focus(cx); activate(cx); });
+          .on_click((_e, cx) => {
+            cx.stop_propagation();
+            // GPUI also clicks a focused trigger on Enter or Space; key() already activated it.
+            if (this.takeKeyEcho(key)) return;
+            this.place(key); this.focus(cx); activate(cx);
+          });
+        if (this.triggerHandles.has(key)) element.track_focus(this.triggerHandles.get(key));
+        return element;
       };
       const button = (key, label, activate, { active = false, text = label } = {}) => {
         const element = click(key, label, activate).h(24).flex_none().tooltip(label);
@@ -459,7 +645,6 @@ export function createRosterView(kit, app, options = {}) {
       // folded or not, then a right-aligned tail: view-specific extras, a count, and the
       // chevron (or an empty slot of its size where a group never folds). The header's own
       // 11px size and dim color reach only the tail.
-      const HEADER = { height: 30, iconSize: 18, titleSize: 13, chevron: 11, gapAbove: 8 };
       const groupHeader = (key, label, title, activate, { icon: lead = null, collapsed = false, foldable = true, extras = [], tooltip = label, depth = 0,
         count = null, first = false } = {}) => {
         const head = click(key, label, activate).h(HEADER.height).mt(first ? 0 : HEADER.gapAbove).flex_none().px(8).pl(8 + Math.min(depth, 3) * 8).gap(7)
@@ -489,10 +674,15 @@ export function createRosterView(kit, app, options = {}) {
         const el = icon(STATUS_ICONS[label] ?? 'help-circle', HEADER.iconSize).text_color(STATUS_COLORS[label] ?? dim);
         return label === 'Working' && !still ? el.spin(1200) : el;
       };
-      const change = event => cx => { this.closeDetails(cx, false); this.controls = []; c.change(event); cx.notify(); };
+      const change = event => cx => { if (!this.toolsOpen) this.dismissPanel(cx, false); this.controls = []; c.change(event); cx.notify(); };
       const viewMode = c.state.view;
       const root = v().id('roster').size_full().p(5).gap(3).bg(theme.surface).text_color(fg).text_size(12)
-        .track_focus(this.handle).on_key_down((e, cx) => this.key(e, cx));
+        .key_context('Roster').track_focus(this.handle).on_key_down((e, cx) => this.key(e, cx))
+        // Tab and Shift-Tab arrive as Roster's own actions (bound in init), never as key events.
+        .on_action(TAB_ACTIONS.next, (_e, cx) => this.key({ keystroke: 'tab' }, cx, true))
+        .on_action(TAB_ACTIONS.prev, (_e, cx) => this.key({ keystroke: 'shift-tab' }, cx, true))
+        // A pointer press is never the keyboard click that follows a key activation.
+        .on_mouse_down('left', () => { this.keyEcho = null; });
       const toolbar = h().id('roster-toolbar').h(26).flex_none().gap(3);
       toolbar.child(button('mode:spaces', 'Spaces', change({ type: 'view', view: 'spaces' }), { active: viewMode === 'spaces' }))
         .child(button('mode:projects', 'Projects', change({ type: 'view', view: 'projects' }), { active: viewMode === 'projects' }))
@@ -507,17 +697,25 @@ export function createRosterView(kit, app, options = {}) {
       let tools = null;
       const filtered = c.state.coreIds !== null || c.state.contextIds !== null;
       toolbar.child(button('tools:toggle', (settingsOpen ? 'Hide' : 'Show') + ' filters and Agents slot controls' + (filtered ? ' (filters active)' : ''),
-        cx => { this.closeDetails(cx, false); this.controls = []; this.toolsOpen = !this.toolsOpen; cx.notify(); }, { active: settingsOpen || filtered, text: filtered ? 'Options •' : 'Options' }));
+        cx => { const open = this.beginPanel('options', 'options', 'tools:toggle', cx); this.controls = []; this.toolsOpen = open; cx.notify(); }, { active: settingsOpen || filtered, text: filtered ? 'Options •' : 'Options' }));
       if (!this.reading && this.controller.feed.evidence.admissions?.length) {
-        this.reading = true;
-        cx.spawn(async cx => { try { if (await this.controller.refresh(p => timerDeadline(cx, p))) cx.notify(); } finally { this.reading = false; } });
+        cx.spawn(async cx => { if (this.reading) return; this.reading = true;
+          try { if (await this.controller.refresh(p => timerDeadline(cx, p))) cx.notify(); } finally { this.reading = false; } });
       }
-      const reader = this.activeReader();
+      const reader = this.activeReader(projection);
+      if ((this.reader && !reader) || (this.newSpace && !this.activeNewSpace())) {
+        const stale = this.panel;
+        cx.spawn(async cx => { await null; if (this.panel === stale) this.invalidatePanel(cx); });
+      }
       if (settingsOpen) {
-        tools = v().id('roster-options').min_h(0).flex_none().gap(2).overflow_y_scrollbar().track_scroll(this.optionsScroll);
+        tools = this.disclosure('roster-options', theme, { v, muted }, 52).p(0).gap(2).track_scroll(this.optionsScroll);
         let optionIndex = 0;
-        const option = (...args) => {
-          tools.child(button(...args));
+        const option = (key, label, activate, { active = false, text = label } = {}) => {
+          const element = click(key, label, activate).min_h(24).flex_none().tooltip(label)
+            .child(div().min_w(0).flex_1().whitespace_normal().text_size(12)
+              .text_color(active ? theme.accent ?? fg : fg).child(panelText(text)));
+          if (active && c.cursor !== key) element.bg(theme.raised);
+          tools.child(element);
           this.controls.at(-1).optionIndex = optionIndex++;
         };
         for (const [field, title, getId] of [['coreIds', 'Machine', r => r.core.verified ? r.core.id : null], ['contextIds', 'Context', r => r.executionContext.id]]) {
@@ -544,25 +742,35 @@ export function createRosterView(kit, app, options = {}) {
         if (props?.rosterToken) option('layout:undo', 'Restore Agents in this slot', cx => {
           cx.spawn(async cx => this.layoutAction(() => this.optIn.undo(props.rosterToken, p => timerDeadline(cx, p)), cx));
         });
+        this.panelItems = optionIndex;
         tools.h(Math.min(52, optionIndex * 24 + Math.max(0, optionIndex - 1) * 2));
       }
-      listPhase = true;
-      const body = v().id('roster-rows').flex_1().min_h(0).gap(3).overflow_y_scrollbar().track_scroll(this.rowScroll);
+      const body = v().id('roster-rows').flex_1().min_h(0).gap(3).overflow_y_scrollbar().track_scroll(this.rowScroll)
+        .on_size_change((size, cx) => this.measureList(size, cx));
       // Needs you, pinned above the tabs and outside their list: the same section in every
       // view, drawn only while something is pending. Its rows scroll on their own past three.
       const PINNED = { row: 44, gap: 3, shown: 3 };
       const pinnedCount = projection.instances.filter(i => i.pinned && i.kind === 'terminal').length;
-      // Sessions already pending when Roster first draws never pulse; one that arrives
-      // after this (even before the first timer tick) does. Recording the baseline asks
-      // for no redraw, so render stays free of updates.
-      if (this.arrivals && this.arrivals.seen === null) this.arrivals.take(projection.instances.filter(i => i.pinned && i.kind === 'terminal').map(i => i.identity));
+      // Capture the initial drawn attention list; its task establishes the baseline after render.
+      if (this.arrivals.seen === null) {
+        const pending = projection.instances.filter(i => i.pinned && i.kind === 'terminal').map(i => i.identity);
+        cx.spawn(async () => { if (this.arrivals.seen === null) this.arrivals.take(pending); });
+      }
       const shown = Math.min(pinnedCount, PINNED.shown);
       const pinnedRows = v().id('roster-needs-rows').flex_none().gap(PINNED.gap).overflow_y_scrollbar().track_scroll(this.pinnedScroll)
-        .h(shown * PINNED.row + Math.max(0, shown - 1) * PINNED.gap);
+        .h(Math.min(144, shown * PINNED.row + Math.max(0, shown - 1) * PINNED.gap + (reader && projection.instances.some(i => i.pinned && i.key === reader.sourceKey) ? 115 : 0)));
       const pinned = v().id('roster-needs-you').flex_none().gap(2).pb(4).border_b(1).border_color(theme.border ?? theme.raised ?? muted);
       // Each instance is one direct child of its list; these count them for scrolling.
       let bodyAt = 0, pinnedAt = 0;
       const place = (i, element) => {
+        if (i.kind === 'terminal') {
+          element = v().id('inline:' + i.key).flex_none().min_w(0).child(element);
+          if (reader?.sourceKey === i.key) {
+            const before = this.controls.length;
+            element.child(this.renderDetails(reader, projection, theme, { labelText, h, v, fg, muted }));
+            for (const control of this.controls.slice(before)) Object.assign(control, slot(i));
+          }
+        }
         if (i.pinned) { pinnedRows.child(element); pinnedAt++; } else { body.child(element); bodyAt++; }
       };
       const slot = i => i.pinned ? { pinnedIndex: pinnedAt, pinned: true } : { rowIndex: bodyAt };
@@ -610,7 +818,6 @@ export function createRosterView(kit, app, options = {}) {
         // Click re-reads the snapshot and focuses only the exact pane drawn; otherwise it
         // says why. Info and the child fold are sibling controls, never this click.
         const element = click(i.key, label, cx => {
-          if (this.reader) return;
           const plan = this.controller.activate(projection, i.key);
           if (plan.enabled) { if (this.openMessage) this.message = ''; this.openMessage = false; }
           else { this.message = reasonText(plan.reason); this.openMessage = true; }
@@ -622,7 +829,7 @@ export function createRosterView(kit, app, options = {}) {
         element.hover(el => el.bg(theme.hover ?? theme.raised));
         if (c.cursor !== i.key && c.feed.snapshot?.focused?.terminal === row.address) element.bg(theme.raised);
         const selected = this.controls.at(-1), at = slot(i);
-        Object.assign(selected, { ...at, instance: i, detail: label, hover,
+        Object.assign(selected, { ...at, instance: i, anchor: rowAnchor(i, c.feed.snapshot), detail: label, hover,
           disabledReason: i.navigation.enabled ? null : explanation });
         // One leading icon: what runs there, from Herdr's program table only (runtime.js),
         // never a tab title or role. A neutral terminal when nothing is known.
@@ -687,16 +894,18 @@ export function createRosterView(kit, app, options = {}) {
         const line = h().id('line:' + i.key).h(24).flex_none().min_w(0).gap(2).pl(Math.min(i.depth, 3) * 8).child(element)
           .on_hover((on, cx) => { if (on) this.hoverKey = i.key; else if (this.hoverKey === i.key) this.hoverKey = null; cx.notify(); });
         // A discreet ⓘ, drawn on hover or keyboard focus; its place is always reserved.
-        const info = click('info:' + i.key, 'Agent details for ' + row.displayLabel, cx => this.openDetails({ key: 'info:' + i.key, instance: i }, cx))
+        const info = selected.anchor ? click('info:' + i.key, 'Agent details for ' + row.displayLabel, cx => this.openDetails({ key: 'info:' + i.key, instance: i, anchor: selected.anchor }, cx))
           .w(18).h(24).flex_none().px(0).justify_center().tooltip('Agent details')
-          .child(labelText(infoShown ? 'ⓘ' : '', 12, muted).id('info-glyph:' + i.key));
-        Object.assign(this.controls.at(-1), { ...at, instance: i, detail: label, hover, disabledReason: selected.disabledReason });
+          .child(labelText(infoShown ? 'ⓘ' : '', 12, muted).id('info-glyph:' + i.key))
+          : div().id('info-unavailable:' + i.key).text_size(10).text_color(muted)
+            .child('Details unavailable: ambiguous instance');
+        if (selected.anchor) Object.assign(this.controls.at(-1), { ...at, instance: i, anchor: rowAnchor(i, c.feed.snapshot), detail: label, hover, disabledReason: selected.disabledReason });
         line.child(info);
         if (parents.has(row.associationKey)) {
           const collapsed = c.state.folds[i.key] ?? false;
           line.child(button('fold:' + i.key, collapsed ? 'Show children' : 'Hide children',
             change({ type: 'fold', key: i.key, collapsed: !collapsed }), { text: collapsed ? '▸' : '▾' }).px(0).w(18));
-          Object.assign(this.controls.at(-1), { ...at, instance: i, detail: label, hover, disabledReason: selected.disabledReason });
+          Object.assign(this.controls.at(-1), { ...at, instance: i, anchor: rowAnchor(i, c.feed.snapshot), detail: label, hover, disabledReason: selected.disabledReason });
         }
         if (!i.alert) { place(i, line); continue; }
         // The first line is the verified agent, Space and machine. The second carries only
@@ -716,7 +925,7 @@ export function createRosterView(kit, app, options = {}) {
             else { this.message = reasonText(plan.reason); this.openMessage = true; }
             cx?.notify?.();
           }, { text: 'Open ' + a.recipient.title }).h(20));
-          Object.assign(this.controls.at(-1), { ...at, instance: i, detail: label, hover: details });
+          Object.assign(this.controls.at(-1), { ...at, instance: i, anchor: rowAnchor(i, c.feed.snapshot), detail: label, hover: details });
         }
         // What was not reported, when no recipient button takes the place.
         if (a.missing.length && !a.recipient) {
@@ -727,7 +936,7 @@ export function createRosterView(kit, app, options = {}) {
       }
       if (viewMode === 'spaces') this.renderSpaces(body, theme, { click, change, labelText, h, fg, muted, groupHeader });
       else if (!projection.instances.some(i => !i.pinned)) body.child(labelText(pinnedCount ? 'Nothing else to list' : 'No observed terminals', 12, muted).p(6));
-      // The modal lies over the list; the list underneath keeps its scroll and folds.
+      // The list keeps its retained scroll handle and stable direct children.
       const stack = v().id('roster-stack').relative().flex_1().min_h(0).child(body);
       // Top to bottom: Needs you (only while pending), the tabs, Options, then the list.
       if (pinnedCount) root.child(pinned.child(pinnedRows));
@@ -736,38 +945,49 @@ export function createRosterView(kit, app, options = {}) {
       // Keyboard order follows that: the pinned controls come before the tabs.
       const pinnedControls = this.controls.filter(control => control.pinned);
       if (pinnedControls.length) this.controls = [...pinnedControls, ...this.controls.filter(control => !control.pinned)];
-      if (reader) stack.child(this.renderModal(reader, projection, theme, { labelText, h, v, fg, muted }));
-      else if (this.newSpace) stack.child(this.renderNewSpace(theme, { labelText, h, v, fg, muted }));
+
       root.child(stack);
       if (this.message) root.child(labelText(this.message, 11, muted).id('roster-message').h(16).flex_none()
         .tooltip(this.message).accessibility_label(this.message));
-      const footerOwner = this.controls.find(control => control.key === c.cursor)
+      const footerOwner = (reader?.returnKey === 'details:open' ? this.controls.find(control => control.key === reader.sourceKey) : null) ?? this.controls.find(control => control.key === c.cursor)
         ?? (c.cursor === 'details:open' ? this.controls.find(control => control.key === this.footerSourceKey) : null);
-      if (footerOwner?.instance) {
+      if (footerOwner?.instance && footerOwner.anchor) {
         this.controls.push({ ...footerOwner, key: 'details:open',
-          activate: cx => this.openDetails({ key: 'details:open', instance: footerOwner.instance }, cx) });
+          activate: cx => this.openDetails({ key: 'details:open', instance: footerOwner.instance, anchor: footerOwner.anchor }, cx) });
       }
       // A cursor whose row vanished selects nothing until the next key or click moves it.
       // Keep the disabled reason independent of long waiting/context text for keyboard selection.
       const selected = this.controls.find(control => control.key === c.cursor);
       root.accessibility_label(selected?.label ?? 'Roster sidebar: Up and Down select, Enter activates');
-      if (selected) {
-        const footer = v().id('roster-focus-tooltip').h(selected.disabledReason ? 32 : 16).flex_none().min_w(0)
-          .tooltip(selected.hover ?? selected.label).accessibility_label(selected.label);
-        if (selected.disabledReason) footer.child(labelText(selected.disabledReason, 11, muted)
+      const foot = reader?.returnKey === 'details:open' ? this.controls.find(control => control.key === reader.sourceKey) ?? selected : selected;
+      if (foot) {
+        const footer = v().id('roster-focus-tooltip').h(foot.disabledReason ? 32 : 16).flex_none().min_w(0)
+          .tooltip(foot.hover ?? foot.label).accessibility_label(foot.label);
+        if (foot.disabledReason) footer.child(labelText(foot.disabledReason, 11, muted)
           .id('roster-disabled-reason').h(16).flex_none());
         const summary = h().h(16).flex_none().min_w(0)
-          .child(labelText(selected.detail ?? selected.label, 11, muted).flex_1());
-        if (selected.instance) summary.child(h().id('details:open').h(16).flex_none().px(3)
+          .child(labelText(foot.detail ?? foot.label, 11, muted).flex_1());
+        if (foot.instance && foot.anchor) { const trigger = h().id('details:open').h(16).flex_none().px(3)
           .bg(c.cursor === 'details:open' ? theme.selected ?? theme.raised : theme.surface)
           .accessibility_label('Details (D)').on_click((_e, cx) => {
-            this.footerSourceKey = selected.instance.key; this.place('details:open'); this.focus(cx);
+            cx.stop_propagation(); if (this.takeKeyEcho('details:open')) return;
+            this.footerSourceKey = foot.instance.key; this.place('details:open'); this.focus(cx);
             this.controls.find(control => control.key === 'details:open')?.activate(cx);
           })
-          .child(labelText('Details (D)', 11)));
+          .child(labelText('Details (D)', 11));
+          if (this.triggerHandles.has('details:open')) trigger.track_focus(this.triggerHandles.get('details:open'));
+          summary.child(trigger);
+        }
         footer.child(summary);
         root.child(footer);
       }
+      const panel = this.panel, controls = this.controls, selection = this.spaceReveal;
+      cx.spawn(async cx => {
+        // Herdr starts a task at once, still inside render, where cx.notify() throws; the
+        // first await lets render finish, so reveals, redraws and focus requests can run.
+        await null;
+        if (this.controls === controls) this.afterRender(cx, panel, controls, selection);
+      });
       return root;
     }
   };

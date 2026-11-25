@@ -1,144 +1,125 @@
 # Roster
 
-A passive, explicitly opt-in Projects/Status sidebar for stock Herdr Desktop.
-The current adapter keeps terminal identities provisional and project/context
-associations unknown. Full release acceptance remains open.
+An explicitly opt-in Spaces, Projects and Status sidebar for Herdr Desktop. Inspect
+sessions and choose folders in inline panels while keeping nearby work visible.
+Unknown project/Core/context facts remain unknown.
 
 ![Roster](preview.png)
 
-[Production Status preview](preview-status.png). Both are real neutral 330×350
-Windows slot crops at zoom 1, copied byte-for-byte from the R3 evidence.
+[Historical Status preview](preview-status.png). Both PNGs retain the existing real
+neutral Windows R3 330×350 capture provenance; neither depicts issue #29's inline
+candidate. No replacement screenshot was produced.
 
 ## What you see
 
-A theme-colored sidebar (`surface`/`foreground`, 12px base text, 5px padding,
-3px gaps). A 26px horizontal toolbar holds Projects, Status and Options. Options
-contains independent Machine/Context filters and selected-slot opt-in/undo controls
-in a separately scrolling region with an explicit viewport height of min(52, n×24 + (n−1)×2)px, min_h(0), flex_none and no max_h. Unfiltered singleton dimensions
-omit redundant selectors; active filters always retain a reset.
+Theme-colored surface, 12px base type, 5px padding and 3px gaps. Global Needs you
+is pinned above a 26px toolbar with Spaces, Projects, Status, a Spaces + and Options.
+The rest is a vertical scrolling list. Shared 30px bold group headers precede compact
+24px session rows (44px for pending alert rows). Info and child-fold controls are
+siblings of the session-name activation. Existing row facts, chips, program/OS icons,
+Space avatars and worktree marks retain their design.
 
-The remaining height is a scrolling row list: 24px group headers, non-shrinking
-64px terminal rows. Each has an 18px title/badge line, independent 14px Project
-and verified Parent lines spanning beneath badges, and a 14px machine/route and
-execution-context line, plus 4px padding. Preserve depth indentation capped at
-24px and one direct scroll child per instance. Keep Info and child-fold buttons
-as siblings of terminal activation, with that same owner key and rowIndex.
-Use truthful Unassigned, Not reported, Unknown (resolution), host unknown and
-Context unknown fallbacks. State chips cap at 104px; each row line may ellipsize.
-Done starts folded; global Needs you survives filters/folds. Contextual Child
-needs you remains nonactionable. Provider badges describe work items/projects.
-
-Disabled selections have a separate readable 16px reason above a 16px summary
-and Details (D) affordance; enabled selections use 16px. A layout message uses
-16px. Worst fixed normal-list budget is 148px, leaving about 170px at fixed
-physical 350px/zoom1.1: plan two 64px rows, a 24px header and two 3px gaps (158px).
-The R3 native report records actual fit at both zooms; arithmetic alone is not acceptance. Full contextual row
-hover includes waiting, project, parent, provider, route/context and reason.
-
-Explicit Details at opening replaces everything below the toolbar with one
-captured, nonpersistent instance snapshot. Display a 24px Back (Esc)/title line,
-18px field label, 18px global/field progress, active literal value and 24px
-Previous/Next controls, with 4px gaps. Use fresh text, full available width,
-whitespace_normal, 12px, line_height(1.25); no clipping/ellipsis/clamp on the value
-or ancestors. Pages have at most 64 Unicode code points and three line breaks
-(CRLF or lone CR/LF), preserving every UTF-16 source span, whitespace and terminal suffix.
-Render only the active page, with no total-length cap or detail-scroll dependency.
-Use separate name/project/parent/machine/context/state/waiting/provider/availability/
-filter/diagnostic fields. Keep full waiting in expanded compact and hidden-child
-modes. R3 reports tested wide-glyph, newline and long-token pages fit at both zooms, subject to the font limits below.
-Production has no admitted authoritative waiting. Stock Desktop 0.1.16 UIA
-exposes no mod labels; Narrator was not run, and the reader is no UIA pass.
+Details is a disclosure immediately below its row inside its stable list container.
+A 112px internal vertical viewport shows truthful host/verified facts, a separate
+Go to terminal action and expandable Technical details. Pinned Details uses 96px so
+its triggering row and panel fit together in the pinned region. Labels sit above
+full wrapped values; long tokens get invisible wrap opportunities every 24 code
+points. Action arguments and accessible labels keep original strings.
+Options sits immediately below the toolbar in its existing 52px scrolling viewport.
+The folder form sits below its exact machine header/+ (below the toolbar for the
+single-local-machine case), showing target machine, chosen/typed path, verification,
+explicit Create/Open actions and Cancel. It shares the bounded 112px panel surface,
+shrunk (60px at least) to fit the measured visible list under its machine header. In a
+list too short for header and 60px form (zoom 1.1 under three pinned rows), the form is its
+own direct list row, at most the list's height, so revealing it shows the focused path field.
 
 ## How it behaves
 
-`place:none` makes installation inert. Explicitly show a copy only after authorized
-isolated checks; installation instructions are not permission to activate it.
-Rendering captures six stock getters once: terminals, machines, panes, spaces,
-agents and focused. Only current snapshot observations appear; vanished rows and
-superseded incarnations are omitted. No supplementary history is acquired.
-Equal names, remote aliases, viewing machine and account/model do not prove identity.
-Projects stay unbound and contexts unknown without Core-qualified configuration.
+Only one Roster disclosure is open: Details, Options or folder entry. The same trigger
+toggles it; Esc closes and returns native focus to that exact surviving trigger, or
+a nearby stable Projects control when removed. Actual focus handles/input focus events
+control automatic focus return; a visual cursor alone never takes terminal focus.
+Up/Down and Tab/Shift-Tab traverse surrounding controls and inline actions; Enter/Space
+activates. Tab/Shift-Tab are Roster actions bound under its own key context; at either
+boundary they call native focus_next/focus_prev without wrapping.
+The real path field retains editing keys only after actual focus; failed focus requests
+leave sidebar keys usable. Enter-reopen after Esc accepts actual focus on the exact
+current folder trigger as well as the root, never an unrelated control/pane.
+Enter in the focused field checks the path. When
+not editing, Home/End/PageUp/PageDown reveal panel content for keyboard reading.
 
-Projects/Status, filters and folds affect this copy. Click focuses it; Up/Down
-select a visible control, Enter activates it; `focus` focuses the handle. Preserve
-surviving cursor keys and choose a nearby position when a control disappears.
-D on a row/Info/fold, or Enter/click on Info/Details, opens the reader.
-Left/Up/Previous and Right/Down/Next page; Home/End jump; Esc/Back returns and
-reveals the surviving originating control, or selects Projects if its exact
-instance disappeared. Never rebind duplicate names. Enter in the reader uses
-only reader callbacks. View/filter/fold and Options changes close it locally;
-unhandled keys retain host behavior. Never bind global next/previous or call setAgentOrder. Production Open is disabled:
-no independently bound Core identity, endpoint or uninterrupted remote epoch is
-available. Injected tests may prove exact focus/peek plans; that is not a native
-capability claim. Native terminal statuses, input, approvals and lifecycle stay native.
+Row-name activation keeps the existing exact native session/pane revalidation.
+Details open/close never activates a terminal. Folder expansion/toggle/Cancel/Esc
+never creates or opens a Space. A local Choose folder uses Herdr's native picker;
+remote input/suggestions use exact paths on that machine. Existing bounded read-only
+Git checks classify checkout/unverified. Explicit final actions alone call space.new
+or select a still-matching existing Space. Unverified creation requires a second
+explicit confirmation. Cancelled/late picker/check results never enter another panel.
 
-Explicit opt-in inspects one current Agents slot, preserves the effective tree,
-saves a private restoration record, creates a separate working layout replacing
-only that slot, then switches. Undo rereads its record after restart and restores
-only the still-owned slot in the latest working tree. Refuse mismatches/concurrent
-changes. Two-second UI deadlines do not cancel late native writes; expected-text
-writes are not OS-wide CAS. Partial failures can leave files for inspection.
+Keep group folds, retained list scroll handles and stable direct children through
+panel open/close. After render, minimally reveal the new panel
+through its owning direct list child and first inner control; closing adds no jump.
+Reveal external active-Space changes promptly after render, consuming changes during
+inspection without replay on close. Return from Projects/Status and real active-row
+position changes also reveal; fold, refresh and panel layout changes do not.
+Needs you stays outside the scrolling tab list. Bind to actual row
+instance/incarnation/process/run and observed machine availability, not a label/index.
+Read-only Details may open on currently listed unavailable rows and must explain disabled
+actions. Folder admission still requires a unique exact ready machine (null local),
+escaping the remote name local separately. Removal, identity/availability change or
+view/filter/fold change closes existing panels conservatively. Unchanged refresh preserves it. No render-time panel/cursor/
+focus mutation or notify: invalidate after rendering in a task/event. No global
+navigation, terminal status/input/approval/lifecycle or native-dialog changes.
 
 ## Built from
 
-One self-contained `mods/roster/`: `mod.json` has `place:none`, `focusable:true`;
-`main.js` wires gpui-kit/gpui-base/Herdr to `view.js`. `desktop.js` exposes stock snapshots
-and guarded layout I/O. `controller.js` connects `feed.js`, `local-reader.js`,
-projection and action guards. Pure modules have no Herdr imports:
-`normalize.js`, `identity.js`, `metadata.js`, `delegations.js`, `attention.js`,
-`projection.js`, `navigation-rows.js`, `navigation.js`, `settings.js`, `icons.js`,
-`detail.js` (presentation facts/reasons/lossless pages), and `layout.js`. Keep the actual reducer chain and independent evidence contracts;
-see `mods/roster/MODULES.md` for data shapes.
+One self-contained mods/roster folder. main.js wires Herdr and gpui-kit/gpui-base to
+view.js; mod.json is place:none, focusable:true. controller/feed retain the tested
+normalization, identity, metadata, delegation, attention, projection and navigation
+guards. disclosure.js is portable anchor/toggle/focus-return/folder-admission/text logic.
+The view owns the shared inline surface and event state. detail.js supplies truthful
+facts; spaces.js supplies Space rows, Git/OS caches, folder verification and matching;
+all portable decisions accept injected host APIs. layout.js retains explicit selected
+Agents-slot opt-in/undo. No sibling-mod imports, new network sources or dependencies.
 
-Production supplies empty Core mappings, admissions, documents, routes, scopes and
-correlations. Thus it acquires zero delegation files, performs zero terminal
-actions, and reads no private settings/images. Local-reader admission requires
-independent process/Core/continuity proof; only local text reads are allowed with
-bounded candidates/bytes, two native slots and `cx.timer.after` deadlines. The delegation reader stays local-only.
-Remote reads for Spaces (os-release, read-only git) follow D8: only while Herdr reports
-the machine ready, re-checked from a fresh machines() right before each call (each Git
-command, one at a time) and on the answer; queued and running work for a machine that stops being ready (in any tab,
-or missing from machines()) is dropped; a failed, malformed or late result stops the
-chain and the whole answer is unknown; no retry through a reconnect. This narrows the window but is not a
-no-wake guarantee until the host offers an attach-only read (herdrdev/herdr-app#1441).
-No experimental acquisition reader, runtime hc probe or network request is shipped.
-
-Only explicit layout controls read/write layouts and private App data restoration
-records. Never bundle those records or personal assets. No third-party assets,
-packages or network sources are added. Source pins in the installed README are
-reference contracts, not installed Desktop evidence. Repository-only scripts and
-`.tests` do not ship. `node scripts/roster-package.mjs` lists exactly the 21 files
-that would ship, validates eager import closure, and performs no install/sync.
+The stock adapter exposes native session snapshots and exact navigation, while permanent
+Core/project/context mapping and authoritative delegation evidence remain unproved.
+Read-only Git/OS work uses exec/readTextFile only on ready machines with fresh readiness
+checks before each request and on response, cx.timer.after deadlines and disconnect
+cancellation. This is not an attach-only/no-wake host guarantee; no ambient Core probe
+is permitted. Native commands own the final machine/path validation.
 
 ## Watch out
 
-The [external Windows R3 report](https://github.com/crx-lc/herdr-mods/issues/21#issuecomment-7083288510) validated runtime source `929d85903dc0b32e2fe05b4b98e8d258c63b7f74` on Windows 11 Pro 10.0.26300, stock Desktop 0.1.16, hc 0.1.21, Node 26.13.1 and tsc 7.0.2. At 100% OS scale the slot was 330×350 physical pixels: zoom 1 uses 330×350 logical, zoom 1.1 uses 300×318 logical. The report records 53 pass, 1 fail, 4 not verifiable, and isolation 3/3. Toolbar return, reader paging, machine/context fit, Options, scrolling and selected-slot opt-in/undo/restart passed the described presentation checks at that source head. Repo tests were 416 total, 415 pass and one optional skip; package inventory had 21 files, typecheck and native check passed, 16 sample states passed and 22 deliberate breaks were detected. This packaging changes only documentation and preview images; runtime files remain byte-identical to that source. Windows did not run on the later packaging commit. Raw private logs were not independently audited here.
+Herdr starts a cx.spawn task at once: one started in render runs inside render until its
+first await, where cx.notify() throws and aborts the rest. Await once before post-render
+reveals, redraws or focus requests. Herdr's Tab binding fires before on_key_down, so
+bind Tab/Shift-Tab under a key context of your own. GPUI also clicks a focused element
+on Enter/Space after on_key_down: ignore that echo once or a toggle opens and shuts.
+The test fixture starts spawned tasks synchronously for this reason.
 
-**Remaining criteria:** stock Windows UIA exposes no Roster labels; Narrator was not run. Production exact Open/Peek (local, remote and pane-less), authoritative Waiting, private project images and finished rows were not verifiable. Injected route and waiting positives are UI test fixtures, not production capability proof. Issue #21 remains open; no full release acceptance or scope waiver is claimed. Stock Desktop 0.1.16 overlay shows only toolbar and Options; selected Agents-slot opt-in is the tested path.
+Public machine snapshots expose names/readiness, not durable Core or connection epochs.
+Do not invent identity to cover an unseen disconnect/replacement. No Intl/time-zone
+assumptions. Runtime files stay hidden; no caches/private state/layout records ship.
+No new art/assets/licenses. Existing native folder picker and layout opt-in stay explicit.
 
-The native tooltip can clip at the window edge; D or pointer Info/Details supplies the complete in-panel reading path. Tested common Unicode and page boundaries preserved text without clipping. Stock fonts displayed regional-indicator components rather than flags, tag sequences as a black flag, and ZWJ sequences as components; lone CR was invisible. These rendering limits are distinct from text loss. The pagination is not full UAX #29.
-
-Stock snapshots cannot prove permanent Core/remote-epoch binding. Unknown must
-remain unknown; do not enable actions, authoritative waiting or private images to
-make a demonstration look complete. Host fixtures exercise stronger contracts;
-production must not adopt invented fixture proof. Waiting parents count zero
-workers; three genuine working delegates count three under admitted contracts.
-
-The original layout file and shipped Agents source are not rewritten by opt-in;
-the external Windows report records preservation/restart/undo passes. Keep Quotr,
-other slots/settings and private data intact. Timed-out writes may settle later:
-reread before retry. Do not promise automatic cleanup or whole-tree rollback.
-
-Node tests and Windows Node CI cannot prove QuickJS/GPUI layout, focus, tooltip,
-accessibility or native image decoding. Herdr check alone cannot see later async
-states or actual layout; sample-state checks need an effective deliberate break.
-Do not claim any App/typecheck/Windows/visual run without its actual evidence.
+Issue #21 acceptance and PR #26 are separate history. Issue #29 requires independent
+review, green CI and exact-final-head Windows verification before merge. This Linux
+implementation has no installed App/types and cannot claim App check, typecheck,
+Windows fit/focus/scroll, native picker behavior or accessibility. Existing preview
+provenance stays historical. UIA/Narrator remains #28, separate from this candidate.
 
 ## Done when
 
-Repository packaging is reviewable when `npm test`, optional offline pinned
-contract parity when available, and the read-only inventory pass, with negative
-controls rejecting missing/forbidden files, links and escaping references. Record
-actual commands/counts separately from planned workstation checks.
+Run exact npm test and node scripts/roster-package.mjs on the repository copy; the
+package allowlist has 50 shipping files. Record baseline/final counts and meaningful
+negative controls. Never install into the owner's live home without separate authority.
 
-The R3 report above is tied to the exact runtime source, not a claim that a later packaging commit ran on Windows. Full acceptance remains open in [#21](https://github.com/crx-lc/herdr-mods/issues/21), [#11](https://github.com/crx-lc/herdr-mods/issues/11), [#10](https://github.com/crx-lc/herdr-mods/issues/10) and [#4](https://github.com/crx-lc/herdr-mods/issues/4). No live activation is authorized by this evidence.
+On the exact final installed candidate, record SHA/file hashes and Desktop/Core/OS/
+scale/zoom. At 330×350 and zoom 1/1.1 verify inline placement in every tab including
+pinned Needs you, same-trigger toggle and single-open state, exact name/session action,
+no open/cancel/Esc actions, actual trigger/fallback focus, logical keyboard traversal,
+scroll/fold preservation, long/Unicode text and all folder actions/validation. Remove,
+replace, filter/fold and disconnect targets and deliver late answers; no stale state or
+action may transfer. Confirm native dialogs remain native. The installed README carries
+the full checklist and limits. A portable fake cannot prove native Windows behavior.
