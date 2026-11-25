@@ -61,7 +61,7 @@ Compared with Pulse at `99f70b2c`:
 - A stock's chart is its latest regular session, placed by time across the session (a
   half-finished day fills part of the width). The price and percentage beside it are the latest
   trade, pre-market and after hours included, with `Pre-market` or `After hours` under the name
-  when it is one; the dashed line is always the close that percentage is measured against: the
+  once that price differs from the close (Yahoo's after-hours bars often just repeat it); the dashed line is always the close that percentage is measured against: the
   previous regular close, and from the next day's first pre-market trade on, the session's own
   close (where its line ends), so evenings and weekends keep the last day. Without a previous close
   the row shows the latest trade with `—` for the change and no dashed line. The dialog is

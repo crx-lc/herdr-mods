@@ -142,3 +142,19 @@ test("the real panel row shows the latest trade and its session; the chart has n
   assert.equal(fills.length, 1, "only the line's fill: the chart is the regular session");
   assert.equal(paints.at(-1).calls.find((c) => c[0] === "paint")[1], theme.ansi1);
 });
+
+test("extended-hours bars at the closing price keep the close, without a label, until the price moves", () => {
+  const now = WED + 21 * H + 3 * M; // 16:03 EST: only the 16:00 after-hours bar so far
+  const close = 3.79;
+  const price = (d, s) => (d === TUE ? 3.77 : close);
+  const echo = answer({ days: [TUE, WED], now, price, previousClose: 3.77, regularClose: close });
+  const shown = shownQuote(echo);
+  assert.equal(shown.price, close); assert.equal(shown.shownSession, "regular", "no After hours label");
+  // The same bar at another price is a trade after the close.
+  const moved = answer({ days: [TUE, WED], now, previousClose: 3.77, regularClose: close,
+    price: (d, s) => (d === TUE ? 3.77 : s === "post" ? 3.81 : close) });
+  assert.equal(shownQuote(moved).shownSession, "post"); assert.equal(shownQuote(moved).price, 3.81);
+  // Later bars at the closing price (Yahoo's live bar with no volume carries it forward): still the close.
+  const later = answer({ days: [TUE, WED], now: WED + 21 * H + 28 * M, price, previousClose: 3.77, regularClose: close });
+  assert.equal(shownQuote(later).shownSession, "regular"); assert.equal(shownQuote(later).price, close);
+});

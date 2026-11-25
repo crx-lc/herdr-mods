@@ -127,7 +127,11 @@ export function yahooTrail(meta, bars, regular, now, reference = null) {
   }
   const regularTime = meta.regularMarketTime * 1000;
   const last = points.at(-1);
-  const extended = (last?.session === "pre" || last?.session === "post") && last.t > regularTime;
+  // An extended-hours price shows (with its label) only once it differs from the close: Yahoo's
+  // after-hours bars often just carry the closing price forward (the bar at the close, a live bar
+  // with no volume), and the same price under "After hours" would only mislead.
+  const extended = (last?.session === "pre" || last?.session === "post") && last.t >= regularTime
+    && last.close !== meta.regularMarketPrice;
   const shown = extended
     ? { price: last.close, t: last.t, session: last.session }
     : { price: meta.regularMarketPrice, t: regularTime, session: "regular" };
