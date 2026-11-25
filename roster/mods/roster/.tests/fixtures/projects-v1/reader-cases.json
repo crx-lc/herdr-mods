@@ -1,0 +1,1059 @@
+{
+ "description": "Cases for a reader of herdr-agents/projects version 1 (contracts/projects/README.md, The project catalog). Each case reads its files in order: file (relative to this folder) or text (null: absent), with lastRevision, the highest revision the reader accepted before from that file (null: none). expect.files gives, per file, the whole-document status and why, and for an ok file its revision, the state and problems of named entries and the ids of dropped entries (when listed; null for an id that is not a string). expect.merged is the cross-Core view in group order: id, primary, state, flags (in the order FLAGS lists them), icon (the chosen sha256 or null), palette (whether one is shown) and the machines of its Cores. A reader verifies each icon's sha256 against its bytes. The reference is bin/projects-read.mjs.",
+ "cases": [
+  {
+   "name": "one Core: a manifest project, a legacy project and an invalid one, all listed",
+   "files": [
+    {
+     "machine": "host-a",
+     "file": "catalogs/core-a.catalog.json",
+     "lastRevision": null
+    }
+   ],
+   "expect": {
+    "files": [
+     {
+      "status": "ok",
+      "revision": 12,
+      "projects": {
+       "broken": {
+        "state": "invalid",
+        "problems": [
+         "palette-contrast"
+        ]
+       },
+       "atlas": {
+        "state": "ok",
+        "problems": []
+       },
+       "pilot": {
+        "state": "ok",
+        "problems": []
+       }
+      },
+      "dropped": []
+     }
+    ],
+    "merged": [
+     {
+      "id": "broken",
+      "primary": "crx-lc/broken-app",
+      "state": "invalid",
+      "flags": [],
+      "icon": null,
+      "palette": false,
+      "cores": [
+       "host-a"
+      ]
+     },
+     {
+      "id": "atlas",
+      "primary": "crx-lc/atlas-server",
+      "state": "ok",
+      "flags": [],
+      "icon": null,
+      "palette": false,
+      "cores": [
+       "host-a"
+      ]
+     },
+     {
+      "id": "pilot",
+      "primary": "crx-lc/pilot-app",
+      "state": "ok",
+      "flags": [],
+      "icon": "448b0212015a7217b5fab7f5bb18894532c88a1c3a1f41a6c10c230a0de3c1dd",
+      "palette": true,
+      "cores": [
+       "host-a"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "two producer files: pilot is one project on both Cores; atlas with two primaries is a duplicate identity, never merged",
+   "files": [
+    {
+     "machine": "host-a",
+     "file": "catalogs/core-a.catalog.json",
+     "lastRevision": null
+    },
+    {
+     "machine": "host-b",
+     "file": "catalogs/core-b.catalog.json",
+     "lastRevision": null
+    }
+   ],
+   "expect": {
+    "files": [
+     {
+      "status": "ok",
+      "revision": 12
+     },
+     {
+      "status": "ok",
+      "revision": 5,
+      "projects": {
+       "atlas": {
+        "state": "ok",
+        "problems": []
+       },
+       "pilot": {
+        "state": "ok",
+        "problems": []
+       }
+      },
+      "dropped": []
+     }
+    ],
+    "merged": [
+     {
+      "id": "broken",
+      "primary": "crx-lc/broken-app",
+      "state": "invalid",
+      "flags": [],
+      "icon": null,
+      "palette": false,
+      "cores": [
+       "host-a"
+      ]
+     },
+     {
+      "id": "atlas",
+      "primary": "crx-lc/atlas-server",
+      "state": "invalid",
+      "flags": [
+       "duplicate-identity"
+      ],
+      "icon": null,
+      "palette": false,
+      "cores": [
+       "host-a"
+      ]
+     },
+     {
+      "id": "pilot",
+      "primary": "crx-lc/pilot-app",
+      "state": "ok",
+      "flags": [],
+      "icon": "448b0212015a7217b5fab7f5bb18894532c88a1c3a1f41a6c10c230a0de3c1dd",
+      "palette": true,
+      "cores": [
+       "host-a",
+       "host-b"
+      ]
+     },
+     {
+      "id": "atlas",
+      "primary": "crx-lc/atlas-web",
+      "state": "invalid",
+      "flags": [
+       "duplicate-identity"
+      ],
+      "icon": null,
+      "palette": false,
+      "cores": [
+       "host-b"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "version conflict: the higher icon version wins; the Cores read different manifest commits",
+   "files": [
+    {
+     "machine": "host-a",
+     "file": "catalogs/core-a.catalog.json",
+     "lastRevision": null
+    },
+    {
+     "machine": "host-b",
+     "file": "catalogs/core-b-newer-icon.catalog.json",
+     "lastRevision": null
+    }
+   ],
+   "expect": {
+    "files": [
+     {
+      "status": "ok"
+     },
+     {
+      "status": "ok"
+     }
+    ],
+    "merged": [
+     {
+      "id": "broken",
+      "primary": "crx-lc/broken-app",
+      "state": "invalid",
+      "flags": [],
+      "icon": null,
+      "palette": false,
+      "cores": [
+       "host-a"
+      ]
+     },
+     {
+      "id": "atlas",
+      "primary": "crx-lc/atlas-server",
+      "state": "ok",
+      "flags": [],
+      "icon": null,
+      "palette": false,
+      "cores": [
+       "host-a"
+      ]
+     },
+     {
+      "id": "pilot",
+      "primary": "crx-lc/pilot-app",
+      "state": "ok",
+      "flags": [
+       "manifest-differs"
+      ],
+      "icon": "ddafabfa651d936b41a3b8dca3970e713bf767101a7f482af28afac66f451c48",
+      "palette": true,
+      "cores": [
+       "host-a",
+       "host-b"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "version conflict: equal icon versions with different bytes show the monogram, with the palette they agree on; two watchers flagged",
+   "files": [
+    {
+     "machine": "host-a",
+     "file": "catalogs/core-a.catalog.json",
+     "lastRevision": null
+    },
+    {
+     "machine": "host-b",
+     "file": "catalogs/core-b-icon-conflict.catalog.json",
+     "lastRevision": null
+    }
+   ],
+   "expect": {
+    "files": [
+     {
+      "status": "ok"
+     },
+     {
+      "status": "ok"
+     }
+    ],
+    "merged": [
+     {
+      "id": "broken",
+      "primary": "crx-lc/broken-app",
+      "state": "invalid",
+      "flags": [],
+      "icon": null,
+      "palette": false,
+      "cores": [
+       "host-a"
+      ]
+     },
+     {
+      "id": "atlas",
+      "primary": "crx-lc/atlas-server",
+      "state": "ok",
+      "flags": [],
+      "icon": null,
+      "palette": false,
+      "cores": [
+       "host-a"
+      ]
+     },
+     {
+      "id": "pilot",
+      "primary": "crx-lc/pilot-app",
+      "state": "ok",
+      "flags": [
+       "icon-conflict",
+       "manifest-differs",
+       "two-watchers"
+      ],
+      "icon": null,
+      "palette": true,
+      "cores": [
+       "host-a",
+       "host-b"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "version conflict: same icon, palettes that disagree: the icon without a palette",
+   "files": [
+    {
+     "machine": "host-a",
+     "file": "catalogs/core-a.catalog.json",
+     "lastRevision": null
+    },
+    {
+     "machine": "host-b",
+     "file": "catalogs/core-b-palette-conflict.catalog.json",
+     "lastRevision": null
+    }
+   ],
+   "expect": {
+    "files": [
+     {
+      "status": "ok"
+     },
+     {
+      "status": "ok"
+     }
+    ],
+    "merged": [
+     {
+      "id": "broken",
+      "primary": "crx-lc/broken-app",
+      "state": "invalid",
+      "flags": [],
+      "icon": null,
+      "palette": false,
+      "cores": [
+       "host-a"
+      ]
+     },
+     {
+      "id": "atlas",
+      "primary": "crx-lc/atlas-server",
+      "state": "ok",
+      "flags": [],
+      "icon": null,
+      "palette": false,
+      "cores": [
+       "host-a"
+      ]
+     },
+     {
+      "id": "pilot",
+      "primary": "crx-lc/pilot-app",
+      "state": "ok",
+      "flags": [
+       "palette-conflict"
+      ],
+      "icon": "448b0212015a7217b5fab7f5bb18894532c88a1c3a1f41a6c10c230a0de3c1dd",
+      "palette": false,
+      "cores": [
+       "host-a",
+       "host-b"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "unknown version: the whole file is unknown and adds nothing",
+   "files": [
+    {
+     "machine": "host-a",
+     "file": "catalogs/version-2.catalog.json",
+     "lastRevision": null
+    },
+    {
+     "machine": "host-b",
+     "file": "catalogs/core-b.catalog.json",
+     "lastRevision": null
+    }
+   ],
+   "expect": {
+    "files": [
+     {
+      "status": "unknown",
+      "why": "version-unknown"
+     },
+     {
+      "status": "ok"
+     }
+    ],
+    "merged": [
+     {
+      "id": "atlas",
+      "primary": "crx-lc/atlas-web",
+      "state": "ok",
+      "flags": [],
+      "icon": null,
+      "palette": false,
+      "cores": [
+       "host-b"
+      ]
+     },
+     {
+      "id": "pilot",
+      "primary": "crx-lc/pilot-app",
+      "state": "ok",
+      "flags": [],
+      "icon": "448b0212015a7217b5fab7f5bb18894532c88a1c3a1f41a6c10c230a0de3c1dd",
+      "palette": true,
+      "cores": [
+       "host-b"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "a bad entry is dropped or flagged without hiding the others; the producer's ok is never trusted; a manifest entry that claims ok with no presentation is invalid (presentation-missing)",
+   "files": [
+    {
+     "machine": "host-a",
+     "file": "catalogs/bad-entry.catalog.json",
+     "lastRevision": null
+    }
+   ],
+   "expect": {
+    "files": [
+     {
+      "status": "ok",
+      "revision": 4,
+      "projects": {
+       "pilot": {
+        "state": "ok",
+        "problems": []
+       },
+       "tampered": {
+        "state": "invalid",
+        "problems": [
+         "icon-invalid"
+        ]
+       },
+       "wrong-hash": {
+        "state": "invalid",
+        "problems": [
+         "icon-invalid"
+        ]
+       },
+       "no-presentation": {
+        "state": "invalid",
+        "problems": [
+         "presentation-missing"
+        ]
+       }
+      },
+      "dropped": [
+       "nameless",
+       "future-entry"
+      ]
+     }
+    ],
+    "merged": [
+     {
+      "id": "pilot",
+      "primary": "crx-lc/pilot-app",
+      "state": "ok",
+      "flags": [],
+      "icon": "448b0212015a7217b5fab7f5bb18894532c88a1c3a1f41a6c10c230a0de3c1dd",
+      "palette": true,
+      "cores": [
+       "host-a"
+      ]
+     },
+     {
+      "id": "tampered",
+      "primary": "crx-lc/tampered-app",
+      "state": "invalid",
+      "flags": [],
+      "icon": null,
+      "palette": false,
+      "cores": [
+       "host-a"
+      ]
+     },
+     {
+      "id": "wrong-hash",
+      "primary": "crx-lc/hash-app",
+      "state": "invalid",
+      "flags": [],
+      "icon": null,
+      "palette": false,
+      "cores": [
+       "host-a"
+      ]
+     },
+     {
+      "id": "no-presentation",
+      "primary": "crx-lc/bare-app",
+      "state": "invalid",
+      "flags": [],
+      "icon": null,
+      "palette": false,
+      "cores": [
+       "host-a"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "malformed types: an id or any other string field that is a number, a boolean, an array or an object (with toString null) is never coerced; the entry is dropped (entry-malformed) or, for the artwork, invalid with its code; the valid entries survive the assessment and the merge with another Core",
+   "files": [
+    {
+     "machine": "host-a",
+     "file": "catalogs/malformed-types.catalog.json",
+     "lastRevision": null
+    },
+    {
+     "machine": "host-b",
+     "file": "catalogs/core-b.catalog.json",
+     "lastRevision": null
+    }
+   ],
+   "expect": {
+    "files": [
+     {
+      "status": "ok",
+      "revision": 4,
+      "projects": {
+       "pilot": {
+        "state": "ok",
+        "problems": []
+       },
+       "icon-format-number": {
+        "state": "invalid",
+        "problems": [
+         "icon-invalid"
+        ]
+       },
+       "icon-format-boolean": {
+        "state": "invalid",
+        "problems": [
+         "icon-invalid"
+        ]
+       },
+       "icon-format-array": {
+        "state": "invalid",
+        "problems": [
+         "icon-invalid"
+        ]
+       },
+       "icon-format-object": {
+        "state": "invalid",
+        "problems": [
+         "icon-invalid"
+        ]
+       },
+       "icon-svg-number": {
+        "state": "invalid",
+        "problems": [
+         "icon-invalid"
+        ]
+       },
+       "icon-svg-boolean": {
+        "state": "invalid",
+        "problems": [
+         "icon-invalid"
+        ]
+       },
+       "icon-svg-array": {
+        "state": "invalid",
+        "problems": [
+         "icon-invalid"
+        ]
+       },
+       "icon-svg-object": {
+        "state": "invalid",
+        "problems": [
+         "icon-invalid"
+        ]
+       },
+       "icon-sha256-number": {
+        "state": "invalid",
+        "problems": [
+         "icon-invalid"
+        ]
+       },
+       "icon-sha256-boolean": {
+        "state": "invalid",
+        "problems": [
+         "icon-invalid"
+        ]
+       },
+       "icon-sha256-array": {
+        "state": "invalid",
+        "problems": [
+         "icon-invalid"
+        ]
+       },
+       "icon-sha256-object": {
+        "state": "invalid",
+        "problems": [
+         "icon-invalid"
+        ]
+       },
+       "palette-light-foreground-number": {
+        "state": "invalid",
+        "problems": [
+         "palette-invalid"
+        ]
+       },
+       "palette-light-foreground-boolean": {
+        "state": "invalid",
+        "problems": [
+         "palette-invalid"
+        ]
+       },
+       "palette-light-foreground-array": {
+        "state": "invalid",
+        "problems": [
+         "palette-invalid"
+        ]
+       },
+       "palette-light-foreground-object": {
+        "state": "invalid",
+        "problems": [
+         "palette-invalid"
+        ]
+       }
+      },
+      "dropped": [
+       null,
+       null,
+       null,
+       null,
+       "token-number",
+       "token-boolean",
+       "token-array",
+       "token-object",
+       "displayname-number",
+       "displayname-boolean",
+       "displayname-array",
+       "displayname-object",
+       "kind-number",
+       "kind-boolean",
+       "kind-array",
+       "kind-object",
+       "mode-number",
+       "mode-boolean",
+       "mode-array",
+       "mode-object",
+       "state-number",
+       "state-boolean",
+       "state-array",
+       "state-object",
+       "primary-number",
+       "primary-boolean",
+       "primary-array",
+       "primary-object",
+       "problems-number",
+       "problems-boolean",
+       "problems-array",
+       "problems-object",
+       "manifest-commit-number",
+       "manifest-commit-boolean",
+       "manifest-commit-array",
+       "manifest-commit-object",
+       "repositories-name-number",
+       "repositories-name-boolean",
+       "repositories-name-array",
+       "repositories-name-object",
+       "repositories-role-number",
+       "repositories-role-boolean",
+       "repositories-role-array",
+       "repositories-role-object",
+       "space-name-number",
+       "space-name-boolean",
+       "space-name-array",
+       "space-name-object",
+       "space-id-number",
+       "space-id-boolean",
+       "space-id-array",
+       "space-id-object",
+       "space-binding-number",
+       "space-binding-boolean",
+       "space-binding-array",
+       "space-binding-object"
+      ]
+     },
+     {
+      "status": "ok",
+      "revision": 5
+     }
+    ],
+    "merged": [
+     {
+      "id": "pilot",
+      "primary": "crx-lc/pilot-app",
+      "state": "ok",
+      "flags": [],
+      "icon": "448b0212015a7217b5fab7f5bb18894532c88a1c3a1f41a6c10c230a0de3c1dd",
+      "palette": true,
+      "cores": [
+       "host-a",
+       "host-b"
+      ]
+     },
+     {
+      "id": "icon-format-number",
+      "primary": "crx-lc/types-art",
+      "state": "invalid",
+      "flags": [],
+      "icon": null,
+      "palette": false,
+      "cores": [
+       "host-a"
+      ]
+     },
+     {
+      "id": "icon-format-boolean",
+      "primary": "crx-lc/types-art",
+      "state": "invalid",
+      "flags": [],
+      "icon": null,
+      "palette": false,
+      "cores": [
+       "host-a"
+      ]
+     },
+     {
+      "id": "icon-format-array",
+      "primary": "crx-lc/types-art",
+      "state": "invalid",
+      "flags": [],
+      "icon": null,
+      "palette": false,
+      "cores": [
+       "host-a"
+      ]
+     },
+     {
+      "id": "icon-format-object",
+      "primary": "crx-lc/types-art",
+      "state": "invalid",
+      "flags": [],
+      "icon": null,
+      "palette": false,
+      "cores": [
+       "host-a"
+      ]
+     },
+     {
+      "id": "icon-svg-number",
+      "primary": "crx-lc/types-art",
+      "state": "invalid",
+      "flags": [],
+      "icon": null,
+      "palette": false,
+      "cores": [
+       "host-a"
+      ]
+     },
+     {
+      "id": "icon-svg-boolean",
+      "primary": "crx-lc/types-art",
+      "state": "invalid",
+      "flags": [],
+      "icon": null,
+      "palette": false,
+      "cores": [
+       "host-a"
+      ]
+     },
+     {
+      "id": "icon-svg-array",
+      "primary": "crx-lc/types-art",
+      "state": "invalid",
+      "flags": [],
+      "icon": null,
+      "palette": false,
+      "cores": [
+       "host-a"
+      ]
+     },
+     {
+      "id": "icon-svg-object",
+      "primary": "crx-lc/types-art",
+      "state": "invalid",
+      "flags": [],
+      "icon": null,
+      "palette": false,
+      "cores": [
+       "host-a"
+      ]
+     },
+     {
+      "id": "icon-sha256-number",
+      "primary": "crx-lc/types-art",
+      "state": "invalid",
+      "flags": [],
+      "icon": null,
+      "palette": false,
+      "cores": [
+       "host-a"
+      ]
+     },
+     {
+      "id": "icon-sha256-boolean",
+      "primary": "crx-lc/types-art",
+      "state": "invalid",
+      "flags": [],
+      "icon": null,
+      "palette": false,
+      "cores": [
+       "host-a"
+      ]
+     },
+     {
+      "id": "icon-sha256-array",
+      "primary": "crx-lc/types-art",
+      "state": "invalid",
+      "flags": [],
+      "icon": null,
+      "palette": false,
+      "cores": [
+       "host-a"
+      ]
+     },
+     {
+      "id": "icon-sha256-object",
+      "primary": "crx-lc/types-art",
+      "state": "invalid",
+      "flags": [],
+      "icon": null,
+      "palette": false,
+      "cores": [
+       "host-a"
+      ]
+     },
+     {
+      "id": "palette-light-foreground-number",
+      "primary": "crx-lc/types-art",
+      "state": "invalid",
+      "flags": [],
+      "icon": null,
+      "palette": false,
+      "cores": [
+       "host-a"
+      ]
+     },
+     {
+      "id": "palette-light-foreground-boolean",
+      "primary": "crx-lc/types-art",
+      "state": "invalid",
+      "flags": [],
+      "icon": null,
+      "palette": false,
+      "cores": [
+       "host-a"
+      ]
+     },
+     {
+      "id": "palette-light-foreground-array",
+      "primary": "crx-lc/types-art",
+      "state": "invalid",
+      "flags": [],
+      "icon": null,
+      "palette": false,
+      "cores": [
+       "host-a"
+      ]
+     },
+     {
+      "id": "palette-light-foreground-object",
+      "primary": "crx-lc/types-art",
+      "state": "invalid",
+      "flags": [],
+      "icon": null,
+      "palette": false,
+      "cores": [
+       "host-a"
+      ]
+     },
+     {
+      "id": "atlas",
+      "primary": "crx-lc/atlas-web",
+      "state": "ok",
+      "flags": [],
+      "icon": null,
+      "palette": false,
+      "cores": [
+       "host-b"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "malformed types in the whole document: a producer machine or a revision of the wrong type makes the file unknown (malformed)",
+   "files": [
+    {
+     "machine": "a",
+     "text": "{\"schema\":\"herdr-agents/projects\",\"version\":1,\"owner\":\"herdr-agents\",\"producer\":{\"core\":null,\"machine\":7},\"revision\":1,\"projects\":[]}",
+     "lastRevision": null
+    },
+    {
+     "machine": "b",
+     "text": "{\"schema\":\"herdr-agents/projects\",\"version\":1,\"owner\":\"herdr-agents\",\"producer\":{\"core\":{\"toString\":null},\"machine\":\"b\"},\"revision\":1,\"projects\":[]}",
+     "lastRevision": null
+    },
+    {
+     "machine": "c",
+     "text": "{\"schema\":\"herdr-agents/projects\",\"version\":1,\"owner\":\"herdr-agents\",\"producer\":{\"core\":null,\"machine\":\"c\"},\"revision\":\"1\",\"projects\":[]}",
+     "lastRevision": null
+    },
+    {
+     "machine": "d",
+     "text": "{\"schema\":\"herdr-agents/projects\",\"version\":1,\"owner\":\"herdr-agents\",\"producer\":{\"core\":null,\"machine\":\"d\"},\"revision\":1,\"projects\":{\"0\":{\"id\":\"x\"}}}",
+     "lastRevision": null
+    }
+   ],
+   "expect": {
+    "files": [
+     {
+      "status": "unknown",
+      "why": "malformed"
+     },
+     {
+      "status": "unknown",
+      "why": "malformed"
+     },
+     {
+      "status": "unknown",
+      "why": "malformed"
+     },
+     {
+      "status": "unknown",
+      "why": "malformed"
+     }
+    ],
+    "merged": []
+   }
+  },
+  {
+   "name": "one id twice inside one file: the whole file is unknown",
+   "files": [
+    {
+     "machine": "host-a",
+     "file": "catalogs/duplicate-id.catalog.json",
+     "lastRevision": null
+    }
+   ],
+   "expect": {
+    "files": [
+     {
+      "status": "unknown",
+      "why": "duplicate-id"
+     }
+    ],
+    "merged": []
+   }
+  },
+  {
+   "name": "a revision below the last accepted one: the whole file is unknown",
+   "files": [
+    {
+     "machine": "host-a",
+     "file": "catalogs/core-a.catalog.json",
+     "lastRevision": 13
+    }
+   ],
+   "expect": {
+    "files": [
+     {
+      "status": "unknown",
+      "why": "revision-backwards"
+     }
+    ],
+    "merged": []
+   }
+  },
+  {
+   "name": "the same revision again is accepted",
+   "files": [
+    {
+     "machine": "host-a",
+     "file": "catalogs/core-a.catalog.json",
+     "lastRevision": 12
+    }
+   ],
+   "expect": {
+    "files": [
+     {
+      "status": "ok",
+      "revision": 12
+     }
+    ],
+    "merged": [
+     {
+      "id": "broken",
+      "primary": "crx-lc/broken-app",
+      "state": "invalid",
+      "flags": [],
+      "icon": null,
+      "palette": false,
+      "cores": [
+       "host-a"
+      ]
+     },
+     {
+      "id": "atlas",
+      "primary": "crx-lc/atlas-server",
+      "state": "ok",
+      "flags": [],
+      "icon": null,
+      "palette": false,
+      "cores": [
+       "host-a"
+      ]
+     },
+     {
+      "id": "pilot",
+      "primary": "crx-lc/pilot-app",
+      "state": "ok",
+      "flags": [],
+      "icon": "448b0212015a7217b5fab7f5bb18894532c88a1c3a1f41a6c10c230a0de3c1dd",
+      "palette": true,
+      "cores": [
+       "host-a"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "not a catalog, unreadable and absent files are unknown",
+   "files": [
+    {
+     "machine": "a",
+     "text": "{\"schema\":\"herdr-agents/delegations\",\"version\":1}",
+     "lastRevision": null
+    },
+    {
+     "machine": "b",
+     "text": "{not json",
+     "lastRevision": null
+    },
+    {
+     "machine": "c",
+     "text": null,
+     "lastRevision": null
+    }
+   ],
+   "expect": {
+    "files": [
+     {
+      "status": "unknown",
+      "why": "not-a-catalog"
+     },
+     {
+      "status": "unknown",
+      "why": "unreadable"
+     },
+     {
+      "status": "unknown",
+      "why": "missing"
+     }
+    ],
+    "merged": []
+   }
+  }
+ ]
+}
