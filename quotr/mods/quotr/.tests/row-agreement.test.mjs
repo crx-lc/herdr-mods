@@ -106,3 +106,60 @@ test("a regular bar without a close keeps its open, high and low for the dialog"
   assert.deepEqual(q.series, [101]);
   assert.deepEqual(q.firstOpen, { t: s * 1000, price: 100 });
 });
+
+// Any missing bar is a hole, however short; continuous data stays one line.
+const strokeCount = async (q, now, color = theme.ansi1) => {
+  const { ChartParts } = await views();
+  return strokes(new ChartParts().watchlistChart(q, color, theme, now)).length;
+};
+
+test("stocks: one missing 5-minute bar, or five, break the line; continuous data doesn't", async () => {
+  const now = WED + 20 * H;
+  const price = (d, s) => (d === TUE ? 100 : s === "pre" ? 97 : 95);
+  const at = WED + 17 * H; // 12:00 EST
+  assert.equal(await strokeCount(answer({ days: [TUE, WED], now, price }), now), 1, "no hole: one stroke");
+  for (const missing of [1, 5]) {
+    const q = answer({ days: [TUE, WED], now, price, drop: (t) => t >= at && t < at + missing * 5 * M });
+    assert.equal(await strokeCount(q, now), 2, `${missing} missing bar(s): two strokes`);
+    assert.equal(watchlistSparkline(q, now).runs.length, 2);
+  }
+});
+
+test("crypto: one missing kline breaks the line; continuous klines don't", async () => {
+  const now = Date.UTC(2026, 10, 25, 18, 9);
+  const first = Math.floor(now / KLINE) * KLINE - 95 * KLINE;
+  const pair = (skip) => {
+    const points = [];
+    for (let i = 0; i < 96; i++) if (i !== skip) points.push({ t: first + i * KLINE, close: 100 + i / 100 });
+    return { symbol: "COIN/USDT", price: 101, previousClose: 100, changePercent: 1, currency: "USDT", timestamp: now,
+      windowStart: now - DAY, fetchedAt: now, points, series: points.map((p) => p.close), firstOpen: { t: first, price: 100 } };
+  };
+  assert.equal(await strokeCount(pair(-1), now, theme.ansi2), 1);
+  assert.equal(await strokeCount(pair(40), now, theme.ansi2), 2);
+});
+
+test("stocks without a trail: one missing bar breaks the line", async () => {
+  const start = sessions(WED).regular[0];
+  // Bars at 09:30, 09:35, then none at 09:40, then 09:45 and 09:50; the quote at 09:55.
+  const points = [0, 1, 3, 4].map((i) => ({ t: start + i * 5 * M, close: 100 }));
+  const now = start + 25 * M;
+  const q = { symbol: "SAMPLE", price: 100, previousClose: 99, changePercent: 1 / 99 * 100, currency: "USD",
+    timestamp: now, fetchedAt: now, session: sessions(WED).regular, points, series: points.map((p) => p.close) };
+  assert.equal(await strokeCount(q, now, theme.ansi2), 2);
+  assert.deepEqual(watchlistSparkline(q, now).runs.map((r) => r.length), [2, 2]);
+  const full = { ...q, points: [0, 1, 2, 3, 4].map((i) => ({ t: start + i * 5 * M, close: 100 })) };
+  assert.equal(await strokeCount(full, now, theme.ansi2), 1);
+});
+
+test("a trail restored from a cache without trading times is not drawn across its holes", async () => {
+  const now = WED + 20 * H;
+  const hole = [WED + 9.5 * H, WED + 14.5 * H];
+  const fresh = answer({ days: [TUE, WED], now, price: (d, s) => (d === TUE ? 100 : s === "pre" ? 97 : 95), drop: (t) => t >= hole[0] && t < hole[1] });
+  // The shape the previous version saved: the same points without slot or gap.
+  const restored = { ...fresh, trail: { ...fresh.trail, points: fresh.trail.points.map(({ t, close, session }) => ({ t, close, session })) } };
+  assert.equal(shownQuote(restored), restored, "the old trail waits for the next refresh");
+  const g = watchlistSparkline(restored, now);
+  assert.match(g.label, /^Regular /, "the regular session's line, which has no hole");
+  assert.equal(await strokeCount(restored, now), g.runs.length);
+  for (const run of g.runs) assert.ok(run.length > 1);
+});

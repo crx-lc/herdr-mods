@@ -97,8 +97,15 @@ function sessionOf(t, periods) {
   return null;
 }
 
-// A stretch of trading time longer than this with no bar is a hole in the data, drawn blank.
-export const GAP_MS = 30 * 60_000;
+// Bar lengths: Yahoo's 5-minute bars, Binance's 15-minute klines.
+export const STOCK_BAR_MS = 300_000;
+export const CRYPTO_BAR_MS = 900_000;
+/**
+ * Whether two consecutive points of a line with bars of `bar` ms have a hole between them: more
+ * than one and a half bars apart, so a single missing bar is a hole while a quote a few seconds
+ * past a bar's end is not.
+ */
+export const isHole = (from, to, bar) => to - from > bar * 1.5;
 
 /** Trading time (inside any session) between `from` and `to`, in ms: closed hours count zero. */
 function tradingTime(from, to, periods) {
@@ -118,7 +125,7 @@ function tradingTime(from, to, periods) {
  * (`regularMarketPrice`, final by then). The line starts with that close at its time when both
  * are known, then every bar after it in its session. Each point's `slot` is the trading time since
  * the start, so closed hours take no room and missing bars leave room; `gap` marks a point after
- * a hole longer than GAP_MS. The row's price is the latest trade, whether or not a reference is
+ * a hole (isHole: any missing bar). The row's price is the latest trade, whether or not a reference is
  * known (`changePercent` is then null). null without a regular session.
  */
 export function yahooTrail(meta, bars, regular, now, reference = null) {
@@ -149,7 +156,7 @@ export function yahooTrail(meta, bars, regular, now, reference = null) {
   }
   points.forEach((p, i) => {
     p.slot = tradingTime(start, p.t, periods);
-    p.gap = i > 0 && p.slot - points[i - 1].slot > GAP_MS;
+    p.gap = i > 0 && isHole(points[i - 1].slot, p.slot, STOCK_BAR_MS);
   });
   return { reference: ref, closeAt, start, points, ...shown,
     changePercent: ref !== null ? (shown.price - ref) / ref * 100 : null };
@@ -163,6 +170,9 @@ export function yahooTrail(meta, bars, regular, now, reference = null) {
 export function shownQuote(quote) {
   const tr = quote?.trail;
   if (!tr || !positive(tr.price) || !positive(tr.t)) return quote;
+  // A trail cached before points carried their trading time can't show its holes: unused until
+  // the next refresh replaces it.
+  if (!Array.isArray(tr.points) || !tr.points.length || !tr.points.every((p) => Number.isFinite(p?.slot))) return quote;
   // No reference: the latest trade still shows, with no change rather than a wrong one.
   const known = positive(tr.reference) && Number.isFinite(tr.changePercent);
   return { ...quote, price: tr.price, changePercent: known ? tr.changePercent : null,

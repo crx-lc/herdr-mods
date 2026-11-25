@@ -36,4 +36,3 @@ export function answer({ days, now, price, previousClose = 100, extended = true,
     currentTradingPeriod: { regular: { start: sec(sessions(days.at(-1)).regular[0]), end: sec(sessions(days.at(-1)).regular[1]) } } };
   return decodeYahoo("SAMPLE", { status: 200, ok: true, text: JSON.stringify({ chart: { result: [{ meta, timestamp, indicators: { quote: [{ close, open }] } }] } }) }, now);
 }
-

@@ -6,7 +6,7 @@
 // ago); the line is drawn against it, in the percentage's color. Only observed prices are
 // drawn, each at its own time: bar closes, the first bar's open and the quote itself. Gaps in
 // the data stay blank; nothing is interpolated or inferred.
-import { formatPrice, isCryptoPair, shownQuote, GAP_MS } from "./quotes.js";
+import { formatPrice, isCryptoPair, shownQuote, isHole, STOCK_BAR_MS, CRYPTO_BAR_MS } from "./quotes.js";
 import { zoneAt, formatPointTime } from "./readout.js";
 
 export const SPARK_WIDTH = 56;
@@ -20,9 +20,7 @@ export const SPARK_RIGHT = 55;
 export const MIN_SPAN = 0.01;
 export const STALE_AFTER_MS = 180_000;
 const DAY_MS = 86_400_000;
-// Bar lengths: Yahoo's 5-minute bars, Binance's 15-minute klines.
-export const STOCK_BAR_MS = 300_000;
-export const CRYPTO_BAR_MS = 900_000;
+export { STOCK_BAR_MS, CRYPTO_BAR_MS };
 
 const positive = (v) => typeof v === "number" && Number.isFinite(v) && v > 0;
 const range = (r) => Array.isArray(r) && positive(r[0]) && positive(r[1]) && r[1] > r[0];
@@ -110,15 +108,9 @@ export function trailPrices(quote) {
   const q = shownQuote(quote ?? {});
   const tr = q?.trail;
   if (!tr || q === quote || !Array.isArray(tr.points)) return null;
-  const points = tr.points.filter((p) => positive(p?.t) && positive(p?.close));
-  if (!points.length) return null;
-  // A trail cached before the end point was part of it: the regular quote ends the line.
-  if (tr.session === "regular" && tr.t >= points.at(-1).t) {
-    const end = { ...points.at(-1), t: tr.t, close: tr.price, session: "regular" };
-    if (points.at(-1).t === tr.t && points.at(-1).session !== "close") points[points.length - 1] = end;
-    else if (tr.t > points.at(-1).t) points.push({ t: tr.t, close: tr.price, session: "regular" });
-  }
-  return points;
+  // shownQuote only uses trails whose points all carry their trading time (`slot`).
+  const points = tr.points.filter((p) => positive(p?.t) && positive(p?.close) && Number.isFinite(p.slot));
+  return points.length ? points : null;
 }
 
 /**
@@ -163,7 +155,8 @@ export function watchlistSparkline(quote, now, { failed = false } = {}) {
     const y = scale(values, reference);
     const x = (t) => SPARK_LEFT + (SPARK_RIGHT - SPARK_LEFT) * Math.min(1, (t - window[0]) / (window[1] - window[0]));
     line = observed.map((p) => [x(p.t), y(p.price)]);
-    runs = splitRuns(line.length, (i) => observed[i].t - observed[i - 1].t > GAP_MS).map((r) => r.map((i) => line[i]));
+    const bar = crypto ? CRYPTO_BAR_MS : STOCK_BAR_MS;
+    runs = splitRuns(line.length, (i) => isHole(observed[i - 1].t, observed[i].t, bar)).map((r) => r.map((i) => line[i]));
     referenceY = reference !== null ? y(reference) : null;
   } else if (reference !== null) {
     referenceY = (SPARK_TOP + SPARK_BOTTOM) / 2;
@@ -176,20 +169,20 @@ const isStale = (q, now, failed) => failed || !positive(q.fetchedAt) || !Number.
   || now - q.fetchedAt > STALE_AFTER_MS;
 
 /**
- * Spaced by trading time when every point has its slot (closed hours take no room, missing bars
- * keep theirs and break the line); by bar for a trail cached without slots.
+ * Spaced by trading time (closed hours take no room); a missing bar keeps its room and breaks
+ * the line, judged from the slots themselves.
  */
 function trailSparkline(q, points, now, failed) {
   const reference = positive(q.previousClose) ? q.previousClose : null;
   const y = scale(reference === null ? points.map((p) => p.close) : [...points.map((p) => p.close), reference], reference);
   const n = points.length;
+  const first = points[0].slot;
   const last = points.at(-1).slot;
-  const slotted = points.every((p) => Number.isFinite(p.slot)) && last > 0;
   const span = SPARK_RIGHT - SPARK_LEFT;
-  const xs = points.map((p, i) => slotted ? SPARK_LEFT + span * p.slot / last : n > 1 ? SPARK_LEFT + span * i / (n - 1) : SPARK_RIGHT);
+  const xs = points.map((p) => (last > first ? SPARK_LEFT + span * (p.slot - first) / (last - first) : SPARK_RIGHT));
   const line = points.map((p, i) => [xs[i], y(p.close)]);
-  const runs = splitRuns(n, (i) => slotted && points[i].gap === true).map((r) => r.map((i) => line[i]));
-  const half = slotted ? span * STOCK_BAR_MS / 2 / last : n > 1 ? span / 2 / (n - 1) : 0;
+  const runs = splitRuns(n, (i) => isHole(points[i - 1].slot, points[i].slot, STOCK_BAR_MS)).map((r) => r.map((i) => line[i]));
+  const half = last > first ? span * STOCK_BAR_MS / 2 / (last - first) : 0;
   const price = (value) => formatPrice({ price: value, currency: q.currency ?? null });
   const when = (t) => formatPointTime(t, q.timeZone, { now }) ?? "the last session";
   const closeAt = q.trail?.closeAt;
