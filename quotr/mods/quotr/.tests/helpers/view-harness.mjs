@@ -28,6 +28,8 @@ export async function views() {
     Background: { solid: (color) => element().solid(color) },
     window: { paint_path: (path, paint) => element("paint").path(path).paint(paint) },
     Input: { new: () => element("input") }, INTERVAL_MS: 60_000,
+    // A Popup's trigger is a constructor argument; recorded as its first node so walk() reaches it.
+    Popup: { new: (id, trigger) => element("popup").popup(id).child(trigger) },
     brand: () => "brand", stamp: () => "12:00", LOGO: "sample.svg",
     LogoParts: class {}, DialogParts: class {},
   };
@@ -41,4 +43,5 @@ export async function views() {
   bindings.ChartParts = await load("charts", "ChartParts");
   return { ChartParts: bindings.ChartParts, Quotr: await load("main", "Quotr") };
 }
-export const theme = { muted: "muted", dim: "dim", border: "border", ansi1: "red", ansi2: "green" };
+export const theme = { muted: "muted", dim: "dim", border: "border", ansi1: "red", ansi2: "green",
+  popover: "popover", foreground: "foreground" };

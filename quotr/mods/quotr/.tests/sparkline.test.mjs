@@ -123,7 +123,8 @@ test("real watchlist panel mounts 56×22 sparkline; selection, removal, reorder 
   assert.ok(spark, "actual panel calls watchlistChart");
   assert.ok(spark.calls.some(c => c[0] === "w" && c[1] === 56));
   assert.ok(spark.calls.some(c => c[0] === "h" && c[1] === 22));
-  assert.match(spark.calls.find(c => c[0] === "tooltip")[1], /previous regular close/);
+  assert.equal(spark.calls.find(c => c[0] === "tooltip"), undefined, "never the shell's one-line tooltip");
+  assert.match(spark.calls.find(c => c[0] === "accessibility_label")[1], /previous regular close/);
   find("quotr-row-SAMPLE").calls.find(c => c[0] === "on_click")[1]();
   assert.equal(v.opened, "SAMPLE");
   find("quotr-remove-SAMPLE").calls.find(c => c[0] === "on_click")[1](null, {});

@@ -2,11 +2,16 @@
 // their legend, the hover readout, and the colors for a change and a session. Methods of the Quotr
 // view (main.js joins them to its class), so `this` is the view.
 import { div, PathBuilder, Background } from "gpui-kit";
-import { v_flex, h_flex } from "gpui-base";
+import { v_flex, h_flex, Popup } from "gpui-base";
 import { chartGeometry, formatPrice } from "./quotes.js";
 import { SPARK_WIDTH, SPARK_HEIGHT, watchlistSparkline } from "./sparkline.js";
 import { nearestIndex, readoutAt } from "./readout.js";
 import { SESSION_NAMES, sessionHours } from "./extended.js";
+
+// The sparkline's explanation is a card Quotr draws, not the shell's `tooltip`: that label is one
+// line that never wraps, so its long text ran past the window's edge. Same rest delay as the shell's.
+const SPARK_CARD_DELAY = 500;
+const SPARK_CARD_WIDTH = 272; // fits inside the 300px panel with room to spare
 
 export class ChartParts {
   // Under the 1D extended chart: which shading is which, with the hours Yahoo gives for the latest day.
@@ -32,8 +37,12 @@ export class ChartParts {
   // Compact row only. Separate the observed shape from the headline reference magnitude.
   watchlistChart(quote, color, t, now, options) {
     const g = watchlistSparkline(quote, now, options);
-    const box = div().id(`quotr-spark-${quote.symbol}`).relative().flex_none()
-      .w(SPARK_WIDTH).h(SPARK_HEIGHT).tooltip(g.description).opacity(g.stale ? 0.5 : 1);
+    const symbol = quote.symbol;
+    const box = div().id(`quotr-spark-${symbol}`).relative().flex_none()
+      .w(SPARK_WIDTH).h(SPARK_HEIGHT).accessibility_label(g.description).opacity(g.stale ? 0.5 : 1)
+      .on_hover((inside, cx) => this.sparkHover(symbol, inside, cx))
+      // GPUI gives the press to the row too, so its detail still opens; the card must not stay over it.
+      .on_mouse_down("left", (_e, cx) => this.sparkHover(symbol, false, cx));
     const layer = (path, paint) => window.paint_path(path.build(), paint)
       .absolute().top(0).left(0).size_full();
     // Established PathBuilder units: percentages local to this exact 56×22 box.
@@ -57,7 +66,34 @@ export class ChartParts {
       // A zero move has a visible center tick; a capped value has an end stop.
       if (g.move.capped) box.child(layer(stroke(g.move.to, 16, g.move.to, 21), color));
     }
-    return box;
+    const open = this.sparkTip?.symbol === symbol && this.sparkTip.open === true;
+    return Popup.new(`quotr-spark-tip-${symbol}`, box).flex_none().anchor("top_right")
+      .when(open, (el) => el.content(this.sparkCard(g.notes, t)));
+  }
+
+  // Resting on a sparkline opens its card after the delay; leaving it or pressing it closes it.
+  sparkHover(symbol, inside, cx) {
+    const tip = this.sparkTip;
+    if (!inside) {
+      if (tip?.symbol === symbol) { this.sparkTip = null; cx.notify(); }
+      return;
+    }
+    if (tip?.symbol === symbol) return;
+    const seq = (this.sparkSeq ?? 0) + 1;
+    this.sparkSeq = seq;
+    this.sparkTip = { symbol, seq, open: false };
+    cx.timer.after(SPARK_CARD_DELAY, (cx) => {
+      if (this.sparkTip?.seq !== seq) return;
+      this.sparkTip = { symbol, seq, open: true };
+      cx.notify();
+    });
+  }
+
+  // One wrapped paragraph per note, so the lower-rail part is as readable as the top.
+  sparkCard(notes, t) {
+    return v_flex().w(SPARK_CARD_WIDTH).gap(4).px(9).py(7).rounded(6).border_1().border_color(t.border)
+      .bg(t.popover).whitespace_normal().text_size(11).text_color(t.foreground)
+      .children(notes.map((note) => div().w_full().child(note)));
   }
 
   // The day's line, scaled to its box; the previous close is a dashed rule.

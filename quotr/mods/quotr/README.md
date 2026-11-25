@@ -63,8 +63,8 @@ Compared with Pulse at `99f70b2c`:
   flat (0.33px), an ordinary 1% trend remains legible, and a 20% swing spans about 9.48px.
   This price-relative scale is independent of the daily rail. Time positions use the
   reported regular session for stocks or the quote's rolling 24h window for pairs; blank time is
-  unobserved. Hover for bar times, formatted observed price range and reference (with the headline’s
-  supported currency/precision), scale rules and freshness. No opening price is inferred from a late first bar, and the headline quote is never appended to bars.
+  unobserved. Rest the pointer on it for a wrapped card with bar times, formatted observed price range and reference (with the headline’s
+  supported currency/precision), scale rules and freshness; leaving or clicking the sparkline closes it. No opening price is inferred from a late first bar, and the headline quote is never appended to bars.
 - Missing or inconsistent references omit the rail. Missing session/times, mismatched cached
   points omit the line; one bar is a dot. Stocks with out-of-session bars omit the line.
   For crypto, the entire cache must first have paired, ordered, positive finite values; then only

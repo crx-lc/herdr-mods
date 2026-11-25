@@ -11,10 +11,13 @@ const near = (a, b) => assert.ok(Math.abs(a - b) < 1e-9, `${a} ≈ ${b}`);
 const moveQuote = percent => fixture([100, 100 * (1 + percent / 100)], {
   price: 100 * (1 + percent / 100), changePercent: percent,
 });
+// watchlistChart returns the Popup that carries the card; the 56×22 box is its trigger.
+const sparkBox = tree => walk(tree).find(n => n.calls?.some(c => c[0] === "id" && /^quotr-spark-/.test(c[1])));
 function recordings(tree) {
-  assert.ok(tree.calls.some(c => c[0] === "w" && c[1] === 56));
-  assert.ok(tree.calls.some(c => c[0] === "h" && c[1] === 22));
-  return walk(tree).filter(n => n.kind === "paint").map(n => {
+  const box = sparkBox(tree);
+  assert.ok(box.calls.some(c => c[0] === "w" && c[1] === 56));
+  assert.ok(box.calls.some(c => c[0] === "h" && c[1] === 22));
+  return walk(box).filter(n => n.kind === "paint").map(n => {
     const calls = n.calls.find(c => c[0] === "path")[1].calls;
     const width = calls.find(c => c[0] === "stroke")[1];
     const coords = calls.filter(c => ["move_to", "line_to"].includes(c[0])).map(c => {
@@ -83,7 +86,7 @@ test("draw layer honors empty, single dot, no reference, malformed cache and sta
     [fixture(), NOW, { failed: true }, 0.5], [fixture(undefined, { fetchedAt: null }), NOW, {}, 0.5],
     [fixture(), NOW-1, {}, 0.5], [fixture(), NaN, {}, 0.5]]) {
     const box = v.watchlistChart(q, theme.ansi2, theme, now, options);
-    assert.equal(box.calls.find(c => c[0] === "opacity")[1], opacity);
+    assert.equal(sparkBox(box).calls.find(c => c[0] === "opacity")[1], opacity);
     assert.equal(recordings(box).length, 4);
   }
 });

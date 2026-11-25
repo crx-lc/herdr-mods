@@ -57,7 +57,8 @@ export function watchlistSparkline(quote, now, { failed = false } = {}) {
     || now - q.fetchedAt > 180_000;
   const time = (t) => formatPointTime(t, q.timeZone, { now }) ?? "unknown";
   const price = (value) => formatPrice({ price: value, currency: q.currency ?? null });
-  const description = [
+  // One paragraph each, in this order; the card shows them wrapped, `description` joins them.
+  const notes = [
     `Top: observed ${crypto ? "15-minute" : "regular-session 5-minute"} closes, independent vertical scale with minimum total span 1% of observed midpoint (16% padding for larger ranges).`,
     usable ? `${observed.length} bars, ${time(observed[0].t)} to ${time(observed.at(-1).t)}; observed range ${price(low)}–${price(high)}.`
       : "Bar times/session unavailable or inconsistent; line omitted.",
@@ -66,6 +67,6 @@ export function watchlistSparkline(quote, now, { failed = false } = {}) {
       : `Bottom omitted: ${referenceName} unavailable or inconsistent with displayed change.`,
     `Quote: ${time(q.timestamp)}. ${stale ? "Stale or refresh failed." : "Fetched within 3 minutes; exchange delays may apply."}`,
     usable && observed.at(-1).t !== q.timestamp ? "Quote and last bar have different timestamps; bar freshness is independent; quote is not appended to bars." : "",
-  ].filter(Boolean).join(" ");
-  return { line, move, stale, description };
+  ].filter(Boolean);
+  return { line, move, stale, notes, description: notes.join(" ") };
 }
