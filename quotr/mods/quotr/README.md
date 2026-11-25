@@ -58,12 +58,18 @@ Compared with Pulse at `99f70b2c`:
   24h open). The reference is part of the vertical scale, so an opening gap reads as the line sitting
   well above or below it even when the session then trades flat; the scale spans at least 1% of the
   reference, so small moves stay small.
-- Only observed prices are drawn, each at its own time: the first bar's open, every bar's close at
-  the bar's end, and the quote itself. Stocks span Yahoo's regular session for the day the bars
-  belong to (a half-finished day fills half the width); pairs span the quote's rolling 24h. Time
-  with no data stays blank; nothing is filled in. Missing reference: no dashed line, the line in
-  `dim`. One price: a dot. A stale or failed quote dims the chart.
-- Resting on the chart shows one line, for example `Regular 09:30–13:12 EST · vs prev close 354.07 USD`
+- A stock's row shows every trade since the last regular close: the line starts on the dashed
+  close and runs through that evening's after hours, the next pre-market and session, and its after
+  hours, spaced by bar as in the dialog (closed hours take no room), pre-market and after hours
+  shaded. The price and percentage beside it are the latest of those trades against that close,
+  with `Pre-market` or `After hours` under the name when the latest trade is one. The close moves
+  on when the next day's first pre-market trade arrives, so evenings and weekends keep the whole
+  last day. Markets without extended hours show their session after the close. The dialog is
+  unchanged: the regular session and its own extended-hours section.
+- A pair's row spans its rolling 24h by time: the first kline's open, every close at the kline's
+  end, and the quote. Only observed prices are drawn; nothing is filled in. Missing reference: no
+  dashed line, the line in `dim`. One price: a dot. A stale or failed quote dims the chart.
+- Resting on the chart shows one line, for example `Since the close of 354.07 USD · Tue, Nov 24, 16:00 EST`
   or `Last 24h · vs 60,115.22 USDT 24h ago`. Clicking it opens the dialog like the rest of the row.
 - A New York market clock under the title (`marketclock.js`, `clockview.js`): New York time, the
   US regular session's state (Open, Pre-market, After-hours, Closed, Weekend, Holiday) and its next
@@ -123,8 +129,8 @@ or copy this folder to `~/.config/herdr-app/mods/quotr/`. Then
 ## Data sources and limits
 
 - **Quotes:** Yahoo Finance's chart endpoint (unofficial, may be rate-limited or unavailable in some
-  regions; regular-session prices with exchange delays, plus extended hours for US stocks where Yahoo
-  has them) and Binance Spot public market data (24-hour change).
+  regions; prices with exchange delays, extended hours included for US stocks where Yahoo has
+  them) and Binance Spot public market data (24-hour change).
 - **Online logo sources:** [AllInvestView Ticker Logos](https://www.allinvestview.com/tools/ticker-logos/)
   and [Elbstream](https://elbstream.com/logos). These are the two online sources currently supported.
   Source adapters make it easy to add others without changing the panel. See the logo selection and per-ticker settings above.

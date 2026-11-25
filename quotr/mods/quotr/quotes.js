@@ -46,9 +46,12 @@ const cleanText = (value) => typeof value === "string"
   ? value.replace(/[\u0000-\u001f\u007f-\u009f]/g, "").slice(0, 100) || null
   : null;
 
-/** Today's 5-minute bars: the quote metadata and the intraday line in one request. */
+/**
+ * Two days of 5-minute bars, extended hours included: the quote metadata, the latest regular
+ * session's line (the dialog) and every trade since the last regular close (the row) in one request.
+ */
 export function yahooUrl(symbol) {
-  return YAHOO_CHART + encodeURIComponent(normalizeSymbol(symbol)) + "?interval=5m&range=1d&includePrePost=false";
+  return YAHOO_CHART + encodeURIComponent(normalizeSymbol(symbol)) + "?interval=5m&range=2d&includePrePost=true";
 }
 
 const finite = (value) => typeof value === "number" && Number.isFinite(value);
@@ -64,32 +67,78 @@ function cleanSeries(values) {
 const period = (value) => finite(value?.start) && finite(value?.end) && value.end > value.start
   ? [value.start * 1000, value.end * 1000] : null;
 
-/**
- * The regular session the bars belong to, from Yahoo's `tradingPeriods` (the day the response
- * covers, unlike `currentTradingPeriod`, which moves on to the next day): the one holding the
- * last bar, else the latest one. [start, end] in ms, or null.
- */
-function barSession(meta, times) {
-  const list = [];
-  const walk = (v) => {
-    if (Array.isArray(v)) { v.forEach(walk); return; }
-    const p = period(v);
-    if (p) list.push(p);
+/** Yahoo's `tradingPeriods` as { pre, regular, post } lists of [start, end] in ms, oldest first. */
+function tradingPeriods(meta) {
+  const out = { pre: [], regular: [], post: [] };
+  const take = (value, into) => {
+    if (Array.isArray(value)) { value.forEach((v) => take(v, into)); return; }
+    const p = period(value);
+    if (p) into.push(p);
   };
   const tp = meta?.tradingPeriods;
-  walk(Array.isArray(tp) ? tp : tp?.regular);
-  if (!list.length) return null;
-  list.sort((a, b) => a[0] - b[0]);
-  const last = Array.isArray(times) ? Math.max(0, ...times.filter(positive)) * 1000 : 0;
-  return list.find((p) => last >= p[0] && last <= p[1] + 300_000) ?? list.at(-1);
+  if (Array.isArray(tp)) take(tp, out.regular);
+  else if (tp && typeof tp === "object") { take(tp.pre, out.pre); take(tp.regular, out.regular); take(tp.post, out.post); }
+  for (const list of Object.values(out)) list.sort((x, y) => x[0] - y[0]);
+  return out;
 }
 
-/** The first bar's opening price at the bar's start (ms), when Yahoo gives both. */
-function firstOpen(times, opens, closes) {
-  if (!Array.isArray(times) || !Array.isArray(opens) || !Array.isArray(closes)) return null;
-  let first = -1;
-  times.forEach((t, i) => { if (positive(t) && positive(closes[i]) && (first < 0 || t < times[first])) first = i; });
-  return first >= 0 && positive(opens[first]) ? { t: times[first] * 1000, price: opens[first] } : null;
+const SLACK_MS = 300_000; // one bar: a closing print can sit just past a session's end
+const within = (t, p, slack = 0) => t >= p[0] && t <= p[1] + slack;
+
+/**
+ * A bar's session by its start time; each session holds its start, not its end (Yahoo's bar at
+ * 16:00 is the first after-hours bar). null outside all of them.
+ */
+function sessionOf(t, periods) {
+  const inside = (p) => t >= p[0] && t < p[1];
+  if (periods.regular.some(inside)) return "regular";
+  if (periods.pre.some(inside)) return "pre";
+  if (periods.post.some(inside)) return "post";
+  return null;
+}
+
+/**
+ * Every trade since the last regular close, for the watchlist row (issue #37).
+ * The reference is the previous regular close (Yahoo's `previousClose`); once the next trading
+ * day's first pre-market trade arrives, it is the latest regular session's own close
+ * (`regularMarketPrice`, final by then). The line starts with that close at its time, then every
+ * bar after it in its session; the row's price is the latest of those trades. null without a
+ * usable session or reference.
+ */
+export function yahooTrail(meta, bars, regular, now) {
+  const periods = tradingPeriods(meta);
+  if (!regular || !periods.regular.length) return null;
+  const before = [...periods.regular].reverse().find((p) => p[1] <= regular[0]) ?? null;
+  const tagged = bars.filter((b) => b.t > regular[1]).map((b) => ({ ...b, session: sessionOf(b.t, periods) }));
+  const rolled = now >= regular[1] && tagged.some((b) => b.session === "pre");
+  const reference = rolled ? meta.regularMarketPrice : meta.previousClose;
+  const start = rolled ? regular[1] : before?.[1] ?? null;
+  if (!positive(reference) || !positive(start)) return null;
+  const points = [{ t: start, close: reference, session: "close" }];
+  for (const b of bars) {
+    if (b.t < start) continue;
+    const session = sessionOf(b.t, periods);
+    if (session) points.push({ t: b.t, close: b.close, session });
+  }
+  const regularTime = meta.regularMarketTime * 1000;
+  const last = points.at(-1);
+  const extended = last.session === "pre" || last.session === "post";
+  const shown = extended && last.t > regularTime
+    ? { price: last.close, t: last.t, session: last.session }
+    : { price: meta.regularMarketPrice, t: regularTime, session: "regular" };
+  return { reference, start, points, ...shown, changePercent: (shown.price - reference) / reference * 100 };
+}
+
+/**
+ * What the watchlist row shows for a quote: with a stock's trail, its latest trade (pre-market,
+ * regular or after hours) and the change against the trail's reference; otherwise the quote as is.
+ * The dialog keeps the quote itself (the regular session).
+ */
+export function shownQuote(quote) {
+  const tr = quote?.trail;
+  if (!tr || !positive(tr.price) || !positive(tr.reference) || !positive(tr.t) || !Number.isFinite(tr.changePercent)) return quote;
+  return { ...quote, price: tr.price, changePercent: tr.changePercent, previousClose: tr.reference,
+    timestamp: tr.t, shownSession: tr.session };
 }
 
 /** `response` is `{ status, ok, text }` with the body already read. */
@@ -111,11 +160,30 @@ export function decodeYahoo(symbol, response, now) {
   }
   const close = positive(meta.previousClose) ? meta.previousClose : meta.chartPreviousClose;
   const delay = meta.exchangeDataDelayedBy;
-  const bars = body.chart.result[0].indicators?.quote?.[0] ?? {};
-  const series = cleanSeries(bars.close);
-  const opens = cleanSeries(bars.open);
-  const highs = cleanSeries(bars.high);
-  const lows = cleanSeries(bars.low);
+  const ohlc = body.chart.result[0].indicators?.quote?.[0] ?? {};
+  const times = Array.isArray(body.chart.result[0].timestamp) ? body.chart.result[0].timestamp : [];
+  const column = (name, i) => (Array.isArray(ohlc[name]) ? ohlc[name][i] : null);
+  // Every bar with a time and a close, oldest first; open, high and low kept when valid.
+  const all = [];
+  times.forEach((s, i) => {
+    if (positive(s) && positive(column("close", i))) {
+      all.push({ t: s * 1000, close: column("close", i), open: column("open", i), high: column("high", i), low: column("low", i) });
+    }
+  });
+  all.sort((a, b) => a.t - b.t);
+  // The latest regular session (the one holding regularMarketTime): the dialog's day and the
+  // quote's own open, high and low. The rest of the response is extended hours and the day before.
+  const regularTime = meta.regularMarketTime * 1000;
+  const regulars = tradingPeriods(meta).regular;
+  const regular = regulars.find((p) => within(regularTime, p, SLACK_MS))
+    ?? [...regulars].reverse().find((p) => p[0] <= regularTime) ?? null;
+  const day = regular ? all.filter((b) => b.t >= regular[0] && b.t < regular[1]) : all;
+  // Without bar times (an older or partial answer) the columns are taken as they come, untimed.
+  const columnOf = (name) => (times.length ? day.map((b) => b[name]) : ohlc[name]);
+  const series = cleanSeries(columnOf("close"));
+  const opens = cleanSeries(columnOf("open"));
+  const highs = cleanSeries(columnOf("high"));
+  const lows = cleanSeries(columnOf("low"));
   const periods = meta.currentTradingPeriod ?? {};
   return {
     symbol,
@@ -128,10 +196,12 @@ export function decodeYahoo(symbol, response, now) {
     delaySeconds: typeof delay === "number" && Number.isFinite(delay) && delay >= 0 ? delay : null,
     series,
     // The same line with Yahoo's own bar times, and the exchange clock.
-    points: timedPoints(body.chart.result[0].timestamp, bars.close),
+    points: timedPoints(day.map((b) => b.t / 1000), day.map((b) => b.close)),
     // The watchlist line: the session those bars belong to, and the first bar's open.
-    session: barSession(meta, body.chart.result[0].timestamp),
-    firstOpen: firstOpen(body.chart.result[0].timestamp, bars.open, bars.close),
+    session: regular,
+    firstOpen: day.length && positive(day[0].open) ? { t: day[0].t, price: day[0].open } : null,
+    // Every trade since the last regular close: the row's line, price and change.
+    trail: yahooTrail(meta, all, regular, now),
     timeZone: yahooTimeZone(meta),
     // Whether Yahoo has pre-market / after-hours data for this market: the dialog asks for it only then.
     hasPrePost: meta.hasPrePostMarketData === true,

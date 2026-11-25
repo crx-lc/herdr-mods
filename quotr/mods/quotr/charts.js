@@ -30,7 +30,8 @@ export class ChartParts {
   }
 
   // The watchlist row's chart, a small 1D chart (sparkline.js): the line in the percentage's color
-  // over a faint fill, the dashed reference the percentage is measured against, and a one-line hover.
+  // over a faint fill, the dashed reference the percentage is measured against, pre-market and
+  // after-hours shading, and a one-line hover. `quote` is the stored quote, `color` the row's.
   watchlistChart(quote, color, t, now, options) {
     const g = watchlistSparkline(quote, now, options);
     const box = div().id(`quotr-spark-${quote.symbol}`).relative().flex_none()
@@ -40,6 +41,11 @@ export class ChartParts {
     // PathBuilder coordinates are percentages of this 56×22 box.
     const x = (v) => `${v / SPARK_WIDTH * 100}%`;
     const y = (v) => `${v / SPARK_HEIGHT * 100}%`;
+    // Pre-market and after hours shaded as in the dialog's 1D chart.
+    for (const b of g.bands) {
+      box.child(layer(PathBuilder.fill().move_to(x(b.from), "0%").line_to(x(b.to), "0%").line_to(x(b.to), "100%")
+        .line_to(x(b.from), "100%").close(), Background.solid(this.sessionColor(t, b.session)).opacity(0.13)));
+    }
     if (g.line.length > 1) {
       let area = PathBuilder.fill().move_to(x(g.line[0][0]), y(SPARK_HEIGHT));
       for (const [px, py] of g.line) area = area.line_to(x(px), y(py));

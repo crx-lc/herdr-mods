@@ -7,7 +7,7 @@ import { View, div, image } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { nextCommand, openOverlay, props, setShared, shared, theme, checking } from "herdr";
 import { Watchlist, INTERVAL_MS } from "./watchlist.js";
-import { formatBandPrice, formatChange, formatPrice, formatStaleDate, isCryptoPair } from "./quotes.js";
+import { formatBandPrice, formatChange, formatPrice, formatStaleDate, isCryptoPair, shownQuote } from "./quotes.js";
 import { createTickMemory, primeTicks, takeTicks } from "./ticks.js";
 import { MarketClock } from "./clockview.js";
 import {
@@ -179,7 +179,7 @@ export default class Quotr extends View {
       .when(w.preferences.paused, (el) => el.child(div().flex_none().text_color(t.blocked).child("Paused")))
       .when(!symbols.length, (el) => el.child(div().text_color(t.dim).truncate().child("Make the panel taller to add tickers.")))
       .children(symbols.map((symbol) => {
-        const quote = w.quotes[symbol];
+        const quote = w.quotes[symbol] ? shownQuote(w.quotes[symbol]) : undefined;
         const failed = Boolean(w.errors[symbol]);
         return h_flex().flex_none().gap(5).items_center().whitespace_nowrap()
           .child(this.assetIcon(symbol, 13, t, { logos: false }))
@@ -247,7 +247,10 @@ export default class Quotr extends View {
     if (this.reordering && symbols.length < 2) this.reordering = false;
     const reordering = this.reordering;
     const rows = symbols.map((symbol, index) => {
-      const quote = w.quotes[symbol];
+      const stored = w.quotes[symbol];
+      // The row shows a stock's latest trade, extended hours included; the dialog gets the stored quote.
+      const quote = stored ? shownQuote(stored) : undefined;
+      const extended = quote?.shownSession === "pre" ? "Pre-market" : quote?.shownSession === "post" ? "After hours" : "";
       const failed = w.errors[symbol];
       const stale = quote ? formatStaleDate(quote.timestamp, now) : "";
       // When this row's value was last fetched, if it is older than a few refreshes
@@ -255,7 +258,7 @@ export default class Quotr extends View {
       const updating = w.inflight.has(symbol);
       const flash = this.flashes?.[symbol];
       const old = quote && !updating && !failed && now - (quote.fetchedAt ?? 0) > 3 * INTERVAL_MS;
-      const meta = quote ? [quote.name, stale && `As of ${stale}`,
+      const meta = quote ? [quote.name, extended, stale && `As of ${stale}`,
         quote.delaySeconds ? `Delay ${Math.ceil(quote.delaySeconds / 60)}m` : "",
         old ? `Updated ${stamp(quote.fetchedAt, now)}` : ""].filter(Boolean).join(" · ") : "";
       const color = quote ? this.changeColor(t, quote.changePercent) : t.dim;
@@ -273,7 +276,7 @@ export default class Quotr extends View {
                 .child(div().font_semibold().truncate().child(symbol))
                 .when(Boolean(meta), (el) => el.child(div().text_size(11).text_color(t.dim).truncate().child(meta)))))
             .when(reordering, (el) => el.child(this.moveButtons(symbol, index, symbols.length, t)))
-            .when(Boolean(quote) && !reordering, (el) => el.child(this.watchlistChart(quote, color, t, now, { failed: Boolean(failed) })))
+            .when(Boolean(quote) && !reordering, (el) => el.child(this.watchlistChart(stored, color, t, now, { failed: Boolean(failed) })))
             .child(v_flex().flex_none().w(108).gap(1)
               // The last value stays during a refresh; a small pulsing dot marks the update in flight.
               // "Waiting…" only when there has never been a quote for this row.
@@ -313,8 +316,8 @@ export default class Quotr extends View {
     const footer = v_flex().flex_none().px(12).py(10).gap(8).border_t(1).border_color(t.border)
       .child(div().text_size(10.5).text_color(t.dim)
         .child(crypto
-          ? "Yahoo Finance · Binance Spot · Stocks: regular session, exchange delays vary · Crypto: 24h change"
-          : "Yahoo Finance · Regular-session quotes · Exchange delays vary"))
+          ? "Yahoo Finance · Binance Spot · Stocks: change since the last close, extended hours included, exchange delays vary · Crypto: 24h change"
+          : "Yahoo Finance · Change since the last close, extended hours included · Exchange delays vary"))
       .children(this.logoCredits(symbols, t));
 
     return root.child(header).child(field).child(list).child(footer);
