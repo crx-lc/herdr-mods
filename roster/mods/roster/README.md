@@ -120,6 +120,11 @@ something is still waiting:
 - Nothing on the rows moves, and Roster posts no notification or toast of its own:
   Herdr's toast stays the only one. A remote session reminds the same way; the chime
   plays on this computer.
+- **One sound per event, however many Roster copies are open.** The copies Herdr runs
+  from this mod share one reminder timer, so an arrival or reminder sounds once while every
+  copy's bell pulses, and closing or opening a copy neither loses nor replays a sound. Two
+  Herdr windows that run separate copies of the mod which cannot see each other would each
+  sound; whether Herdr ever does that is not verified.
 
 **Options › Sound** has three values (activate the entry to move to the next):
 

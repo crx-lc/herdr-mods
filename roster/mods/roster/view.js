@@ -6,7 +6,7 @@ import { spaceRows, machineKey, spaceFill, spacePlace, GitIdentities, MachineOs,
 import { actionReason, rowContext, detailLabel, hoverText, reasonText, agentFacts, homeRelative } from './detail.js';
 import { terminalKind } from './runtime.js';
 import { reducedMotion, readStored, writeStored, PULSE } from './motion.js';
-import { Reminders, CHIME, SOUND, SOUND_LABELS, readSound, writeSound, nextSoundChoice, herdrMuted, playsChime, lookingAt } from './reminders.js';
+import { NeedsYou, CHIME, SOUND, SOUND_LABELS, readSound, writeSound, nextSoundChoice, herdrMuted, playsChime, lookingAt } from './reminders.js';
 
 // One distinct icon per status group, so each reads as its own section.
 export const STATUS_ICONS = Object.freeze({ 'Needs you': 'bell', 'Child needs you': 'bell-dot', Working: 'working', Done: 'check-circle', Idle: 'pause-circle', Offline: 'offline', Stale: 'clock', Unknown: 'help-circle' });
@@ -37,6 +37,9 @@ export function createRosterView(kit, app, options = {}) {
   const herdrGlyph = (name, size) => svg('icons/' + name + '.svg').size(size).flex_none();
   const herdrPicture = (name, size) => image('icons/' + name + '.svg').w(size).h(size).flex_none();
   const storage = options.storage ?? (typeof localStorage === 'undefined' ? null : localStorage);
+  // One Needs you timer for every copy of this class: main.js makes the class once per mod
+  // context, so an arrival or reminder sounds once however many copies are open.
+  const needsYou = options.needsYou ?? new NeedsYou();
   return class Roster extends View {
     init(_props, cx) {
       this.handle = cx.focus_handle();
@@ -67,7 +70,8 @@ export function createRosterView(kit, app, options = {}) {
       });
       // Needs you pulses the bell, and by Options > Sound plays Roster's chime, on a new arrival
       // and then every 2 minutes while it is not empty; the check reads the last drawn list.
-      this.reminders = new Reminders(); this.pulseUntil = 0;
+      // The timer is shared (needsYou); heardCount is the last of its events this copy pulsed for.
+      this.needsYou = needsYou; this.heardCount = null; this.readNumber = 0; this.pulseUntil = 0;
       // Git identity for worktree nesting: the stock panel's two read-only rev-parse
       // queries, probed in the background (never in render, never under check).
       const exec = options.exec ?? app.exec, readTextFile = options.readTextFile ?? app.readTextFile;
@@ -110,23 +114,28 @@ export function createRosterView(kit, app, options = {}) {
     soundChoice() { return readSound(storage); }
     watchNeedsYou(cx) {
       const c = this.controller;
-      if (!c.projection) return;
+      // Not drawn yet, so not joined to the shared timer: nothing to take or pulse.
+      if (!c.projection || this.heardCount === null) return;
       const now = c.host.now();
       // A reminder that falls due reads Herdr afresh first, so it never sounds for a list
       // that has emptied since the last draw; that read is drawn too.
-      const fresh = this.reminders.isDue(now);
-      const pinned = (fresh ? c.render() : c.projection).instances.filter(i => i.pinned && i.kind === 'terminal');
+      const fresh = needsYou.isDue(now);
+      if (fresh) { c.render(); this.readNumber = needsYou.read(); }
+      const pinned = c.projection.instances.filter(i => i.pinned && i.kind === 'terminal');
       const looking = () => {
         const focused = typeof c.host.focused === 'function' ? c.host.focused() : null;
         const win = typeof app.window === 'function' ? app.window() : null;
         return pinned.every(i => lookingAt([i.row?.address, ...(i.row?.identityEvidence ?? []).map(e => e?.address)], focused, win));
       };
-      const event = this.reminders.take(pinned.map(i => i.identity), now, looking);
+      // Only the copy that takes an event sounds it; every copy pulses for it.
+      const event = needsYou.take(pinned.map(i => i.identity), this.readNumber, now, looking);
       if (event && playsChime(event, this.soundChoice(), typeof app.settings === 'function' ? app.settings() : null)) {
         const play = options.playSound ?? app.playSound;
         try { if (typeof play === 'function') play(CHIME); } catch { /* A sound that fails stays silent. */ }
       }
-      if (!event || this.reduceMotion()) { if (fresh) cx.notify(); return; }
+      const pulse = needsYou.count !== this.heardCount;
+      this.heardCount = needsYou.count;
+      if (!pulse || this.reduceMotion()) { if (fresh) cx.notify(); return; }
       this.pulseUntil = now + PULSE.ms;
       cx.notify();
       // Then still: one redraw after the pulse draws the bell without it.
@@ -777,11 +786,13 @@ export function createRosterView(kit, app, options = {}) {
       // view, drawn only while something is pending. Its rows scroll on their own past three.
       const PINNED = { row: 44, gap: 3, shown: 3 };
       const pinnedCount = projection.instances.filter(i => i.pinned && i.kind === 'terminal').length;
-      // Capture the initial drawn attention list; its task establishes the baseline after render.
-      if (this.reminders.seen === null) {
+      // Number this read of Herdr for the shared timer. The first draw joins it: its task
+      // establishes the baseline after render (silent, or the shared one if another copy runs).
+      this.readNumber = needsYou.read();
+      if (this.heardCount === null) {
         const pending = projection.instances.filter(i => i.pinned && i.kind === 'terminal').map(i => i.identity);
-        const at = c.host.now();
-        cx.spawn(async () => { this.reminders.start(pending, at); });
+        const at = c.host.now(), read = this.readNumber;
+        cx.spawn(async () => { if (this.heardCount === null) this.heardCount = needsYou.join(pending, read, at); });
       }
       const shown = Math.min(pinnedCount, PINNED.shown);
       const pinnedRows = v().id('roster-needs-rows').flex_none().gap(PINNED.gap).overflow_y_scrollbar().track_scroll(this.pinnedScroll)

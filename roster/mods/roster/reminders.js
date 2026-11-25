@@ -67,3 +67,36 @@ export class Reminders {
     return looking() ? null : 'reminder';
   }
 }
+
+// One timer for every Roster copy in a mod context, so an event sounds once however many
+// copies are open. The copy whose tick takes an event plays it; each copy pulses its own bell
+// when count moves past the count it last saw. A copy that joins later starts at the current
+// count, so it never replays a sound, and closing a copy takes nothing with it.
+// Each copy numbers its reads of Herdr with read(); a list from a read older than the latest
+// one taken (a hidden copy that has not redrawn) is ignored, so an older list never undoes a
+// newer one and turns the same arrival into two. When no copy has ticked for `idle` ms (all
+// were closed), the next copy to join starts silently, as a first copy does.
+export const IDLE_MS = 5000;
+export class NeedsYou {
+  constructor(every = REMIND_MS, idle = IDLE_MS) {
+    this.every = every; this.idle = idle; this.reminders = new Reminders(every);
+    this.count = 0; this.reads = 0; this.latest = 0; this.heard = -Infinity;
+  }
+  read() { return ++this.reads; }
+  // A copy's first draw, of identities from read number `read`. Answers the count it starts from.
+  join(identities, read, now) {
+    if (now - this.heard > this.idle) { this.reminders = new Reminders(this.every); this.latest = 0; }
+    this.heard = now;
+    if (this.reminders.seen === null) { this.reminders.start(identities, now); this.latest = Math.max(this.latest, read); }
+    return this.count;
+  }
+  isDue(now) { return this.reminders.isDue(now); }
+  // Answers the event this call took: each event is taken by one call only.
+  take(identities, read, now, looking = () => false) {
+    this.heard = now;
+    if (read < this.latest) identities = this.reminders.seen ?? identities; else this.latest = read;
+    const event = this.reminders.take(identities, now, looking);
+    if (event) this.count++;
+    return event;
+  }
+}

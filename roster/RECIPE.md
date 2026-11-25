@@ -68,6 +68,9 @@ reading Herdr afresh when a reminder falls due; nothing pending at start stays s
 no reminder while the window is active and focused on every pending session. Options ›
 Sound (Off, Reminders only by default, Arrival and reminders) picks when playSound plays
 the shipped chime; settings sounds.enabled:false always silences it; Motion stops the pulse.
+One timer per mod context (reminders.js NeedsYou, made with the view class), shared by
+every copy: the copy that takes an event sounds it, each copy pulses its own bell, a later
+copy never replays, and a list from an older read is ignored.
 No toasts of Roster's own. Bind to actual row
 instance/incarnation/process/run and observed machine availability, not a label/index.
 Read-only Details may open on currently listed unavailable rows and must explain disabled
