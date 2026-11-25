@@ -319,3 +319,48 @@ test('native 3: Herdr\'s timeout ends a page of a list too; a rejection at the c
   assert.equal(execFailure(new Error('running `gh` failed: executable was not found on the host PATH'), 3, 20000), 'gh-unavailable');
   assert.equal(execFailure(undefined, 0, 20000), 'gh-unavailable');
 });
+
+// Review 6: the timeout words were never matched (the pattern held control characters where word boundaries were
+// meant), and every test delivered them at the timeout, where the time alone answers. Here only the words can.
+test('review 6: Herdr\'s timeout words alone make a timeout, before the call\'s own timeout has passed', async () => {
+  const s = setup({}, { modes: { 'sample-org/pilot-docs': 'hang' } });
+  const start = s.t.now;
+  s.data.wantCounts(['sample-org/pilot-docs']); await settle();
+  s.t.now = start + 19999;
+  s.gh.hung[0].reject(new Error('`gh` timed out after 20000 ms')); await settle();
+  assert.deepEqual(entryOf(s.data.counts, 'sample-org/pilot-docs'), ['error', 'timeout', null, null]);
+  assert.equal(s.data.running, 0);
+  const label = projectTotals(group(['sample-org/pilot-docs']), s.data, s.t.now).issues.label;
+  assert.match(label, /sample-org\/pilot-docs \(no answer in time\)/);
+  assert.doesNotMatch(label, /gh did not run/);
+  assert.equal(execFailure(new Error('`gh` timed out after 20000 ms'), 0, 20000), 'timeout');
+  assert.equal(execFailure('TIMED OUT after 20000 ms', 3, 20000), 'timeout', 'a string, in any case');
+  assert.equal(execFailure(new Error('`gh` timed out after 20000 ms'), 60000, 20000), 'timeout');
+  // Whole words: a message that only holds the letters is not Herdr's timeout.
+  assert.equal(execFailure(new Error('untimed outcome'), 3, 20000), 'gh-unavailable');
+});
+
+test('review 6: a program that could not start is "gh did not run" however late the rejection arrives', async () => {
+  const notFound = 'running `gh` failed: executable was not found on the host PATH';
+  const s = setup({}, { modes: { 'sample-org/pilot-docs': 'hang' } });
+  const start = s.t.now;
+  s.data.wantCounts(['sample-org/pilot-docs']); await settle();
+  // Herdr refused at once; the rejection is only heard at the call's timeout (a pause, a late callback).
+  s.t.now = start + 20000;
+  s.gh.hung[0].reject(new Error(notFound)); await settle();
+  assert.deepEqual(entryOf(s.data.counts, 'sample-org/pilot-docs'), ['error', 'gh-unavailable', null, null]);
+  assert.equal(s.data.running, 0);
+  assert.match(projectTotals(group(['sample-org/pilot-docs']), s.data, s.t.now).issues.label, /gh did not run \(is GitHub CLI installed\?\)/);
+  for (const elapsed of [0, 19999, 20000, 20001, 3600000]) {
+    assert.equal(execFailure(new Error(notFound), elapsed, 20000), 'gh-unavailable', `not found at ${elapsed} ms`);
+    assert.equal(execFailure('running `gh` failed: access is denied', elapsed, 20000), 'gh-unavailable', `another start failure at ${elapsed} ms`);
+  }
+});
+
+test('review 6: words that say neither fall back to the time', () => {
+  for (const error of [new Error('something else'), 'stdout exceeded 1048576 bytes', undefined, null, {}]) {
+    assert.equal(execFailure(error, 19999, 20000), 'gh-unavailable');
+    assert.equal(execFailure(error, 20000, 20000), 'timeout');
+    assert.equal(execFailure(error, 20001, 20000), 'timeout');
+  }
+});

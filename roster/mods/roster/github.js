@@ -65,12 +65,17 @@ export function ghOutcome(result) {
 export const isReason = value => REASONS.includes(value);
 // Why Herdr's exec rejected. It rejects for its own timeout, for a program that cannot start, and for a machine it
 // cannot reach (not here: gh runs on this computer). Herdr 0.1.18 words them "`gh` timed out after 20000 ms" and
-// "running `gh` failed: executable was not found on the host PATH". A timeout is "no answer in time"; anything else
-// is gh-unavailable. A rejection that came at or after the call's own timeout is a timeout too, whatever its words.
+// "running `gh` failed: executable was not found on the host PATH". The words decide first, whatever the time: a
+// program that could not start is gh-unavailable, a timeout is "no answer in time". Only words that say neither fall
+// back to the time: a rejection at or after the call's own timeout is a timeout, an earlier one gh-unavailable.
 // Herdr's timeout (callMs) is what ends a slow call: it comes before the job's deadline (its calls' time + graceMs).
+const NOT_STARTED = /\brunning\s+\S+\s+failed\b|\bexecutable was not found\b/i;
+const TIMED_OUT = /\btimed out\b/i;
 export function execFailure(error, elapsed, timeoutMs) {
   const text = String(error?.message ?? error);
-  return /timed out/i.test(text) || elapsed >= timeoutMs ? 'timeout' : 'gh-unavailable';
+  if (NOT_STARTED.test(text)) return 'gh-unavailable';
+  if (TIMED_OUT.test(text)) return 'timeout';
+  return elapsed >= timeoutMs ? 'timeout' : 'gh-unavailable';
 }
 
 export function parseCounts(data) {
