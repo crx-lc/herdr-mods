@@ -2,10 +2,16 @@
 // their legend, the hover readout, and the colors for a change and a session. Methods of the Quotr
 // view (main.js joins them to its class), so `this` is the view.
 import { div, PathBuilder, Background } from "gpui-kit";
-import { v_flex, h_flex } from "gpui-base";
+import { v_flex, h_flex, Popup } from "gpui-base";
 import { chartGeometry, formatPrice } from "./quotes.js";
+import { SPARK_WIDTH, SPARK_HEIGHT, SPARK_CARD_GAP, watchlistSparkline, sparkCardPlacement } from "./sparkline.js";
 import { nearestIndex, readoutAt } from "./readout.js";
 import { SESSION_NAMES, sessionHours } from "./extended.js";
+
+// The sparkline's explanation is a card Quotr draws, not the shell's `tooltip`: that label is one
+// line that never wraps, so its long text ran past the window's edge. Same rest delay as the shell's.
+// The card sits beside the sparkline (sparkCardPlacement), never over it.
+const SPARK_CARD_DELAY = 500;
 
 export class ChartParts {
   // Under the 1D extended chart: which shading is which, with the hours Yahoo gives for the latest day.
@@ -26,6 +32,97 @@ export class ChartParts {
 
   changeColor(t, change) {
     return change === null || change === undefined ? t.dim : change >= 0 ? t.ansi2 : t.ansi1;
+  }
+
+  // Compact row only. Separate the observed shape from the headline reference magnitude.
+  watchlistChart(quote, color, t, now, options) {
+    const g = watchlistSparkline(quote, now, options);
+    const symbol = quote.symbol;
+    const box = div().id(`quotr-spark-${symbol}`).relative().flex_none()
+      .w(SPARK_WIDTH).h(SPARK_HEIGHT).accessibility_label(g.description).opacity(g.stale ? 0.5 : 1)
+      .on_hover((inside, cx) => this.sparkHover(symbol, inside, cx))
+      // Where the sparkline is in the window, so the card can go beside it. No redraw.
+      .on_mouse_move((event) => this.sparkTrack(symbol, event))
+      // GPUI gives the press to the row too, so its detail still opens; the card must not stay over it.
+      .on_mouse_down("left", (_e, cx) => this.sparkHover(symbol, false, cx));
+    const layer = (path, paint) => window.paint_path(path.build(), paint)
+      .absolute().top(0).left(0).size_full();
+    // Established PathBuilder units: percentages local to this exact 56×22 box.
+    const xPercent = (x) => `${x / SPARK_WIDTH * 100}%`;
+    const yPercent = (y) => `${y / SPARK_HEIGHT * 100}%`;
+    const stroke = (x, y, toX, toY, width = 1) => PathBuilder.stroke(width)
+      .move_to(xPercent(x), yPercent(y)).line_to(xPercent(toX), yPercent(toY));
+    if (g.line.length === 1) {
+      const [x, y] = g.line[0];
+      box.child(layer(stroke(x - 1, y, x + 1, y, 2), t.muted));
+    } else if (g.line.length > 1) {
+      let path = PathBuilder.stroke(1.25);
+      g.line.forEach(([x, y], i) => { path = i ? path.line_to(xPercent(x), yPercent(y)) : path.move_to(xPercent(x), yPercent(y)); });
+      box.child(layer(path, t.muted));
+    }
+    if (g.move) {
+      box.child(layer(stroke(2, 19, 54, 19), t.border))
+        .child(layer(stroke(28, 16, 28, 21), t.muted));
+      // Paint nonzero cues above the tick so small signed moves stay visible.
+      if (g.move.percent !== 0) box.child(layer(stroke(g.move.from, 19, g.move.to, 19, 2.5), color));
+      // A zero move has a visible center tick; a capped value has an end stop.
+      if (g.move.capped) box.child(layer(stroke(g.move.to, 16, g.move.to, 21), color));
+    }
+    const open = this.sparkTip?.symbol === symbol && this.sparkTip.open === true;
+    return box.when(open, (el) => el.child(this.sparkPopup(symbol, g.notes, t)));
+  }
+
+  // The card's Popup. Its trigger is a 1px stand-in just outside the sparkline, so the card's near
+  // edge is pinned beside it: clamping into the window can then only move it up or down, never over
+  // the sparkline. "below" (geometry unknown, or no room either side) pins to the sparkline itself.
+  sparkPopup(symbol, notes, t) {
+    const at = this.sparkAt?.symbol === symbol ? this.sparkAt : null;
+    const viewport = typeof window.viewport_size === "function" ? window.viewport_size() : null;
+    const place = sparkCardPlacement(at, viewport?.width);
+    const id = `quotr-spark-tip-${symbol}`;
+    const popup = place.side === "below"
+      ? Popup.new(id, div().w(SPARK_WIDTH).h(SPARK_HEIGHT)).absolute().top(0).left(0).anchor("top_right")
+      : Popup.new(id, div().w(1).h(1)).absolute().top(0)
+        .left(place.side === "left" ? -SPARK_CARD_GAP - 1 : SPARK_WIDTH + SPARK_CARD_GAP)
+        .anchor(place.side === "left" ? "top_right" : "top_left");
+    return popup.content(this.sparkCard(symbol, notes, t, place.width));
+  }
+
+  // The sparkline's place in the window: pointer position less its offset inside the box.
+  sparkTrack(symbol, event) {
+    const x = event?.position?.x, local = event?.local_position?.x;
+    if (!Number.isFinite(x) || !Number.isFinite(local)) return;
+    const width = Number.isFinite(event.bounds?.width) ? event.bounds.width : SPARK_WIDTH;
+    this.sparkAt = { symbol, left: x - local, width };
+  }
+
+  // Resting on a sparkline opens its card after the delay; leaving it or pressing it closes it.
+  sparkHover(symbol, inside, cx) {
+    const tip = this.sparkTip;
+    if (!inside) {
+      if (tip?.symbol === symbol) { this.sparkTip = null; cx.notify(); }
+      return;
+    }
+    if (tip?.symbol === symbol) return;
+    const seq = (this.sparkSeq ?? 0) + 1;
+    this.sparkSeq = seq;
+    this.sparkTip = { symbol, seq, open: false };
+    cx.timer.after(SPARK_CARD_DELAY, (cx) => {
+      if (this.sparkTip?.seq !== seq) return;
+      this.sparkTip = { symbol, seq, open: true };
+      cx.notify();
+    });
+  }
+
+  // One wrapped paragraph per note, so the lower-rail part is as readable as the top. If the card
+  // ever does end up under the pointer, leaving it or pressing it still closes it.
+  sparkCard(symbol, notes, t, width) {
+    const close = (cx) => this.sparkHover(symbol, false, cx);
+    return v_flex().id(`quotr-spark-card-${symbol}`).w(width).gap(3).px(9).py(6).rounded(6)
+      .border_1().border_color(t.border).bg(t.popover).whitespace_normal().text_size(11).text_color(t.foreground)
+      .on_hover((inside, cx) => { if (!inside) close(cx); })
+      .on_mouse_down("left", (_e, cx) => close(cx))
+      .children(notes.map((note) => div().w_full().child(note)));
   }
 
   // The day's line, scaled to its box; the previous close is a dashed rule.
