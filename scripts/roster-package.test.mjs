@@ -18,7 +18,7 @@ test('inventory is deterministic, excludes development/runtime files, and does n
   const root = fixture(t);
   for (const file of ['.tests/sample.test.mjs', '.cache/private.json', '.backups/old.js', 'gpui-kit.d.ts', 'herdr.d.ts', 'jsconfig.json']) write(root, file);
   const before = fs.readFileSync(path.join(root, 'main.js'));
-  assert.equal(SHIPPING.length, 55);
+  assert.equal(SHIPPING.length, 57);
   assert.deepEqual(inventory(root), SHIPPING);
   assert.deepEqual(inventory(root), SHIPPING);
   assert.deepEqual(fs.readFileSync(path.join(root, 'main.js')), before);

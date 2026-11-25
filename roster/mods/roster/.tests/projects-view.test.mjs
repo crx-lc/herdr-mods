@@ -146,28 +146,63 @@ test('#30: keyboard and pointer keep folds, the exact session and the pinned sec
   assert.deepEqual(s.f.calls, [['pane.focus', { pane: 'p1' }]]);
 });
 
-test('#30: a new Needs you pulses its echo icon once with the bell; a refresh never replays it; motion off keeps it still', async () => {
-  const w = world(); const s = await setup(w);
-  const every = []; s.cx.timer.every = (ms, fn) => every.push(fn);
-  s.render(); s.view.watchArrivals(s.cx);
+// Two Roster copies share Needs you's one timer (reminders.js, #34). The Projects echo pulses for an arrival in both
+// copies, as each bell does, and never for a 2-minute reminder; one sound per event; motion off keeps it still.
+async function copiesOf(w, { storage = null } = {}) {
+  const played = [];
+  const Type = createRosterView(kit, { ...appOf(w.f.host), window: () => ({ active: true }) }, { host: w.f.host, layoutHost: layoutHostUnused,
+    initialView: 'projects', collapseUnassigned: false, catalogSource: w.catalogSource, github: w.github, projectIcons: w.projectIcons, storage,
+    playSound: sound => played.push(sound) });
+  w.catalogSource.refresh(w.t.after); await settle();
+  const copies = [0, 1].map(() => {
+    const c = context(), every = [];
+    c.cx.timer.every = (ms, fn) => every.push(fn); c.cx.timer.after = () => {};
+    const view = new Type(); view.init({}, c.cx); view.applyProjects();
+    return { view, cx: c.cx, render: () => view.render(c.cx), tick: () => every[0](c.cx) };
+  });
+  const step = ms => { w.t.now += ms; for (const copy of copies) copy.render(); for (const copy of copies) copy.tick(); };
+  return { copies, step, played };
+}
+const echoGlyph = (copy, address) => {
+  const tree = copy.render(), pilot = registered(copy.view, 'pilot');
+  const echo = rowsIn(copy.view, pilot).find(i => i.row.address === address);
+  return flatten(byId(tree, 'row-status:' + echo.key)).find(e => e.attributes.svg);
+};
+const bellOf = copy => byId(copy.render(), 'group-icon:' + JSON.stringify(['attention']));
+
+test('#30 after #34: the echo pulses for a new arrival in every copy, never for a reminder; one sound per event; motion off stays still', async () => {
+  const w = world(), { copies, step, played } = await copiesOf(w);
+  step(1000);
   w.f.values.terminals[0] = { ...w.f.values.terminals[0], status: 'blocked' };
-  s.render(); s.cx.timer.after = () => {}; s.view.watchArrivals(s.cx);
-  const pilot = registered(s.view, 'pilot');
-  const echo = rowsIn(s.view, pilot).find(i => i.row.address === 't1');
-  const glyph = () => flatten(byId(s.render(), 'row-status:' + echo.key)).find(e => e.attributes.svg);
-  assert.equal(glyph().attributes.loop[0], 'opacity');
-  s.view.watchArrivals(s.cx); s.render();
-  w.t.now += 2500; assert.equal(glyph().attributes.loop, undefined, 'one short pulse, then still');
-  s.view.watchArrivals(s.cx); assert.equal(glyph().attributes.loop, undefined, 'no replay on refresh');
-  // Motion reduced in Options: the same arrival draws a still bell, and a Working row's icon does not turn.
-  const r = await setup(world(), { storage: { getItem: () => 'reduce', setItem() {} } });
-  r.render(); r.view.watchArrivals(r.cx);
+  step(1000);
+  for (const copy of copies) {
+    assert.equal(echoGlyph(copy, 't1').attributes.loop?.[0], 'opacity', 'each copy\'s echo pulses for the arrival');
+    assert.equal(bellOf(copy).attributes.loop?.[0], 'opacity');
+  }
+  assert.deepEqual(played, [], 'default Sound: Herdr announces the arrival, Roster stays silent');
+  step(3000);
+  for (const copy of copies) assert.equal(echoGlyph(copy, 't1').attributes.loop, undefined, 'one short pulse, then still');
+  // The 2-minute reminder: one chime, both bells pulse, the echoes stay still.
+  step(120000);
+  assert.equal(played.length, 1, 'one chime for the reminder, from one copy');
+  for (const copy of copies) {
+    assert.equal(bellOf(copy).attributes.loop?.[0], 'opacity', 'the reminder pulses the bell');
+    assert.equal(echoGlyph(copy, 't1').attributes.loop, undefined, 'a reminder never pulses the echo');
+  }
+  // A second arrival pulses only its own echo; the first session's echo stays still.
+  w.f.values.terminals[1] = { ...w.f.values.terminals[1], status: 'blocked' };
+  step(1000);
+  for (const copy of copies) {
+    assert.equal(echoGlyph(copy, 'edge/t2').attributes.loop?.[0], 'opacity');
+    assert.equal(echoGlyph(copy, 't1').attributes.loop, undefined);
+  }
+  // Motion reduced in Options: the same arrival draws a still echo, and a Working row's icon does not turn.
+  const r = world(), still = await copiesOf(r, { storage: { getItem: () => 'reduce', setItem() {} } });
+  still.step(1000);
   r.f.values.terminals[0] = { ...r.f.values.terminals[0], status: 'blocked' };
-  r.render(); r.view.watchArrivals(r.cx);
-  const still = rowsIn(r.view, registered(r.view, 'pilot')).find(i => i.row.address === 't1');
-  const tree = r.render();
-  assert.equal(flatten(byId(tree, 'row-status:' + still.key)).find(e => e.attributes.svg).attributes.loop, undefined);
-  assert.deepEqual(flatten(byId(tree, 'roster-rows')).filter(e => e.attributes.spin || e.attributes.loop), []);
+  still.step(1000);
+  assert.equal(echoGlyph(still.copies[0], 't1').attributes.loop, undefined);
+  assert.deepEqual(flatten(byId(still.copies[0].render(), 'roster-rows')).filter(e => e.attributes.spin || e.attributes.loop), []);
 });
 
 test('#25: two labeled totals on each registered row, idle and across Cores; partial with one inaccessible repository', async () => {

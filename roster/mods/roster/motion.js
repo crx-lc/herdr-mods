@@ -15,18 +15,6 @@ export function writeStored(storage, value) {
   try { if (typeof storage?.setItem === 'function') storage.setItem(MOTION_KEY, value); return true; } catch { return false; }
 }
 
-// A new arrival in Needs you: an identity not pending at the previous look. The first
-// look only records what is already pending, so nothing pulses at start.
-// fresh keeps the identities that arrived at the last look, so their own Projects row can pulse with the bell.
-export class Arrivals {
-  constructor() { this.seen = null; this.fresh = new Set(); }
-  take(identities) {
-    const now = new Set(identities);
-    const arrived = this.seen === null ? [] : [...now].filter(id => !this.seen.has(id));
-    this.seen = now;
-    if (arrived.length) this.fresh = new Set(arrived);
-    return arrived.length > 0;
-  }
-}
-// One short pulse, then still: three swings of the bell's opacity.
+// One short pulse, then still: three swings of the bell's opacity. When it pulses (a new
+// arrival in Needs you, then every 2 minutes) is reminders.js.
 export const PULSE = { from: 0.3, to: 1, period: 650, ms: 2000 };

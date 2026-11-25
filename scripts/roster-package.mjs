@@ -13,7 +13,7 @@ export const SHIPPING = Object.freeze([
   'icons/pencil.svg', 'icons/plus.svg', 'icons/powershell.svg', 'icons/server.svg', 'LICENSE-DEBIAN-LOGO.txt', 'NOTICE-UBUNTU-LOGO.txt',
   'desktop.js', 'detail.js', 'disclosure.js', 'feed.js', 'icons.js', 'identity.js', 'layout.js', 'local-reader.js',
   'main.js', 'metadata.js', 'mod.json', 'motion.js', 'navigation-rows.js', 'navigation.js',
-  'normalize.js', 'project-groups.js', 'project-totals.js', 'projection.js', 'runtime.js', 'settings.js', 'spaces.js', 'view.js',
+  'normalize.js', 'project-groups.js', 'project-totals.js', 'projection.js', 'reminders.js', 'runtime.js', 'settings.js', 'sounds/chime.mp3', 'spaces.js', 'view.js',
 ].sort());
 const omitted = new Set(['.tests', '.cache', '.backups', 'gpui-kit.d.ts', 'herdr.d.ts', 'jsconfig.json']);
 // fs/promises: Herdr's built-in, used by main.js only to create the mod's own hidden .cache/ folder.
