@@ -35,6 +35,17 @@ own direct list row, at most the list's height, so revealing it shows the focuse
 
 ## How it behaves
 
+Projects (#30, #25): with a readable herdr-agents/projects v1 catalog, registered projects come first, one group
+per stable ID and primary repository across Cores, idle ones too; a session joins only through its own machine's
+current catalog and its exact herdr.project token, never a name. Fallback groups follow under "Not in a registered
+project" in muted 12px headers. A registered header: validated catalog SVG (cached under .cache/icons, read back
+before drawing) or monogram on the palette background, the name, "N issues" and "N PRs" totals (partial "≥N",
+stale muted, unavailable "–", never a false 0), ⓘ, count, chevron. Issues opens the inline open-issue list (oldest
+first, age, exact UTC date on hover/focus, board-status filters incl. No board status and Status unknown); PRs opens
+per-repository counts; ⓘ opens Details (repositories, board, Cores). Agent rows end in a 14px status icon instead of
+a chip; the echo is a bell that pulses once with the pinned bell. No catalog: one focusable notice, Spaces as before.
+
+
 Only one Roster disclosure is open: Details, Options or folder entry. The same trigger
 toggles it; Esc closes and returns native focus to that exact surviving trigger, or
 a nearby stable Projects control when removed. Actual focus handles/input focus events
@@ -80,7 +91,11 @@ guards. disclosure.js is portable anchor/toggle/focus-return/folder-admission/te
 The view owns the shared inline surface and event state. detail.js supplies truthful
 facts; spaces.js supplies Space rows, Git/OS caches, folder verification and matching;
 all portable decisions accept injected host APIs. layout.js retains explicit selected
-Agents-slot opt-in/undo. No sibling-mod imports, new network sources or dependencies.
+Agents-slot opt-in/undo. catalog.js ports the herdr-agents catalog reader (parity-tested on its pinned fixtures);
+catalog-source.js reads one catalog per machine (D8 for remote, 5 s deadline, 60 s interval); project-groups.js
+builds groups and membership; github.js runs only `gh api graphql` locally with arguments (counts every 5 min,
+lists while open, 20 s per call, two at once, .cache/github.json); project-totals.js shapes totals and the list.
+No sibling-mod imports or dependencies; GitHub via the person's own gh is the one network source.
 
 The stock adapter exposes native session snapshots and exact navigation, while permanent
 Core/project/context mapping and authoritative delegation evidence remain unproved.
@@ -112,7 +127,7 @@ provenance stays historical. UIA/Narrator remains #28, separate from this candid
 ## Done when
 
 Run exact npm test and node scripts/roster-package.mjs on the repository copy; the
-package allowlist has 50 shipping files. Record baseline/final counts and meaningful
+package allowlist has 55 shipping files. Record baseline/final counts and meaningful
 negative controls. Never install into the owner's live home without separate authority.
 
 On the exact final installed candidate, record SHA/file hashes and Desktop/Core/OS/

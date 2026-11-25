@@ -660,3 +660,20 @@ revealing on selection, tab return or a real position change. Inspection consume
 observations without a close replay; folds and disclosure layout do not impersonate
 position changes. Deferred path focus accepts only the root or current folder
 trigger actual focus, while owner/input/cursor/readiness guards still apply.
+
+## Registered projects and GitHub totals (#30, #25)
+
+Pure modules, Herdr passed in as a host object.
+
+| Module | Exports |
+|---|---|
+| `catalog.js` | `assessCatalog({ text, lastRevision, sha256 })`, `mergeCatalogs([{ machine, result }])`, `remoteCatalogRead({ machine, isReady, read })`: ports of crx-lc/herdr-agents `bin/projects-read.mjs` and `bin/catalog-remote-read.mjs` (pinned `b129202`; `.tests/catalog-parity.test.mjs`). `checkPalette`, `contrast` (WCAG 2.2), `catalogIcon(bytes)` (`icons.js` `validateIcon` plus the producer's 64 KiB, `xmlns`, `viewBox` and `#RRGGBB` rules), `sha256(text)` (pure, so QuickJS checks icon hashes), `utf8`, `githubBoard(board)`, `catalogPath(platform, home)`, `REMOTE_CATALOG_PATH`. `mergeCatalogs` also keeps each Core's `token`, `board` and `revision`. |
+| `catalog-source.js` | `CatalogSource(host)`: `refresh(after, force)`, `sources()` → `[{ machine, status: 'reading' \| 'ok' \| 'missing' \| 'unknown' \| 'unavailable', why, result, current, path, at, okAt }]`, `takeChanged()`. `labelPath(terminals, machine)`. `ProjectIcons(host)`: `ensure(icon)`, `lookup(icon)` → sha256 once the cached file reads back equal. |
+| `project-groups.js` | `registeredGroups(sources)` → `[{ key, id, primary, displayName, state, flags, presentation, cores, repositories, board: { state: 'none' \| 'known' \| 'unknown' }, stale }]`; `catalogMembership(sources, groups)` → `row => key \| null`; `catalogNotice(sources)`; `sourceText`, `whyText`, `machineLabel`. |
+| `github.js` | `GitHubData(host, limits)`: `wantCounts`, `wantList`, `refreshNow`, `restore`, `takeChanged`; maps `counts`, `lists`, `boards`, `fields` of `{ status, reason, at, okAt, value, cached }`. `ghOutcome`, `graphqlArgs`, the parsers, `serializeCache`/`parseCache`, `LIMITS`. |
+| `project-totals.js` | `projectTotals(group, data, now)` → `{ issues, prs, repos }`, each total `{ state: 'ok' \| 'partial' \| 'stale' \| 'loading' \| 'unavailable' \| 'none', value, text, label }`; `issueList(group, data, now, filter)` → `{ state, items, total, filter, filters, notes }`; `ageText`, `utcStamp`. |
+
+`projectRoster(..., { catalog: { groups, member } })` lists registered groups first (idle ones included) with
+`registered` on their section instances, and marks other top-level groups `subordinate` when any registered group
+exists. `actionIntent` re-projects with the same `catalog`, so a session in a registered group navigates exactly as
+before.

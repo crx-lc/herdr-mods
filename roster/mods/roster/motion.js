@@ -17,13 +17,15 @@ export function writeStored(storage, value) {
 
 // A new arrival in Needs you: an identity not pending at the previous look. The first
 // look only records what is already pending, so nothing pulses at start.
+// fresh keeps the identities that arrived at the last look, so their own Projects row can pulse with the bell.
 export class Arrivals {
-  constructor() { this.seen = null; }
+  constructor() { this.seen = null; this.fresh = new Set(); }
   take(identities) {
     const now = new Set(identities);
-    const fresh = this.seen !== null && [...now].some(id => !this.seen.has(id));
+    const arrived = this.seen === null ? [] : [...now].filter(id => !this.seen.has(id));
     this.seen = now;
-    return fresh;
+    if (arrived.length) this.fresh = new Set(arrived);
+    return arrived.length > 0;
   }
 }
 // One short pulse, then still: three swings of the bell's opacity.

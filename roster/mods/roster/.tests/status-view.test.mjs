@@ -14,16 +14,27 @@ const rowsOf = view => view.controller.projection.instances.filter(i => i.kind =
 const spinners = tree => flatten(tree).filter(e => e.attributes.frames || e.attributes.spin || e.attributes.loop);
 const mixed = () => fakeHost([terminal('t1', 'working'), terminal('t2', 'idle'), terminal('t3', 'done'), terminal('t4', 'blocked'), terminal('t5', 'error')]);
 
-test('Status drops chips that repeat their group header; Projects keeps every chip', () => {
+test('Status drops chips that repeat their group header; Projects shows a status icon instead of every chip (#30)', () => {
   const f = mixed(), s = setup(f);
   let tree = s.render();
-  const projects = Object.fromEntries(rowsOf(s.view).map(i => [i.row.address + ':' + i.key.includes('attention'), chips(byId(tree, i.key))]));
-  // Every row keeps its chip, except the blocked terminal: its pinned row sits under the Needs
-  // you header (no repeat), and its group copy is a muted "in Needs you" echo.
-  for (const [key, list] of Object.entries(projects)) assert.equal(list.length, key.startsWith('t4:') ? 0 : 1, key);
-  const echo = rowsOf(s.view).find(i => i.row.address === 't4' && !i.key.includes('attention'));
-  assert.equal(textOf(byId(tree, 'row-echo:' + echo.key)), 'in Needs you');
-  assert.equal(spinners(tree).length, 0, 'Projects has no Working header spinner');
+  // Projects: no text chip on any row; each listed row ends in one status icon from the Status tab's vocabulary.
+  for (const i of rowsOf(s.view)) assert.deepEqual(chips(byId(tree, i.key)), [], i.row.address);
+  const icons = Object.fromEntries(rowsOf(s.view).filter(i => !i.pinned).map(i => [i.row.address, byId(tree, 'row-status:' + i.key)]));
+  const svgOf = el => flatten(el).find(e => e.attributes.svg)?.attributes.svg[0].split('/').pop();
+  assert.deepEqual(Object.fromEntries(Object.entries(icons).map(([a, el]) => [a, svgOf(el)])),
+    { t1: 'working.svg', t2: 'pause-circle.svg', t3: 'check-circle.svg', t4: 'bell.svg', t5: 'help-circle.svg' });
+  // The full status on hover and as the accessible label; the echo names where the alert is.
+  assert.equal(icons.t2.attributes.tooltip[0], 'Idle'); assert.equal(icons.t2.attributes.accessibility_label[0], 'Status: Idle');
+  assert.equal(icons.t5.attributes.tooltip[0], 'Error');
+  assert.match(icons.t4.attributes.accessibility_label[0], /Needs you: listed in Needs you above/);
+  // The pinned row carries no status icon: the pinned header already says Needs you.
+  const pinned = rowsOf(s.view).find(i => i.pinned);
+  assert.equal(byId(tree, 'row-status:' + pinned.key), undefined);
+  // Only the Working row's icon turns: no header spinner in Projects, and nothing else moves.
+  assert.deepEqual(spinners(tree), [flatten(icons.t1).find(e => e.attributes.spin)], 'only the Working row icon turns');
+  // Distinct from the leading runtime icon, which stays first on the row.
+  const row = byId(tree, rowsOf(s.view).find(i => i.row.address === 't1').key);
+  assert.ok(row.children.findIndex(e => e.attributes?.id?.[0]?.startsWith('row-kind:')) < row.children.findIndex(e => e.attributes?.id?.[0]?.startsWith('row-status:')));
   s.view.controller.change({ type: 'view', view: 'status' }); s.render();
   // Done starts folded; open every group so each state is drawn.
   for (const section of s.view.controller.projection.instances.filter(i => i.kind === 'section' && i.collapsed))

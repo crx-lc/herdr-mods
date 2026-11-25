@@ -94,7 +94,9 @@ for (const [name, theme] of Object.entries(THEMES)) {
       assert.equal(textOf(byId(tree, 'row-name:' + shell.key)), 't1', 'the shell keeps its own name, not the tab title');
       // Status: no chip repeats its header. Nothing on a row moves.
       if (view === 'status') assert.equal(flatten(byId(tree, 'roster-rows')).filter(e => e.attributes.max_w?.[0] === 104).length, 0);
-      for (const i of [shell, claude, unknown]) assert.deepEqual(moving(byId(tree, 'line:' + i.key)), []);
+      // Nothing on a row moves except, in Projects, the status icon of a Working row (#30: Working animates).
+      for (const i of [shell, claude, unknown]) assert.deepEqual(moving(byId(tree, 'line:' + i.key)).filter(e => !flatten(byId(tree, 'row-status:' + i.key) ?? []).includes(e)), []);
+      for (const i of [shell, claude, unknown]) assert.equal(moving(byId(tree, 'row-status:' + i.key) ?? []).length, view === 'projects' && i.status === 'Working' ? 1 : 0, i.row.address);
       assert.deepEqual(s.f.calls, []);
     }
   });

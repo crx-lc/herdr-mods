@@ -15,11 +15,55 @@ still requires independent admitted evidence that the stock adapter does not sup
 
 ## Using the sidebar
 
-Spaces shows Herdr's Spaces under their machines. Projects groups observed sessions
-by their current Space or independently verified project/parent association; Status
+Spaces shows Herdr's Spaces under their machines. Projects lists registered projects from the
+project catalog first (see below), then groups other sessions by their current Space or independently
+verified project/parent association; Status
 groups sessions by reported status. Done starts folded. Global **Needs you** stays
 above the tabs, outside the main scrolling list, including when filters hide the
 same session elsewhere. Its repeated group row is an echo of the same session.
+
+### Registered projects (#30) and their open issues and pull requests (#25)
+
+When a project catalog (`herdr-agents/projects` v1, published by herdr-agents) can be read, Projects lists the
+**registered projects first**, one group per stable project ID and primary repository, idle ones included, even
+when a project spans several repositories or Cores. Two entries are never merged because a Space or display name
+matches; an ID registered with two primaries is two flagged groups. A session joins a project only when its own
+machine's catalog was read successfully at the last attempt and exactly one entry there carries the session's
+`herdr.project` token. A stale, failed or absent catalog lists its projects (marked with a quiet `!`) but places no
+session in them. Everything else keeps today's fallback groups (repository, Space, Infrastructure, Other,
+Unidentified), drawn below the caption "Not in a registered project" in a smaller, muted header. Two Spaces with the
+same name stay two groups, each named as a Space on its machine.
+
+A registered header shows the verified display name, the catalog's SVG icon (validated again by Roster, written once
+to the mod's hidden `.cache/icons/`, read back and compared before it is drawn) or the neutral monogram, on the
+palette's background for the current light or dark theme when the palette is valid; then the two totals, **ⓘ**, the
+session count and the fold chevron. ⓘ opens Details below the header: the ID, the primary and other repositories
+(links), the monitored board (a link; "No board" for a manual project), each Core's machine, mode and Space, and
+any flags or catalog problems.
+
+The totals are labeled ("12 issues", "3 PRs"), repository-wide across every distinct registered repository (once
+each across Cores and checkouts). Draft pull requests count as open pull requests; a pull request is never counted
+as an issue. **Partial** totals read "≥12 issues" and their label names the missing repository and why; **stale**
+ones are muted with "as of HH:MM UTC"; **unavailable** ones read "– issues" with the reason (no `gh`, not logged in,
+access refused, no answer in time, an error status, an answer Roster could not read). Only an answer from every
+repository shows a confirmed 0.
+
+The issues total opens the **open-issue list** inline below the header (the list stays visible): repository and
+number, title (opens GitHub), the issue's Status on the project's monitored board, and its age ("opened 12 days
+ago"), with the exact creation time (UTC) on hover and in the footer on keyboard focus. Oldest first, all open
+issues by default; filters for the board's own statuses, **No board status** (an issue not on the board, or on it
+with no Status: never counted as Backlog) and **Status unknown** (board data that could not be read). Notes name each
+repository whose list or board data is missing. The PR total opens the per-repository pull request counts, each
+linking to that repository's pull requests. Refresh asks again at most every 30 s.
+
+Agent rows in Projects end in a 14px **status icon** from the Status tab's vocabulary instead of a text chip:
+Working turns (still when motion is reduced), Done, Idle, Offline, Stale and Unknown are static, Error is the
+Unknown mark in the blocked color, and a session pending in Needs you shows the bell, which pulses once together
+with the pinned bell for a new arrival and never on a refresh. The full status is the icon's tooltip and accessible
+label and part of the row's label for keyboard focus. The leading runtime icon is unchanged.
+
+When no catalog can be read, a single focusable line, "Project catalog unavailable · showing Spaces", heads the
+list (each machine's state in its label; Enter reads again, at most every 10 s), and the groups are as before.
 
 **Details**, **Options** and **Open folder as Space** share one disclosure state:
 opening one closes the other. Click the same trigger again to close it. These are
@@ -238,7 +282,7 @@ Detailed pure exports and data shapes are in [MODULES.md](MODULES.md).
 
 ## Modules, data sources and limits
 
-The installable tree is self-contained. `main.js` imports only Herdr/gpui-kit/gpui-base and
+The installable tree is self-contained. `main.js` imports only Herdr/gpui-kit/gpui-base, `fs/promises` (to create `.cache/`) and
 the local view; `view.js` draws and wires the host-injected controller, feed,
 local reader and layout logic. Pure logic has no Herdr imports. Existing identity,
 metadata, delegation, attention, projection, settings, icons and navigation
@@ -256,8 +300,9 @@ new public Desktop API or a proof that installed Desktop exports those facts.
 Source references: [App manual/types and implementation at 317e673](https://github.com/herdrdev/herdr-app/tree/317e673f1f1568b876cbaa0b41dabeb9153ecbea),
 [Core at c751780](https://github.com/herdrdev/herdr-core/tree/c7517808d64f06609e4ecf0db1757005373cc3a3),
 and [herdr-agents delegations v1 at 55c71df](https://github.com/crx-lc/herdr-agents/tree/55c71df91dbd60cf07358bbcaebba5586870fd44/contracts/delegations).
-These pins are source evidence, not installed Desktop version proof. No network
-source, external asset, dependency or Better Sidebar code/assets is bundled.
+These pins are source evidence, not installed Desktop version proof. No external
+asset, dependency or Better Sidebar code/assets is bundled. The one network source is GitHub, read through
+the person's own `gh` (below).
 
 **Remote reads follow the owner's D8 rule** ([crx-lc/herdr-agents#141](https://github.com/crx-lc/herdr-agents/issues/141)):
 Roster reads another machine only while Herdr reports it ready, checks readiness again
@@ -277,6 +322,37 @@ start it; until the host offers an attach-only read
 **not a no-wake guarantee**. The rule covers the Spaces probes: `/etc/os-release` through
 `readTextFile(path, { on })` and the read-only `git` queries through `exec`, including
 the folder check in "Open folder as Space…". The delegation reader below stays local-only.
+
+**Project catalog** (`catalog.js`, `catalog-source.js`, `project-groups.js`): one read-only file per machine,
+`herdr-agents/projects` v1, ported from crx-lc/herdr-agents `contracts/projects` (pinned at `b129202`, checked by
+`.tests/catalog-parity.test.mjs` against that folder's reader, palette, icon and remote-read cases). This computer:
+`<home>/AppData/Local/herdr-agents-data/published/projects.v1.json` on Windows,
+`<home>/.local/share/herdr-agents/published/projects.v1.json` on Linux (none on macOS). Another machine: only while
+Herdr reports it ready, under the D8 rule above (ready before the one read and again after it, never retried), at
+`~/.local/share/herdr-agents/published/projects.v1.json`. On either, a watcher's `herdr.projects` label names the
+path instead when exactly one valid absolute path is on that machine's live terminals. One read per machine every
+60 s, each raced against a 5 s host timer; a hung read is never started twice. At most 1 MiB (Herdr's read limit).
+No other file, folder scan, `hc` call or repository or board discovery: repositories and boards are only what the
+catalog names. Catalog icons are written to the mod's hidden `.cache/icons/<sha256>.svg` (the only file Roster writes
+for this, under Herdr's home).
+
+**GitHub totals and issue list** (`github.js`, `project-totals.js`): the only program run is `gh api graphql`, on
+this computer, directly with arguments (no shell), with the person's own `gh` login; values are passed with `-f`
+(raw strings) and only the board number with `-F`. Nothing about credentials is read, stored or logged; only `gh`'s
+exit code, output and error text are read, and an error is kept as a short code. The calls, each with a 20 s timeout
+and at most two at once:
+
+| Call | When |
+|---|---|
+| `repository { issues(states: OPEN) { totalCount } pullRequests(states: OPEN) { totalCount } }` per distinct registered repository (at most 32) | at start and every 5 minutes |
+| open issues (number, title, createdAt), 100 per page, oldest first, up to 5 pages per repository | while that project's issue list is open, every 5 minutes |
+| the same issues' `projectItems` and their `Status` value (needs the `read:project` scope; without it, status is unknown) | with the list, when the project has a GitHub board |
+| the board's `Status` field options | with the list, at most every 30 minutes |
+
+The panel's Refresh asks all of them again, at most once per 30 s. Totals and issue lists are cached in the mod's
+hidden `.cache/github.json` (repository names, counts, issue numbers, titles and dates; no credentials), shown as
+stale until a refresh answers; a damaged cache is ignored. GitHub's terms apply to that data. Azure DevOps counts are
+a separate follow-up.
 
 Terminal row icons: each row's one leading icon comes from Herdr's own program table
 (the `program` Herdr reports for the terminal), never from a tab title, name or role.
@@ -306,7 +382,7 @@ the current scope; the old Phase 2/#18 gate is retired.
 ## Package inventory and acceptance evidence
 
 From the repository root, run `node scripts/roster-package.mjs`. It prints the
-sorted, repository-relative paths of the 50 installed-folder files that would
+sorted, repository-relative paths of the 55 installed-folder files that would
 ship. It only reads the repository package; it never copies, installs, syncs,
 loads mod code or consults a live App home. No destination options are accepted.
 This is a separate inventory policy, not a dry run of `scripts/sync.mjs` (whose
@@ -315,14 +391,15 @@ broader file selection must not be substituted for this shipping list).
 The script uses an explicit file allowlist and V8's module parser in a bounded
 Node subprocess without linking or evaluating modules. All static imports and
 re-exports must resolve to included JavaScript files or the Herdr-provided
-`herdr`, `gpui-kit`, `gpui-base` modules. Missing files, unexpected files, explicitly
+`herdr`, `gpui-kit`, `gpui-base` and `fs/promises` modules (the last only in `main.js`, to create the hidden `.cache/`). Missing files, unexpected files, explicitly
 linked package roots or links in included traversal paths, escaping/external
 references and changed passive manifest defaults fail the check.
 Ordinary directory roots reached through linked ancestors are accepted after root
 canonicalization; traversal never follows links inside the package.
 `.tests`, generated types/jsconfig, `.cache` and `.backups` are excluded, never
 read recursively or shipped. Other hidden/private/unrecognized files fail rather
-than quietly entering the inventory. There are no shipped image assets; direct
+than quietly entering the inventory. There are no shipped image assets (a catalog icon is drawn only from the
+hidden `.cache/icons/<sha256>.svg`, through one exact helper in `view.js`); direct
 renderer calls and dynamic imports/require are conservatively refused (the local
 `svg(bytes)` validator in `icons.js` is an audited exception). This static inventory
 is a current-package eager import inventory with direct-call restrictions, not
