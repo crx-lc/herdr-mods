@@ -10,7 +10,7 @@ import { fakeHost, terminal, fixture, prove, cores, settings, route, association
 const rows = p => p.instances.filter(i => i.kind === 'terminal');
 const find = (p, address) => rows(p).find(i => i.row.address === address);
 const checkCounts = counts => assert.deepEqual(counts, { terminals: 1, machines: 1, panes: 1, spaces: 1, agents: 1, focused: 1 });
-function viewOf(f, options = {}) { const app = appOf(f.host), Type = createRosterView(kit, app, { host: f.host, layoutHost: layoutHostUnused, ...expanded, ...options }); const view = new Type(), c = context(); view.init({}, c.cx); return { view, ...c, app }; }
+function viewOf(f, options = {}, prepare = () => {}) { const app = appOf(f.host); prepare(app); const Type = createRosterView(kit, app, { host: f.host, layoutHost: layoutHostUnused, ...expanded, ...options }); const view = new Type(), c = context(); view.init({}, c.cx); return { view, ...c, app }; }
 
 test('actual main entry defaults passive, captures exactly once, renders labels and never reads or acts', async () => {
   const f = fakeHost([terminal('t1', 'blocked', { labels: { 'herdr.issue': 'sample/repo#12', 'herdr.role': 'planner', 'herdr.project': 'sample' } }), terminal('edge/t1')]);
@@ -187,8 +187,10 @@ test('native timer deadline bounds actual view read and retains native slot', as
 });
 
 test('actual view counts theme and props once, focus command is deferred beyond render', async () => {
-  const f = fakeHost(), { view, app, cx, stats, tasks } = viewOf(f); let themes = 0, props = 0;
-  app.theme = () => { themes++; return { surface: '#111111', text: '#eeeeee' }; }; app.props = () => { props++; return {}; }; let delivered = false; app.nextCommand = () => { if (!delivered) { delivered = true; return Promise.resolve('focus'); } return new Promise(() => {}); };
+  // The command loop starts in init (Herdr starts a task at once), so its source is set first.
+  let delivered = false; const f = fakeHost(), { view, app, cx, stats, tasks } = viewOf(f, {}, app => { app.nextCommand = () => { if (!delivered) { delivered = true; return Promise.resolve('focus'); } return new Promise(() => {}); }; });
+  let themes = 0, props = 0; stats.focus = 0;
+  app.theme = () => { themes++; return { surface: '#111111', text: '#eeeeee' }; }; app.props = () => { props++; return {}; };
   view.render(cx); checkCounts(f.counts); assert.equal(themes, 1); assert.equal(props, 1); assert.equal(stats.focus, 0);
   await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); assert.equal(stats.focus, 1); assert.equal(f.calls.length, 0);
 });

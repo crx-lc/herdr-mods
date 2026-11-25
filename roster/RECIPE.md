@@ -28,7 +28,8 @@ points. Action arguments and accessible labels keep original strings.
 Options sits immediately below the toolbar in its existing 52px scrolling viewport.
 The folder form sits below its exact machine header/+ (below the toolbar for the
 single-local-machine case), showing target machine, chosen/typed path, verification,
-explicit Create/Open actions and Cancel. It shares the bounded 112px panel surface.
+explicit Create/Open actions and Cancel. It shares the bounded 112px panel surface,
+shrunk (60px at least) to fit the measured visible list under its machine header.
 
 ## How it behaves
 
@@ -37,7 +38,8 @@ toggles it; Esc closes and returns native focus to that exact surviving trigger,
 a nearby stable Projects control when removed. Actual focus handles/input focus events
 control automatic focus return; a visual cursor alone never takes terminal focus.
 Up/Down and Tab/Shift-Tab traverse surrounding controls and inline actions; Enter/Space
-activates. Boundary Tab/Shift-Tab propagate to native focus traversal without wrapping.
+activates. Tab/Shift-Tab are Roster actions bound under its own key context; at either
+boundary they call native focus_next/focus_prev without wrapping.
 The real path field retains editing keys only after actual focus; failed focus requests
 leave sidebar keys usable. Enter-reopen after Esc accepts actual focus on the exact
 current folder trigger as well as the root, never an unrelated control/pane.
@@ -86,6 +88,13 @@ cancellation. This is not an attach-only/no-wake host guarantee; no ambient Core
 is permitted. Native commands own the final machine/path validation.
 
 ## Watch out
+
+Herdr starts a cx.spawn task at once: one started in render runs inside render until its
+first await, where cx.notify() throws and aborts the rest. Await once before post-render
+reveals, redraws or focus requests. Herdr's Tab binding fires before on_key_down, so
+bind Tab/Shift-Tab under a key context of your own. GPUI also clicks a focused element
+on Enter/Space after on_key_down: ignore that echo once or a toggle opens and shuts.
+The test fixture starts spawned tasks synchronously for this reason.
 
 Public machine snapshots expose names/readiness, not durable Core or connection epochs.
 Do not invent identity to cover an unseen disconnect/replacement. No Intl/time-zone

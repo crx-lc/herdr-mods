@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRosterView } from '../view.js';
 import { GitIdentities, MachineOs, verifyFolder, readyNow, OS_RELEASE } from '../spaces.js';
-import { fakeHost, terminal, kit, context, appOf, flatten, layoutHostUnused } from './sidebar-fixtures.mjs';
+import { spawnNow, fakeHost, terminal, kit, context, appOf, flatten, layoutHostUnused } from './sidebar-fixtures.mjs';
 
 // Regressions for the PR #26 review (round 1): passive remote probes (D8), the folder
 // dialog's keyboard, and the first Needs you arrival's pulse. Neutral sample data.
@@ -172,7 +172,7 @@ function dialog() {
   const Type = createRosterView(kit, appOf(f.host), { host: f.host, layoutHost: layoutHostUnused, exec, pickFolder: async () => '/home/sample/work' });
   const v = new Type(), c = context();
   c.cx.timer.every = () => {}; c.cx.timer.after = () => {};
-  c.cx.spawn = fn => { c.tasks.push(Promise.resolve().then(() => fn(c.cx))); };
+  c.cx.spawn = fn => { c.tasks.push(spawnNow(fn, c.cx)); };
   v.init({}, c.cx);
   // The fake input reports focus like gpui-base: focus() fires its focus handler.
   let inputFocus = 0;

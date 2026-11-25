@@ -47,8 +47,12 @@ inline panels, with surrounding rows still usable; none covers the sidebar.
 
 Up/Down and Tab/Shift-Tab traverse visible controls in visual order, including
 surrounding rows and inline actions; Enter/Space activates the selected control.
-Tab at the last control and Shift-Tab at the first propagate to native focus traversal
-without wrapping or forcing terminal focus.
+Herdr's own Tab binding moves native focus before a mod hears the key, so Roster
+binds Tab and Shift-Tab to actions of its own under its `Roster` key context.
+Tab at the last control and Shift-Tab at the first hand on to native focus traversal
+(the window's next or previous tab stop) without wrapping or forcing terminal focus.
+GPUI also clicks a focused trigger on Enter or Space; that click is ignored once
+after the key already activated it, so Enter on the + after Esc reopens the form.
 The real path input keeps its editing keys and Enter checks the path; Tab leaves
 it. Focus is requested after mounting; editing-key ownership starts only on an actual
 focus event. Reopening with Enter after Esc also requests the field when the exact
@@ -63,7 +67,9 @@ input Esc propagation and focus return still require final Windows validation.
 
 Panels preserve group folds, list handles and stable row containers. Opening Details
 or a folder form requests a minimal reveal of its owning direct list child after
-render, plus its first inner control. Already visible children stay put through the
+render, plus its first inner control (a remote form's focused path field). Herdr runs
+a task started from render at once, inside render, where `cx.notify()` throws: the
+post-render task awaits once before it reveals, redraws or requests focus. Already visible children stay put through the
 supported ScrollHandle API; close adds no compensating jump. Other viewports retain
 their offsets. Actual external Space selection changes reveal promptly from a
 post-render task, including return from Projects/Status and a changed drawn position
@@ -71,7 +77,8 @@ of the same active Space. Folds, unrelated refreshes and panel layout changes do
 request a selection reveal. Changes observed during inspection are consumed without scrolling
 and are never replayed when a panel closes. Details and
 the folder form use a bounded 112px internal vertical scrollbar (96px for pinned
-Details); Options retains its 52px viewport. Long values/actions wrap, with invisible
+Details); the folder form shrinks (to 60px at least) so it fits the visible list with
+its machine header, measured with `on_size_change`; Options retains its 52px viewport. Long values/actions wrap, with invisible
 wrap opportunities in tokens longer than 24 code points. Accessible labels and
 native action arguments retain the original text. These are compact-layout provisions,
 not evidence of native fit or Unicode shaping. No new screenshot is claimed.

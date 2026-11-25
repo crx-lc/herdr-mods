@@ -11,6 +11,13 @@ import { reducedMotion, readStored, writeStored, Arrivals, PULSE } from './motio
 export const STATUS_ICONS = Object.freeze({ 'Needs you': 'bell', 'Child needs you': 'bell-dot', Working: 'working', Done: 'check-circle', Idle: 'pause-circle', Offline: 'offline', Stale: 'clock', Unknown: 'help-circle' });
 // Stock-style working spinner frames, drawn natively by frames().
 export const WORKING_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+// Tab and Shift-Tab inside Roster. Herdr's own Tab binding moves native focus before
+// on_key_down hears the key; a binding of Roster's own, deeper in, comes first.
+export const TAB_ACTIONS = Object.freeze({ next: 'roster_tab_next', prev: 'roster_tab_prev' });
+// The inline folder form: its full height, and the least it shrinks to in a short list.
+export const FOLDER = Object.freeze({ height: 112, min: 60 });
+// The one group header's measures (see groupHeader in render).
+const HEADER = Object.freeze({ height: 30, iconSize: 18, titleSize: 13, chevron: 11, gapAbove: 8 });
 export function timerDeadline(cx, promise) {
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -47,6 +54,10 @@ export function createRosterView(kit, app, options = {}) {
       // "Open folder as Space…": each owner gets its own retained remote path field.
       this.newSpace = null;
       this.pathInput = null; this.inputFocused = false;
+      // Tab within Roster (TAB_ACTIONS); without bindings, key() still hears Tab as a key.
+      try { cx.bind_keys?.([{ keystroke: 'tab', action: TAB_ACTIONS.next, context: 'Roster' },
+        { keystroke: 'shift-tab', action: TAB_ACTIONS.prev, context: 'Roster' }]); } catch { /* Keys stay with on_key_down. */ }
+      this.keyEcho = null; this.listHeight = 0;
       // D8: whether Herdr reports a machine ready right now, from a fresh machines().
       this.isReady = machine => machineAnchor(machine, this.controller.host.machines() ?? []) !== null;
       if (!app.checking()) cx.spawn(async cx => {
@@ -214,7 +225,10 @@ export function createRosterView(kit, app, options = {}) {
       if (this.panel !== panel) return;
       if (panel.revealPending) {
         panel.revealPending = false;
-        const first = controls.find(c => c.key === (panel.kind === 'details' ? 'details:close' : panel.kind === 'folder' ? 'new-space:cancel' : null));
+        // A remote folder form's first control is its focused path field: that is what must show.
+        const firstKey = panel.kind === 'details' ? 'details:close'
+          : panel.kind === 'folder' ? (controls.some(c => c.key === 'new-space:path') ? 'new-space:path' : 'new-space:cancel') : null;
+        const first = controls.find(c => c.key === firstKey);
         if (first) { this.reveal(first); cx.notify(); }
       }
       const request = this.inputRequest;
@@ -295,9 +309,32 @@ export function createRosterView(kit, app, options = {}) {
       cx.notify();
     }
     closeDetails(cx, returnToOrigin = true) { if (this.reader) this.dismissPanel(cx, returnToOrigin); }
-    key(event, cx) {
+    // True once for the native click GPUI sends a focused trigger after key() activated it.
+    takeKeyEcho(key) {
+      const echo = this.keyEcho === key;
+      if (echo) this.keyEcho = null;
+      return echo;
+    }
+    // At either end, Tab goes on to the window's next tab stop, as Herdr's own binding does.
+    leave(step) {
+      const surface = options.window ?? globalThis.window;
+      try { if (step > 0) surface?.focus_next?.(); else surface?.focus_prev?.(); } catch { /* Nothing else to reach. */ }
+    }
+    // The visible list's height; the folder form fits it with its machine header.
+    measureList(size, cx) {
+      const height = Math.floor(size?.height ?? 0);
+      if (!(height > 0) || height === this.listHeight) return;
+      this.listHeight = height;
+      if (this.panel?.kind === 'folder') { this.panel.revealPending = true; cx.notify(); }
+    }
+    folderHeight(above) {
+      const room = this.listHeight;
+      return room > 0 ? Math.max(FOLDER.min, Math.min(FOLDER.height, Math.floor(room - above))) : FOLDER.height;
+    }
+    key(event, cx, traversal = false) {
       const chord = event.keystroke;
       const previousPanel = this.panel;
+      this.keyEcho = null;
       this.reconcilePanel(cx);
       if (chord === 'escape' && previousPanel && !this.panel) { this.place('mode:projects'); this.triggerHandles.get('mode:projects').focus(); cx.stop_propagation(); cx.notify(); return; }
       if (chord === 'escape' && this.panel) { cx.stop_propagation(); this.dismissPanel(cx); return; }
@@ -318,9 +355,14 @@ export function createRosterView(kit, app, options = {}) {
       const at = controls.findIndex(i => i.key === c.cursor);
       // At either boundary let native Tab traversal leave this sidebar.
       if ((chord === 'tab' && (count === 0 || at === count - 1))
-        || (chord === 'shift-tab' && (count === 0 || at === 0))) return;
+        || (chord === 'shift-tab' && (count === 0 || at === 0))) { if (traversal) this.leave(chord === 'tab' ? 1 : -1); return; }
       cx.stop_propagation();
-      if (chord === 'enter' || chord === 'space') controls.find(i => i.key === c.cursor)?.activate(cx);
+      if (chord === 'enter' || chord === 'space') {
+        const control = controls.find(i => i.key === c.cursor);
+        // A focused trigger also gets GPUI's keyboard click; that echo must not toggle it back.
+        if (control && this.triggerHandles.get(control.key)?.is_focused?.() === true) this.keyEcho = control.key;
+        control?.activate(cx);
+      }
       else if (count) {
         const index = controls.findIndex(i => i.key === c.cursor), step = ['up', 'shift-tab'].includes(chord) ? -1 : 1;
         let next;
@@ -354,7 +396,7 @@ export function createRosterView(kit, app, options = {}) {
       const add = element => { body.child(element); drawn++; };
       if (this.activeNewSpace() && !rows.some(row => row.kind === 'machine' && row.machine === this.newSpace.machine)) {
         const before = this.controls.length;
-        add(this.renderNewSpace(theme, { labelText, h, v: () => v_flex(), fg, muted }));
+        add(this.renderNewSpace(theme, { labelText, h, v: () => v_flex(), fg, muted }, 0));
         for (const control of this.controls.slice(before)) control.rowIndex = drawn - 1;
       }
       for (const row of rows) {
@@ -380,7 +422,9 @@ export function createRosterView(kit, app, options = {}) {
           const headerControl = this.controls.pop();
           this.controls.splice(row.ready ? this.controls.length - 1 : this.controls.length, 0, headerControl);
           const block = v_flex().id('machine-block:' + row.key).flex_none().min_w(0).child(header);
-          if (this.activeNewSpace() && this.newSpace.machine === row.machine) block.child(this.renderNewSpace(theme, { labelText, h, v: () => v_flex(), fg, muted }));
+          // Below its header (and the gap above a later header), the form still fits the list.
+          if (this.activeNewSpace() && this.newSpace.machine === row.machine) block.child(this.renderNewSpace(theme, { labelText, h, v: () => v_flex(), fg, muted },
+            HEADER.height + (row === rows[0] ? 0 : HEADER.gapAbove)));
           for (const control of this.controls.slice(before)) control.rowIndex = drawn;
           add(block);
           if (!row.collapsed && row.count === 0 && row.ready) { add(click('spaces:new:' + machineKey(row.machine), 'New space on ' + row.label, cx => this.openNewSpace(row.machine, cx, 'spaces:new:' + machineKey(row.machine)))
@@ -437,7 +481,7 @@ export function createRosterView(kit, app, options = {}) {
         if (control?.rowIndex === next.at) { this.rowScroll.scroll_to_item(next.at); cx.notify(); }
       }
     }
-    renderNewSpace(theme, { labelText, h, v, fg, muted }) {
+    renderNewSpace(theme, { labelText, h, v, fg, muted }, above = 0) {
       const c = this.controller, ns = this.newSpace, snapshot = c.feed.snapshot ?? {};
       this.readerControls = [];
       let panelIndex = 0;
@@ -455,7 +499,7 @@ export function createRosterView(kit, app, options = {}) {
       const drawnFolder = ns.folder, drawnCheck = ns.check;
       const machineLabel = ns.machine ?? 'This computer';
       const shown = folder => ns.machine ? folder : homeRelative(folder, typeof app.home === 'function' ? app.home() : null, true);
-      const box = this.disclosure('roster-new-space', theme, { v, muted }).accessibility_label('Open folder as Space');
+      const box = this.disclosure('roster-new-space', theme, { v, muted }, this.folderHeight(above)).accessibility_label('Open folder as Space');
       const append = el => { box.child(el); panelIndex++; return box; };
       append(h().h(22).flex_none().gap(6).child(labelText('Open folder as Space', 12, fg).font_semibold().flex_1())
         .child(control('new-space:cancel', 'Cancel (Esc): nothing is created', 'Cancel', cx => this.closeNewSpace(cx))));
@@ -560,7 +604,12 @@ export function createRosterView(kit, app, options = {}) {
         this.controls.push({ key, label, activate });
         const element = (column ? v() : h()).id(key).min_w(0).px(6).rounded(4).accessibility_label(label)
           .bg(c.cursor === key ? theme.selected ?? theme.raised : theme.surface)
-          .on_click((_e, cx) => { cx.stop_propagation(); this.place(key); this.focus(cx); activate(cx); });
+          .on_click((_e, cx) => {
+            cx.stop_propagation();
+            // GPUI also clicks a focused trigger on Enter or Space; key() already activated it.
+            if (this.takeKeyEcho(key)) return;
+            this.place(key); this.focus(cx); activate(cx);
+          });
         if (this.triggerHandles.has(key)) element.track_focus(this.triggerHandles.get(key));
         return element;
       };
@@ -582,7 +631,6 @@ export function createRosterView(kit, app, options = {}) {
       // folded or not, then a right-aligned tail: view-specific extras, a count, and the
       // chevron (or an empty slot of its size where a group never folds). The header's own
       // 11px size and dim color reach only the tail.
-      const HEADER = { height: 30, iconSize: 18, titleSize: 13, chevron: 11, gapAbove: 8 };
       const groupHeader = (key, label, title, activate, { icon: lead = null, collapsed = false, foldable = true, extras = [], tooltip = label, depth = 0,
         count = null, first = false } = {}) => {
         const head = click(key, label, activate).h(HEADER.height).mt(first ? 0 : HEADER.gapAbove).flex_none().px(8).pl(8 + Math.min(depth, 3) * 8).gap(7)
@@ -615,7 +663,12 @@ export function createRosterView(kit, app, options = {}) {
       const change = event => cx => { if (!this.toolsOpen) this.dismissPanel(cx, false); this.controls = []; c.change(event); cx.notify(); };
       const viewMode = c.state.view;
       const root = v().id('roster').size_full().p(5).gap(3).bg(theme.surface).text_color(fg).text_size(12)
-        .track_focus(this.handle).on_key_down((e, cx) => this.key(e, cx));
+        .key_context('Roster').track_focus(this.handle).on_key_down((e, cx) => this.key(e, cx))
+        // Tab and Shift-Tab arrive as Roster's own actions (bound in init), never as key events.
+        .on_action(TAB_ACTIONS.next, (_e, cx) => this.key({ keystroke: 'tab' }, cx, true))
+        .on_action(TAB_ACTIONS.prev, (_e, cx) => this.key({ keystroke: 'shift-tab' }, cx, true))
+        // A pointer press is never the keyboard click that follows a key activation.
+        .on_mouse_down('left', () => { this.keyEcho = null; });
       const toolbar = h().id('roster-toolbar').h(26).flex_none().gap(3);
       toolbar.child(button('mode:spaces', 'Spaces', change({ type: 'view', view: 'spaces' }), { active: viewMode === 'spaces' }))
         .child(button('mode:projects', 'Projects', change({ type: 'view', view: 'projects' }), { active: viewMode === 'projects' }))
@@ -638,7 +691,7 @@ export function createRosterView(kit, app, options = {}) {
       const reader = this.activeReader(projection);
       if ((this.reader && !reader) || (this.newSpace && !this.activeNewSpace())) {
         const stale = this.panel;
-        cx.spawn(async cx => { if (this.panel === stale) this.invalidatePanel(cx); });
+        cx.spawn(async cx => { await null; if (this.panel === stale) this.invalidatePanel(cx); });
       }
       if (settingsOpen) {
         tools = this.disclosure('roster-options', theme, { v, muted }, 52).p(0).gap(2).track_scroll(this.optionsScroll);
@@ -678,7 +731,8 @@ export function createRosterView(kit, app, options = {}) {
         this.panelItems = optionIndex;
         tools.h(Math.min(52, optionIndex * 24 + Math.max(0, optionIndex - 1) * 2));
       }
-      const body = v().id('roster-rows').flex_1().min_h(0).gap(3).overflow_y_scrollbar().track_scroll(this.rowScroll);
+      const body = v().id('roster-rows').flex_1().min_h(0).gap(3).overflow_y_scrollbar().track_scroll(this.rowScroll)
+        .on_size_change((size, cx) => this.measureList(size, cx));
       // Needs you, pinned above the tabs and outside their list: the same section in every
       // view, drawn only while something is pending. Its rows scroll on their own past three.
       const PINNED = { row: 44, gap: 3, shown: 3 };
@@ -902,7 +956,8 @@ export function createRosterView(kit, app, options = {}) {
         if (foot.instance && foot.anchor) { const trigger = h().id('details:open').h(16).flex_none().px(3)
           .bg(c.cursor === 'details:open' ? theme.selected ?? theme.raised : theme.surface)
           .accessibility_label('Details (D)').on_click((_e, cx) => {
-            cx.stop_propagation(); this.footerSourceKey = foot.instance.key; this.place('details:open'); this.focus(cx);
+            cx.stop_propagation(); if (this.takeKeyEcho('details:open')) return;
+            this.footerSourceKey = foot.instance.key; this.place('details:open'); this.focus(cx);
             this.controls.find(control => control.key === 'details:open')?.activate(cx);
           })
           .child(labelText('Details (D)', 11));
@@ -914,6 +969,9 @@ export function createRosterView(kit, app, options = {}) {
       }
       const panel = this.panel, controls = this.controls, selection = this.spaceReveal;
       cx.spawn(async cx => {
+        // Herdr starts a task at once, still inside render, where cx.notify() throws; the
+        // first await lets render finish, so reveals, redraws and focus requests can run.
+        await null;
         if (this.controls === controls) this.afterRender(cx, panel, controls, selection);
       });
       return root;
