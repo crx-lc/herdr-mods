@@ -122,8 +122,9 @@ test("no invented points: only bar opens, bar closes and the quote, each at its 
   const later = { ...q, timestamp: q.timestamp + 20 * 60_000, price: 92.5, changePercent: -7.5 };
   assert.deepEqual(observedPrices(later).at(-1), { t: later.timestamp, price: 92.5 });
   // A quote older than the bars adds nothing.
-  const older = observedPrices({ ...q, timestamp: START, price: 50 });
-  assert.ok(!older.some((p) => p.price === 50) && older.every((p) => p.t <= q.points.at(-1).t));
+  // A quote older than the bars still ends the line: bars after it are left out.
+  const older = observedPrices({ ...q, timestamp: START + 60_000, price: 50 });
+  assert.deepEqual(older, [{ t: START, price: q.firstOpen.price }, { t: START + 60_000, price: 50 }]);
   // A gap in the data stays a gap: two bars two hours apart are joined, nothing is filled between them.
   const holes = { ...q, firstOpen: null, points: [q.points[0], { t: START + 2 * 3_600_000, close: 92 }], timestamp: START + 2 * 3_600_000 + 60_000 };
   assert.equal(watchlistSparkline(holes, NOW).line.length, 2);

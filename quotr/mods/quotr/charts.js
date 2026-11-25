@@ -46,20 +46,25 @@ export class ChartParts {
       box.child(layer(PathBuilder.fill().move_to(x(b.from), "0%").line_to(x(b.to), "0%").line_to(x(b.to), "100%")
         .line_to(x(b.from), "100%").close(), Background.solid(this.sessionColor(t, b.session)).opacity(0.13)));
     }
-    if (g.line.length > 1) {
-      let area = PathBuilder.fill().move_to(x(g.line[0][0]), y(SPARK_HEIGHT));
-      for (const [px, py] of g.line) area = area.line_to(x(px), y(py));
-      box.child(layer(area.line_to(x(g.line.at(-1)[0]), y(SPARK_HEIGHT)).close(), Background.solid(color).opacity(0.16)));
+    // One fill and one stroke per run: where data is missing the chart stays blank.
+    for (const run of g.runs) {
+      if (run.length < 2) continue;
+      let area = PathBuilder.fill().move_to(x(run[0][0]), y(SPARK_HEIGHT));
+      for (const [px, py] of run) area = area.line_to(x(px), y(py));
+      box.child(layer(area.line_to(x(run.at(-1)[0]), y(SPARK_HEIGHT)).close(), Background.solid(color).opacity(0.16)));
     }
     if (g.reference !== null) {
       box.child(layer(PathBuilder.stroke(1).dash_array([2, 2]).move_to("0%", y(g.reference)).line_to("100%", y(g.reference)), t.muted));
     }
-    if (g.line.length === 1) {
-      const [px, py] = g.line[0];
-      box.child(layer(PathBuilder.stroke(2).move_to(x(Math.max(0, px - 1)), y(py)).line_to(x(Math.min(SPARK_WIDTH, px + 1)), y(py)), color));
-    } else if (g.line.length > 1) {
+    for (const run of g.runs) {
+      if (run.length === 1) {
+        // A lone price is a short dash, so it shows.
+        const [px, py] = run[0];
+        box.child(layer(PathBuilder.stroke(2).move_to(x(Math.max(0, px - 1)), y(py)).line_to(x(Math.min(SPARK_WIDTH, px + 1)), y(py)), color));
+        continue;
+      }
       let path = PathBuilder.stroke(1.25);
-      g.line.forEach(([px, py], i) => { path = i ? path.line_to(x(px), y(py)) : path.move_to(x(px), y(py)); });
+      run.forEach(([px, py], i) => { path = i ? path.line_to(x(px), y(py)) : path.move_to(x(px), y(py)); });
       box.child(layer(path, color));
     }
     return box;

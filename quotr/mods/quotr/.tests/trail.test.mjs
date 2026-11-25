@@ -2,44 +2,12 @@
 // sparkline.js trail geometry), from Yahoo's two-day extended-hours answer.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { decodeYahoo, shownQuote, yahooUrl } from "../quotes.js";
+import { shownQuote, yahooUrl } from "../quotes.js";
 import { watchlistSparkline, trailPrices, SPARK_LEFT, SPARK_RIGHT } from "../sparkline.js";
 import { createTickMemory, primeTicks, takeTicks } from "../ticks.js";
 import { views, walk, element, theme } from "./helpers/view-harness.mjs";
 
-const H = 3_600_000, M = 60_000, BAR = 5 * M;
-const TUE = Date.UTC(2026, 10, 24), WED = TUE + 24 * H, THU = WED + 24 * H;
-// US sessions in UTC (EST): pre 04:00–09:30, regular 09:30–16:00, post 16:00–20:00.
-const sessions = (d) => ({ pre: [d + 9 * H, d + 14.5 * H], regular: [d + 14.5 * H, d + 21 * H], post: [d + 21 * H, d + 25 * H] });
-const sec = (ms) => ms / 1000;
-
-/**
- * Yahoo's chart answer for `days` (two trading days), bars every 5 minutes up to `now`, priced by
- * `price(day, session, t)`. `extended: false` is a market with only regular hours (an index).
- */
-function answer({ days, now, price, previousClose = 100, extended = true, regularClose }) {
-  const timestamp = [], close = [], open = [];
-  for (const d of days) {
-    const s = sessions(d);
-    for (const name of extended ? ["pre", "regular", "post"] : ["regular"]) {
-      for (let t = s[name][0]; t < s[name][1] && t <= now; t += BAR) {
-        timestamp.push(sec(t)); close.push(price(d, name, t)); open.push(price(d, name, t));
-      }
-    }
-  }
-  const regulars = days.map((d) => sessions(d).regular).filter((r) => r[0] <= now);
-  const latest = regulars.at(-1);
-  const regularBars = timestamp.map((s, i) => [s * 1000, close[i]]).filter(([t]) => t >= latest[0] && t < latest[1]);
-  const regularMarketPrice = now >= latest[1] && regularClose ? regularClose : regularBars.at(-1)[1];
-  const period = ([start, end]) => [{ timezone: "EST", start: sec(start), end: sec(end), gmtoffset: -18_000 }];
-  const tradingPeriods = extended
-    ? { pre: days.map((d) => period(sessions(d).pre)), regular: days.map((d) => period(sessions(d).regular)), post: days.map((d) => period(sessions(d).post)) }
-    : days.map((d) => period(sessions(d).regular));
-  const meta = { symbol: "SAMPLE", currency: "USD", regularMarketPrice, regularMarketTime: sec(Math.min(now, latest[1])),
-    previousClose, chartPreviousClose: 77, hasPrePostMarketData: extended, gmtoffset: -18_000, timezone: "EST", tradingPeriods,
-    currentTradingPeriod: { regular: { start: sec(sessions(days.at(-1)).regular[0]), end: sec(sessions(days.at(-1)).regular[1]) } } };
-  return decodeYahoo("SAMPLE", { status: 200, ok: true, text: JSON.stringify({ chart: { result: [{ meta, timestamp, indicators: { quote: [{ close, open }] } }] } }) }, now);
-}
+import { H, M, BAR, TUE, WED, THU, sessions, answer } from "./helpers/yahoo-answer.mjs";
 
 // Tuesday closes at 100; Wednesday gaps down 8% at the open and trades flat; after hours a little lower.
 const gap = (d, session) => d === TUE ? (session === "post" ? 100.2 : 100) : session === "pre" ? 95 : session === "regular" ? 91.88 : 91;
@@ -53,7 +21,8 @@ test("during the session: from Tuesday's close through its after hours, Wednesda
   const q = answer({ days: [TUE, WED], now, price: gap });
   const tr = q.trail;
   assert.equal(tr.reference, 100); assert.equal(tr.start, TUE + 21 * H);
-  assert.deepEqual(tr.points[0], { t: TUE + 21 * H, close: 100, session: "close" });
+  assert.deepEqual(tr.points[0], { t: TUE + 21 * H, close: 100, session: "close", slot: 0, gap: false });
+  assert.equal(tr.closeAt, TUE + 21 * H);
   const sessionsSeen = [...new Set(tr.points.map((p) => p.session))];
   assert.deepEqual(sessionsSeen, ["close", "post", "pre", "regular"]);
   // In time order; the first after-hours bar starts at the close itself.
@@ -106,18 +75,14 @@ test("a market without extended hours: the session after the previous close, not
   assert.equal(tr.session, "regular");
 });
 
-test("no previous close, no sessions or no bars: no trail, the row falls back to the plain quote", () => {
+test("a cached quote without a trail, or a trail without a price or time, falls back to the plain quote", () => {
   const now = WED + 18 * H;
-  const noRef = answer({ days: [TUE, WED], now, price: gap, previousClose: null });
-  assert.equal(noRef.trail, null);
-  assert.equal(shownQuote(noRef), noRef);
-  assert.equal(watchlistSparkline(noRef, now).bands.length, 0);
-  // A cached quote from before this change has no trail at all.
-  const old = { ...noRef, trail: undefined };
+  const q = answer({ days: [TUE, WED], now, price: gap });
+  const old = { ...q, trail: undefined };
   assert.equal(shownQuote(old), old);
-  for (const bad of [{ price: 0 }, { reference: -1 }, { changePercent: NaN }, { t: null }]) {
-    const q = { ...noRef, trail: { ...answer({ days: [TUE, WED], now, price: gap }).trail, ...bad } };
-    assert.equal(shownQuote(q), q, JSON.stringify(bad));
+  for (const bad of [{ price: 0 }, { price: NaN }, { t: null }, { t: -1 }]) {
+    const broken = { ...q, trail: { ...q.trail, ...bad } };
+    assert.equal(shownQuote(broken), broken, JSON.stringify(bad));
   }
 });
 
@@ -129,8 +94,12 @@ test("the row chart: bar-spaced from the close, ending on the shown price, on th
   const g = watchlistSparkline(q, now);
   assert.equal(g.line.length, points.length);
   assert.equal(g.line[0][0], SPARK_LEFT); assert.equal(g.line.at(-1)[0], SPARK_RIGHT);
-  const step = (SPARK_RIGHT - SPARK_LEFT) / (points.length - 1);
-  g.line.forEach(([x], i) => assert.ok(Math.abs(x - (SPARK_LEFT + i * step)) < 1e-9, "even spacing: closed hours take no room"));
+  // Spaced by trading time: the closed night between Tuesday 20:00 and Wednesday 04:00 takes no room.
+  const last = points.at(-1).slot;
+  g.line.forEach(([x], i) => assert.ok(Math.abs(x - (SPARK_LEFT + (SPARK_RIGHT - SPARK_LEFT) * points[i].slot / last)) < 1e-9));
+  const night = points.findIndex((p) => p.session === "pre");
+  assert.ok(g.line[night][0] - g.line[night - 1][0] < 0.5, "the night is not drawn as time");
+  assert.equal(g.runs.length, 1, "no hole in the data, one run");
   assert.equal(g.line[0][1], g.reference, "the line starts on the dotted close");
   assert.ok(g.line.at(-1)[1] - g.reference > 14, "an 8% drop sits well below it");
   // After hours and pre-market are shaded, the session isn't.

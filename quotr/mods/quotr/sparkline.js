@@ -6,7 +6,7 @@
 // ago); the line is drawn against it, in the percentage's color. Only observed prices are
 // drawn, each at its own time: bar closes, the first bar's open and the quote itself. Gaps in
 // the data stay blank; nothing is interpolated or inferred.
-import { formatPrice, isCryptoPair, shownQuote } from "./quotes.js";
+import { formatPrice, isCryptoPair, shownQuote, GAP_MS } from "./quotes.js";
 import { zoneAt, formatPointTime } from "./readout.js";
 
 export const SPARK_WIDTH = 56;
@@ -44,31 +44,41 @@ export function sparkWindow(quote, observed) {
 }
 
 /**
- * Observed prices in time order: the first bar's open at the bar's start, each bar's close at
- * the bar's end (the bar still forming ends at the quote's time), then the quote itself.
+ * Observed prices in time order: the first bar's open at the bar's start, each finished bar's
+ * close at the bar's end, then the displayed quote, which always ends the line. A bar still
+ * forming at the quote's time (or after it) is left out: its close was read at some other moment
+ * than the quote's, so it can't be placed against it.
  */
 export function observedPrices(quote) {
   const q = quote ?? {};
   const bar = isCryptoPair(q.symbol ?? "") ? CRYPTO_BAR_MS : STOCK_BAR_MS;
+  const shown = positive(q.price) && positive(q.timestamp) ? { t: q.timestamp, price: q.price } : null;
+  const until = shown?.t ?? Infinity;
   const points = Array.isArray(q.points) ? q.points.filter((p) => positive(p?.t) && positive(p?.close)) : [];
   const out = [];
-  if (positive(q.firstOpen?.t) && positive(q.firstOpen?.price) && (!points.length || q.firstOpen.t <= points[0].t)) {
+  if (positive(q.firstOpen?.t) && positive(q.firstOpen?.price) && q.firstOpen.t <= until
+    && (!points.length || q.firstOpen.t <= points[0].t)) {
     out.push({ t: q.firstOpen.t, price: q.firstOpen.price });
   }
-  const latest = positive(q.timestamp) ? q.timestamp : Infinity;
-  for (const p of points) out.push({ t: Math.max(p.t, Math.min(p.t + bar, latest)), price: p.close });
+  for (const p of points) if (p.t + bar <= until) out.push({ t: p.t + bar, price: p.close });
   out.sort((a, b) => a.t - b.t);
-  // The quote is a real trade at its own time; it ends the line when it is newer than the bars.
-  if (positive(q.price) && positive(q.timestamp) && (!out.length || q.timestamp > out.at(-1).t)) {
-    out.push({ t: q.timestamp, price: q.price });
-  }
-  // One price per time: a later entry at the same time replaces the earlier.
+  if (shown) out.push(shown);
+  // One price per time: the later entry (the quote, at the end) wins.
   const unique = [];
   for (const p of out) {
     if (unique.length && unique.at(-1).t === p.t) unique[unique.length - 1] = p;
     else unique.push(p);
   }
   return unique;
+}
+
+/** Index runs of consecutive points with no hole between them: [[0, 1, 2], [3, 4]]. */
+export function splitRuns(count, isGap) {
+  const runs = [];
+  for (let i = 0; i < count; i++) {
+    if (i === 0 || isGap(i)) runs.push([i]); else runs.at(-1).push(i);
+  }
+  return runs;
 }
 
 /** The reference, only when the displayed percentage really is measured against it. */
@@ -93,42 +103,44 @@ function scale(values, basis) {
 }
 
 /**
- * A stock's trail (quotes.js, yahooTrail): the last regular close, then every trade after it,
- * ending on the price the row shows. Spaced by bar as in the dialog, so closed hours take no room.
+ * A stock's trail (quotes.js, yahooTrail): the last regular close when known, then every trade
+ * after it, ending on the price the row shows. null when the quote has none.
  */
 export function trailPrices(quote) {
   const q = shownQuote(quote ?? {});
   const tr = q?.trail;
   if (!tr || q === quote || !Array.isArray(tr.points)) return null;
   const points = tr.points.filter((p) => positive(p?.t) && positive(p?.close));
-  if (!points.length || points[0].session !== "close") return null;
-  // The regular quote ends the line when it is at least as new as the last bar (the closing auction).
+  if (!points.length) return null;
+  // A trail cached before the end point was part of it: the regular quote ends the line.
   if (tr.session === "regular" && tr.t >= points.at(-1).t) {
-    const end = { t: tr.t, close: tr.price, session: "regular" };
-    if (points.at(-1).t === tr.t) points[points.length - 1] = end; else points.push(end);
+    const end = { ...points.at(-1), t: tr.t, close: tr.price, session: "regular" };
+    if (points.at(-1).t === tr.t && points.at(-1).session !== "close") points[points.length - 1] = end;
+    else if (tr.t > points.at(-1).t) points.push({ t: tr.t, close: tr.price, session: "regular" });
   }
   return points;
 }
 
-/** Runs of pre-market and after-hours bars as [{ session, from, to }] in pixels, as the dialog shades them. */
-export function trailBands(points) {
-  const n = points.length;
-  if (n < 2) return [];
-  const x = (i) => SPARK_LEFT + (SPARK_RIGHT - SPARK_LEFT) * Math.min(1, Math.max(0, i / (n - 1)));
+/**
+ * Pre-market and after-hours runs as [{ session, from, to }] in pixels, each widened by `half`
+ * pixels either side, as the dialog shades them.
+ */
+export function trailBands(points, xs, half) {
   const bands = [];
-  for (let i = 0; i < n;) {
+  for (let i = 0; i < points.length;) {
     let j = i;
-    while (j + 1 < n && points[j + 1].session === points[i].session) j++;
+    while (j + 1 < points.length && points[j + 1].session === points[i].session) j++;
     if (points[i].session === "pre" || points[i].session === "post") {
-      bands.push({ session: points[i].session, from: x(i - 0.5), to: x(j + 0.5) });
+      bands.push({ session: points[i].session, from: Math.max(SPARK_LEFT, xs[i] - half), to: Math.min(SPARK_RIGHT, xs[j] + half) });
     }
     i = j + 1;
   }
-  return bands;
+  return points.length > 1 ? bands : [];
 }
 
 /**
- * The 56×22 geometry, in pixels: `line` [[x, y]], `reference` (y or null), `bands`, `stale`,
+ * The 56×22 geometry, in pixels: `line` [[x, y]], `runs` (`line` split where data is missing),
+ * `reference` (y or null), `bands`, `stale`,
  * `label` (the one-line hover) and `description` (for screen readers).
  * `quote` is the stored quote; the row's own numbers come from shownQuote(quote).
  */
@@ -143,6 +155,7 @@ export function watchlistSparkline(quote, now, { failed = false } = {}) {
   const observed = window ? all.filter((p) => p.t >= window[0] && p.t <= window[1] + slack) : [];
   const reference = sparkReference(q);
   let line = [];
+  let runs = [];
   let referenceY = null;
   if (observed.length) {
     const values = observed.map((p) => p.price);
@@ -150,26 +163,39 @@ export function watchlistSparkline(quote, now, { failed = false } = {}) {
     const y = scale(values, reference);
     const x = (t) => SPARK_LEFT + (SPARK_RIGHT - SPARK_LEFT) * Math.min(1, (t - window[0]) / (window[1] - window[0]));
     line = observed.map((p) => [x(p.t), y(p.price)]);
+    runs = splitRuns(line.length, (i) => observed[i].t - observed[i - 1].t > GAP_MS).map((r) => r.map((i) => line[i]));
     referenceY = reference !== null ? y(reference) : null;
   } else if (reference !== null) {
     referenceY = (SPARK_TOP + SPARK_BOTTOM) / 2;
   }
   const label = sparkLabel(q, observed, reference, crypto);
-  return { line, reference: referenceY, bands: [], stale: isStale(q, now, failed), label, description: `Chart: ${label}` };
+  return { line, runs, reference: referenceY, bands: [], stale: isStale(q, now, failed), label, description: `Chart: ${label}` };
 }
 
 const isStale = (q, now, failed) => failed || !positive(q.fetchedAt) || !Number.isFinite(now) || now < q.fetchedAt
   || now - q.fetchedAt > STALE_AFTER_MS;
 
+/**
+ * Spaced by trading time when every point has its slot (closed hours take no room, missing bars
+ * keep theirs and break the line); by bar for a trail cached without slots.
+ */
 function trailSparkline(q, points, now, failed) {
-  const reference = q.previousClose;
-  const y = scale([...points.map((p) => p.close), reference], reference);
+  const reference = positive(q.previousClose) ? q.previousClose : null;
+  const y = scale(reference === null ? points.map((p) => p.close) : [...points.map((p) => p.close), reference], reference);
   const n = points.length;
-  const x = (i) => n > 1 ? SPARK_LEFT + (SPARK_RIGHT - SPARK_LEFT) * i / (n - 1) : SPARK_RIGHT;
+  const last = points.at(-1).slot;
+  const slotted = points.every((p) => Number.isFinite(p.slot)) && last > 0;
+  const span = SPARK_RIGHT - SPARK_LEFT;
+  const xs = points.map((p, i) => slotted ? SPARK_LEFT + span * p.slot / last : n > 1 ? SPARK_LEFT + span * i / (n - 1) : SPARK_RIGHT);
+  const line = points.map((p, i) => [xs[i], y(p.close)]);
+  const runs = splitRuns(n, (i) => slotted && points[i].gap === true).map((r) => r.map((i) => line[i]));
+  const half = slotted ? span * STOCK_BAR_MS / 2 / last : n > 1 ? span / 2 / (n - 1) : 0;
   const price = (value) => formatPrice({ price: value, currency: q.currency ?? null });
-  const when = formatPointTime(points[0].t, q.timeZone, { now }) ?? "the last regular close";
-  const label = `Since the close of ${price(reference)} · ${when}`;
-  return { line: points.map((p, i) => [x(i), y(p.close)]), reference: y(reference), bands: trailBands(points),
+  const when = (t) => formatPointTime(t, q.timeZone, { now }) ?? "the last session";
+  const closeAt = q.trail?.closeAt;
+  const label = reference !== null && positive(closeAt) ? `Since the close of ${price(reference)} · ${when(closeAt)}`
+    : `Since ${when(points[0].t)} · ${reference !== null ? `vs prev close ${price(reference)}` : "no reference"}`;
+  return { line, runs, reference: reference === null ? null : y(reference), bands: trailBands(points, xs, half),
     stale: isStale(q, now, failed), label, description: `Chart: ${label}` };
 }
 

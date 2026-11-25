@@ -60,14 +60,19 @@ Compared with Pulse at `99f70b2c`:
   reference, so small moves stay small.
 - A stock's row shows every trade since the last regular close: the line starts on the dashed
   close and runs through that evening's after hours, the next pre-market and session, and its after
-  hours, spaced by bar as in the dialog (closed hours take no room), pre-market and after hours
-  shaded. The price and percentage beside it are the latest of those trades against that close,
+  hours, placed by trading time: closed hours take no room, while a stretch of more than 30
+  minutes of trading time without a bar stays blank. Pre-market and after hours are shaded. The price and percentage beside it are the latest of those trades against that close,
   with `Pre-market` or `After hours` under the name when the latest trade is one. The close moves
   on when the next day's first pre-market trade arrives, so evenings and weekends keep the whole
-  last day. Markets without extended hours show their session after the close. The dialog is
+  last day. Markets without extended hours show their session after the close. Without a previous
+  close the row still shows the latest trade, with `—` for the change and no dashed line. The dialog is
   unchanged: the regular session and its own extended-hours section.
-- A pair's row spans its rolling 24h by time: the first kline's open, every close at the kline's
-  end, and the quote. Only observed prices are drawn; nothing is filled in. Missing reference: no
+- A pair's row spans its rolling 24h by time: the first kline's open, every finished kline's close
+  at its end, and the quote. Only observed prices are drawn; more than 30 minutes without a kline
+  stays blank.
+- The displayed quote always ends the line. A bar or kline still forming at the quote's time is
+  left out: its close was read at another moment, so it could end the line on the wrong side of
+  the dashed reference. Missing reference: no
   dashed line, the line in `dim`. One price: a dot. A stale or failed quote dims the chart.
 - Resting on the chart shows one line, for example `Since the close of 354.07 USD · Tue, Nov 24, 16:00 EST`
   or `Last 24h · vs 60,115.22 USDT 24h ago`. Clicking it opens the dialog like the rest of the row.
