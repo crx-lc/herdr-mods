@@ -70,7 +70,9 @@ Sound (Off, Reminders only by default, Arrival and reminders) picks when playSou
 the shipped chime; settings sounds.enabled:false always silences it; Motion stops the pulse.
 One timer per mod context (reminders.js NeedsYou, made with the view class), shared by
 every copy: the copy that takes an event sounds it, each copy pulses its own bell, a later
-copy never replays, and a list from an older read is ignored.
+copy never replays, and a list from an older read is ignored. It counts the open copies,
+from a copy's first draw to Herdr's close(cx) on its view: one that joins while none is
+open starts the timer afresh and silently, one that joins beside another leaves it as it is.
 No toasts of Roster's own. Bind to actual row
 instance/incarnation/process/run and observed machine availability, not a label/index.
 Read-only Details may open on currently listed unavailable rows and must explain disabled

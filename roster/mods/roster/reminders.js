@@ -74,26 +74,29 @@ export class Reminders {
 // count, so it never replays a sound, and closing a copy takes nothing with it.
 // Each copy numbers its reads of Herdr with read(); a list from a read older than the latest
 // one taken (a hidden copy that has not redrawn) is ignored, so an older list never undoes a
-// newer one and turns the same arrival into two. When no copy has ticked for `idle` ms (all
-// were closed), the next copy to join starts silently, as a first copy does.
-export const IDLE_MS = 5000;
+// newer one and turns the same arrival into two.
+// `open` counts the copies between their join() and their leave() (Herdr's close() on the
+// view): known, not guessed from time. A copy that joins while none is open starts the timer
+// afresh and silently, as a first copy does. One that joins while another is open leaves the
+// timer as it is, however long ago that other copy last ticked, so a reminder that fell due
+// during a pause is still owed, once.
 export class NeedsYou {
-  constructor(every = REMIND_MS, idle = IDLE_MS) {
-    this.every = every; this.idle = idle; this.reminders = new Reminders(every);
-    this.count = 0; this.reads = 0; this.latest = 0; this.heard = -Infinity;
+  constructor(every = REMIND_MS) {
+    this.every = every; this.reminders = new Reminders(every);
+    this.count = 0; this.reads = 0; this.latest = 0; this.open = 0;
   }
   read() { return ++this.reads; }
   // A copy's first draw, of identities from read number `read`. Answers the count it starts from.
   join(identities, read, now) {
-    if (now - this.heard > this.idle) { this.reminders = new Reminders(this.every); this.latest = 0; }
-    this.heard = now;
-    if (this.reminders.seen === null) { this.reminders.start(identities, now); this.latest = Math.max(this.latest, read); }
+    if (this.open === 0) { this.reminders = new Reminders(this.every); this.reminders.start(identities, now); this.latest = read; }
+    this.open++;
     return this.count;
   }
+  // A copy that joined has closed. What it took stays taken; the timer goes on for the others.
+  leave() { if (this.open > 0) this.open--; }
   isDue(now) { return this.reminders.isDue(now); }
   // Answers the event this call took: each event is taken by one call only.
   take(identities, read, now, looking = () => false) {
-    this.heard = now;
     if (read < this.latest) identities = this.reminders.seen ?? identities; else this.latest = read;
     const event = this.reminders.take(identities, now, looking);
     if (event) this.count++;

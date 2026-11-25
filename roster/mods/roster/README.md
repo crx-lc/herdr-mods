@@ -122,9 +122,15 @@ something is still waiting:
   plays on this computer.
 - **One sound per event, however many Roster copies are open.** The copies Herdr runs
   from this mod share one reminder timer, so an arrival or reminder sounds once while every
-  copy's bell pulses, and closing or opening a copy neither loses nor replays a sound. Two
-  Herdr windows that run separate copies of the mod which cannot see each other would each
-  sound; whether Herdr ever does that is not verified.
+  copy's bell pulses, and closing or opening a copy neither loses nor replays a sound. The
+  timer knows how many copies are open, because Herdr tells each copy when it closes: a copy
+  that opens while none is open starts silently, as Roster does at start, and one that opens
+  beside another changes nothing, so a reminder that fell due while the computer slept still
+  sounds once. Not verified in a running Herdr: that every copy that goes is told so (after
+  a missed one, the next Roster to open once all had closed would go on with the old timer
+  instead of starting silently: one pulse or chime as it opens, never two for one event), and
+  whether two Herdr windows can run separate copies of the mod that cannot see each other,
+  which would each sound.
 
 **Options › Sound** has three values (activate the entry to move to the next):
 

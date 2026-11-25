@@ -71,7 +71,7 @@ export function createRosterView(kit, app, options = {}) {
       // Needs you pulses the bell, and by Options > Sound plays Roster's chime, on a new arrival
       // and then every 2 minutes while it is not empty; the check reads the last drawn list.
       // The timer is shared (needsYou); heardCount is the last of its events this copy pulsed for.
-      this.needsYou = needsYou; this.heardCount = null; this.readNumber = 0; this.pulseUntil = 0;
+      this.needsYou = needsYou; this.heardCount = null; this.readNumber = 0; this.pulseUntil = 0; this.closed = false;
       // Git identity for worktree nesting: the stock panel's two read-only rev-parse
       // queries, probed in the background (never in render, never under check).
       const exec = options.exec ?? app.exec, readTextFile = options.readTextFile ?? app.readTextFile;
@@ -114,8 +114,8 @@ export function createRosterView(kit, app, options = {}) {
     soundChoice() { return readSound(storage); }
     watchNeedsYou(cx) {
       const c = this.controller;
-      // Not drawn yet, so not joined to the shared timer: nothing to take or pulse.
-      if (!c.projection || this.heardCount === null) return;
+      // Not drawn yet, so not joined to the shared timer, or closed: nothing to take or pulse.
+      if (!c.projection || this.heardCount === null || this.closed) return;
       const now = c.host.now();
       // A reminder that falls due reads Herdr afresh first, so it never sounds for a list
       // that has emptied since the last draw; that read is drawn too.
@@ -140,6 +140,14 @@ export function createRosterView(kit, app, options = {}) {
       cx.notify();
       // Then still: one redraw after the pulse draws the bell without it.
       cx.timer.after(PULSE.ms, cx => cx.notify());
+    }
+    // Herdr's one final call when this copy goes (its pane, tab, slot or overlay, or the app
+    // quits; never for a hidden copy). The shared timer stops counting this copy, so it knows
+    // when none is open: the next one to open then starts silently.
+    async close() {
+      if (this.closed) return;
+      this.closed = true;
+      if (this.heardCount !== null) needsYou.leave();
     }
     async layoutAction(operation, cx) {
       if (app.checking()) return;
@@ -789,10 +797,10 @@ export function createRosterView(kit, app, options = {}) {
       // Number this read of Herdr for the shared timer. The first draw joins it: its task
       // establishes the baseline after render (silent, or the shared one if another copy runs).
       this.readNumber = needsYou.read();
-      if (this.heardCount === null) {
+      if (this.heardCount === null && !this.closed) {
         const pending = projection.instances.filter(i => i.pinned && i.kind === 'terminal').map(i => i.identity);
         const at = c.host.now(), read = this.readNumber;
-        cx.spawn(async () => { if (this.heardCount === null) this.heardCount = needsYou.join(pending, read, at); });
+        cx.spawn(async () => { if (this.heardCount === null && !this.closed) this.heardCount = needsYou.join(pending, read, at); });
       }
       const shown = Math.min(pinnedCount, PINNED.shown);
       const pinnedRows = v().id('roster-needs-rows').flex_none().gap(PINNED.gap).overflow_y_scrollbar().track_scroll(this.pinnedScroll)

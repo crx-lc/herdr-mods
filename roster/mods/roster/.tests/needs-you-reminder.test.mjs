@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { createRosterView } from '../view.js';
-import { Reminders, NeedsYou, IDLE_MS, REMIND_MS, CHIME, SOUND, SOUND_KEY, soundChoice, nextSoundChoice, readSound, writeSound, herdrMuted, playsChime, lookingAt } from '../reminders.js';
+import { Reminders, NeedsYou, REMIND_MS, CHIME, SOUND, SOUND_KEY, soundChoice, nextSoundChoice, readSound, writeSound, herdrMuted, playsChime, lookingAt } from '../reminders.js';
 import { PULSE } from '../motion.js';
 import { fakeHost, terminal, kit, context, appOf, flatten, textOf, layoutHostUnused } from './sidebar-fixtures.mjs';
 
@@ -233,10 +233,11 @@ test('Options › Sound cycles three values, says when Herdr mutes it, and Motio
   assert.deepEqual(m.f.calls, []);
 });
 
-test('the shared timer: each event is taken once; an older read never undoes a newer one; idle starts afresh', () => {
+test('the shared timer: each event is taken once; an older read never undoes a newer one; afresh only when no copy is open', () => {
   const n = new NeedsYou();
   assert.equal(n.join(['a'], n.read(), 0), 0);
   assert.equal(n.join(['a'], n.read(), 500), 0, 'a second copy joins the running timer');
+  assert.equal(n.open, 2);
   const first = n.read(), second = n.read();
   assert.equal(n.take(['a'], second, MIN2), 'reminder');
   assert.equal(n.take(['a'], first, MIN2), null, 'the same reminder, taken by the other copy: nothing');
@@ -247,12 +248,26 @@ test('the shared timer: each event is taken once; an older read never undoes a n
   assert.equal(n.take(['a'], stale, MIN2 + 1000), null, 'the older list is ignored');
   assert.equal(n.take(['a', 'b'], fresh, MIN2 + 2000), null, 'so b does not arrive twice');
   assert.equal(n.count, 2);
-  // Every copy closed: the next one to join starts silently, and the count never goes back.
-  assert.equal(n.join(['a', 'b', 'c'], n.read(), MIN2 + 2000 + IDLE_MS + 1), 2);
-  assert.equal(n.take(['a', 'b', 'c'], n.read(), MIN2 + 2000 + IDLE_MS + 2), null, 'c was pending at that start');
+  // One copy closed; the other is open but has not ticked for a long time (a pause). A copy
+  // that joins then leaves the timer alone: what fell due is still owed, once.
+  n.leave();
+  const late = 12 * MIN2;
+  assert.equal(n.join(['a', 'b'], n.read(), late), 2);
+  assert.equal(n.reminders.due, 2 * MIN2 + 1000, 'not moved');
+  assert.equal(n.take(['a', 'b'], n.read(), late), 'reminder');
+  assert.equal(n.take(['a', 'b'], n.read(), late), null);
+  assert.equal(n.count, 3);
+  // Every copy closed: the next one to join starts silently, however soon, and the count
+  // never goes back.
+  n.leave(); n.leave(); assert.equal(n.open, 0);
+  n.leave(); assert.equal(n.open, 0, 'never below none');
+  assert.equal(n.join(['a', 'b', 'c'], n.read(), late + 1), 3);
+  assert.equal(n.take(['a', 'b', 'c'], n.read(), late + 2), null, 'c was pending at that start');
+  assert.equal(n.reminders.due, late + 1 + MIN2);
 });
 
 // Copies of one Roster class, as Herdr makes them from one mod context: one host, one clock.
+// t9 needs you from the start; t1 starts needing you later.
 function copies({ storage = null, settings = null } = {}) {
   let clock = 1000;
   const f = fakeHost([terminal('t1', 'working', { created_ms: 110 }), terminal('t9', 'blocked', { created_ms: 90 })]);
@@ -266,19 +281,23 @@ function copies({ storage = null, settings = null } = {}) {
     const c = context(), every = [], after = [];
     c.cx.timer.every = (ms, fn) => every.push({ ms, fn }); c.cx.timer.after = (ms, fn) => after.push({ ms, fn });
     const view = new Type(); view.init({}, c.cx);
-    const copy = { view, ...c, every, after, render: () => view.render(c.cx) };
+    const copy = { view, ...c, every, after, render: () => view.render(c.cx), tick: () => every[0].fn(c.cx) };
     copy.bell = () => flatten(view.render(c.cx)).find(e => e.attributes.id?.[0] === 'group-icon:' + JSON.stringify(['attention']));
     open.push(copy); return copy;
   };
-  s.close = copy => { open.splice(open.indexOf(copy), 1); };
+  // Herdr closes a copy: one final close() call, and its timer stops.
+  s.close = copy => { copy.view.close(copy.cx); open.splice(open.indexOf(copy), 1); };
   // Herdr redraws every open copy when its data changes, then each copy's timer ticks.
   s.render = () => open.forEach(copy => copy.render());
-  s.tick = (ms = 1000) => { clock += ms; for (const copy of open) copy.every[0].fn(copy.cx); };
+  // Time passes with no timer callback delivered (no copy open, or a pause).
+  s.wait = ms => { clock += ms; };
+  s.tick = (ms = 1000) => { clock += ms; for (const copy of open) copy.tick(); };
+  s.clock = () => clock;
   s.set = (address, status) => { f.values.terminals = f.values.terminals.map(t => t.address === address ? { ...t, status } : t); };
   return s;
 }
 
-test('two copies, default Sound: the reminder chimes once, and both bells pulse', () => {
+test('row 1: two copies, default Sound: the reminder chimes once, in either tick order, and both bells pulse', () => {
   const s = copies(); const a = s.add(), b = s.add(); s.render(); s.tick();
   s.tick(MIN2 - 1000);
   assert.deepEqual(s.played, [CHIME], 'one chime for one reminder');
@@ -289,9 +308,10 @@ test('two copies, default Sound: the reminder chimes once, and both bells pulse'
   s.tick(MIN2); assert.deepEqual(s.played, [CHIME, CHIME], 'the next reminder, once');
   // Either copy may tick first: still one.
   s.open.reverse(); s.tick(MIN2); assert.deepEqual(s.played, [CHIME, CHIME, CHIME]);
+  assert.deepEqual([a.after.length, b.after.length], [3, 3]);
 });
 
-test('two copies, Arrival and reminders: one chime on arrival and one per reminder', () => {
+test('row 2: two copies, Arrival and reminders: one chime on arrival and one per reminder', () => {
   const s = copies({ storage: memory({ [SOUND_KEY]: 'arrival' }) }); const a = s.add(), b = s.add(); s.render(); s.tick();
   s.set('t1', 'blocked'); s.render(); s.tick();
   assert.deepEqual(s.played, [CHIME], 'one arrival, one chime');
@@ -302,31 +322,111 @@ test('two copies, Arrival and reminders: one chime on arrival and one per remind
   assert.deepEqual([a.after.length, b.after.length], [2, 2]);
 });
 
-test('a copy that closes takes nothing with it; one opened later never replays a sound', () => {
+test('row 3: the copy that took an event closes before the other ticks; the survivor gives the next reminder once', () => {
   const s = copies({ storage: memory({ [SOUND_KEY]: 'arrival' }) }); const a = s.add(), b = s.add(); s.render(); s.tick();
-  s.set('t1', 'blocked'); s.render(); s.tick();
+  s.set('t1', 'blocked'); s.render();
+  // Only a's timer has run: it takes the arrival, and a closes before b ticks.
+  s.wait(1000); a.tick();
   assert.deepEqual(s.played, [CHIME]);
-  // The copy whose tick took the arrival goes; the other still sounds the reminder.
   s.close(a);
-  s.tick(MIN2); assert.deepEqual(s.played, [CHIME, CHIME], 'the reminder still sounds, once');
-  // A copy opened later: no replay of the arrival or reminder; it pulses with the next one.
-  const c = s.add(); c.render(); s.tick();
-  assert.deepEqual(s.played, [CHIME, CHIME]); assert.equal(c.after.length, 0);
-  s.tick(MIN2 - 1000); assert.deepEqual(s.played, [CHIME, CHIME, CHIME]);
-  assert.deepEqual([b.after.length, c.after.length], [3, 1]);
-  // b has not redrawn since t1 came back, so it holds an older list without t1: that list
-  // never makes t1 leave and arrive again.
-  s.set('t1', 'idle'); s.render(); s.tick();
-  s.set('t1', 'blocked'); c.render(); s.tick();
-  assert.equal(s.played.length, 4, 'the second arrival, once');
-  for (let i = 0; i < 3; i++) s.tick();
-  assert.equal(s.played.length, 4, 'b holds the older list: no second arrival');
-  // All copies closed; t1 comes back while none is open; the next copy starts silently.
-  s.set('t1', 'idle'); s.render(); s.tick();
-  s.close(b); s.close(c);
-  s.tick(IDLE_MS + 1);
-  s.set('t1', 'blocked');
-  const d = s.add(); d.render(); s.tick(); s.tick();
-  assert.equal(s.played.length, 4, 'pending at start: silent'); assert.equal(d.after.length, 0);
-  s.tick(MIN2); assert.equal(s.played.length, 5, 'then its reminders');
+  assert.equal(b.view.needsYou.open, 1);
+  s.tick(0);
+  assert.deepEqual(s.played, [CHIME], 'the arrival is not sounded again');
+  assert.equal(b.after.length, 1, 'the survivor still pulses for it');
+  s.tick(MIN2 - 1000); assert.deepEqual(s.played, [CHIME], 'not before 2 minutes after the arrival');
+  s.tick(1000); assert.deepEqual(s.played, [CHIME, CHIME], 'the reminder still sounds, once');
+  s.tick(MIN2); assert.deepEqual(s.played, [CHIME, CHIME, CHIME]);
+  assert.equal(b.after.length, 3);
+});
+
+test('row 4: a copy that opens right after an event replays nothing; the next reminder sounds once', () => {
+  const s = copies(); const a = s.add(); s.render(); s.tick();
+  s.tick(MIN2 - 1000); assert.deepEqual(s.played, [CHIME]);
+  const b = s.add(); b.render(); s.tick();
+  assert.deepEqual(s.played, [CHIME], 'no replay');
+  assert.equal(b.after.length, 0, 'and no pulse for an event from before it opened');
+  s.tick(MIN2 - 2000); assert.deepEqual(s.played, [CHIME], 'the schedule is the running one');
+  s.tick(1000); assert.deepEqual(s.played, [CHIME, CHIME], 'the next reminder, once');
+  assert.deepEqual([a.after.length, b.after.length], [2, 1]);
+});
+
+test('row 5: a copy holding an older read ticks after a newer one; it cannot undo the newer list or sound again', () => {
+  const s = copies({ storage: memory({ [SOUND_KEY]: 'arrival' }) }); const a = s.add(), b = s.add(); s.render(); s.tick();
+  // t1 starts needing you and only b redraws: a still holds the list without t1.
+  s.set('t1', 'blocked'); b.render();
+  s.wait(1000); b.tick(); a.tick();
+  const arrived = s.clock();
+  assert.deepEqual(s.played, [CHIME], 'the arrival, once');
+  assert.deepEqual([a.after.length, b.after.length], [1, 1]);
+  for (let i = 0; i < 3; i++) { s.wait(1000); b.tick(); a.tick(); }
+  assert.deepEqual(s.played, [CHIME], 'the older list never makes t1 leave and arrive again');
+  assert.equal(a.view.needsYou.reminders.seen.size, 2, 'the newer list stands');
+  assert.equal(a.view.needsYou.reminders.due, arrived + MIN2, 'and so does its schedule');
+  assert.deepEqual([a.after.length, b.after.length], [1, 1]);
+});
+
+// Rows 6 and 7: the only copy closes with nothing pending, a session becomes pending while
+// no copy is open, and a copy opens `gap` ms later.
+function reopened(gap) {
+  const s = copies({ storage: memory({ [SOUND_KEY]: 'arrival' }) });
+  s.set('t9', 'idle');
+  const a = s.add(); s.render(); s.tick();
+  s.close(a);
+  assert.equal(a.view.needsYou.open, 0);
+  s.set('t9', 'blocked');
+  s.wait(gap);
+  const b = s.add(); b.render(); const opened = s.clock();
+  s.tick(); s.tick();
+  assert.deepEqual(s.played, [], 'pending when it opened: a silent start, not an arrival');
+  assert.equal(b.after.length, 0, 'and a still bell');
+  s.tick(opened + MIN2 - 1000 - s.clock()); assert.deepEqual(s.played, [], 'not before 2 minutes after it opened');
+  s.tick(1000); assert.deepEqual(s.played, [CHIME], 'the first reminder, 2 minutes after it opened');
+  assert.equal(b.after.length, 1);
+}
+test('row 6: every copy closed, a session becomes pending, a copy opens 1 second later: silent start', () => reopened(1000));
+test('row 7: the same with a long gap before reopening: silent start', () => {
+  reopened(5001);
+  reopened(10 * MIN2);
+  // A reminder that fell due while no copy was open is not owed: also a silent start.
+  const s = copies(); const a = s.add(); s.render(); s.tick();
+  s.close(a); s.wait(10 * MIN2);
+  const b = s.add(); b.render(); const opened = s.clock(); s.tick();
+  assert.deepEqual(s.played, []); assert.equal(b.after.length, 0);
+  s.tick(opened + MIN2 - s.clock()); assert.deepEqual(s.played, [CHIME]);
+});
+
+for (const first of ['older', 'newer']) test(`row 8: a copy open across a pause, a second opens before the delayed tick (the ${first} copy ticks first): the overdue reminder sounds once`, () => {
+  const s = copies(); const a = s.add(); s.render(); s.tick();
+  const due = a.view.needsYou.reminders.due;
+  assert.equal(due, 1000 + MIN2);
+  // A pause: the clock passes the due time and no timer callback is delivered.
+  s.wait(MIN2 + 9000);
+  const b = s.add(); b.render();
+  assert.equal(b.view.needsYou.open, 2);
+  assert.equal(b.view.needsYou.reminders.due, due, 'opening a copy does not move what is owed');
+  if (first === 'newer') s.open.reverse();
+  s.tick(0);
+  assert.deepEqual(s.played, [CHIME], 'the overdue reminder, once');
+  assert.deepEqual([a.after.length, b.after.length], [1, 1], 'both bells pulse for it');
+  assert.equal(a.view.needsYou.reminders.due, s.clock() + MIN2, 'one reminder for the pause, no burst');
+  s.tick(); assert.deepEqual(s.played, [CHIME]);
+  s.tick(MIN2 - 1000); assert.deepEqual(s.played, [CHIME, CHIME]);
+});
+
+test('close: a copy counts from its first draw to the close call, once; a closed copy takes and joins nothing', () => {
+  const s = copies(); const a = s.add(), never = s.add(), b = s.add();
+  a.render();
+  // Closed before its first draw: it never joined, so there is nothing to give back.
+  s.close(never); never.render();
+  b.render(); s.tick();
+  const shared = a.view.needsYou;
+  assert.equal(shared.open, 2);
+  assert.ok(a.view.close(a.cx) instanceof Promise, 'the async close(cx) of the manual');
+  a.view.close(a.cx);
+  assert.equal(shared.open, 1, 'a second close gives nothing back twice');
+  // Its timer may fire once more before Herdr cancels it, and a draw may still be queued.
+  s.wait(MIN2); a.tick(); a.render(); a.tick();
+  assert.deepEqual(s.played, []); assert.equal(a.after.length, 0); assert.equal(shared.open, 1);
+  // What fell due is still there for the copy that is open.
+  b.tick(); assert.deepEqual(s.played, [CHIME]); assert.equal(b.after.length, 1);
 });
