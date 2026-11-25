@@ -64,6 +64,34 @@ function cleanSeries(values) {
 const period = (value) => finite(value?.start) && finite(value?.end) && value.end > value.start
   ? [value.start * 1000, value.end * 1000] : null;
 
+/**
+ * The regular session the bars belong to, from Yahoo's `tradingPeriods` (the day the response
+ * covers, unlike `currentTradingPeriod`, which moves on to the next day): the one holding the
+ * last bar, else the latest one. [start, end] in ms, or null.
+ */
+function barSession(meta, times) {
+  const list = [];
+  const walk = (v) => {
+    if (Array.isArray(v)) { v.forEach(walk); return; }
+    const p = period(v);
+    if (p) list.push(p);
+  };
+  const tp = meta?.tradingPeriods;
+  walk(Array.isArray(tp) ? tp : tp?.regular);
+  if (!list.length) return null;
+  list.sort((a, b) => a[0] - b[0]);
+  const last = Array.isArray(times) ? Math.max(0, ...times.filter(positive)) * 1000 : 0;
+  return list.find((p) => last >= p[0] && last <= p[1] + 300_000) ?? list.at(-1);
+}
+
+/** The first bar's opening price at the bar's start (ms), when Yahoo gives both. */
+function firstOpen(times, opens, closes) {
+  if (!Array.isArray(times) || !Array.isArray(opens) || !Array.isArray(closes)) return null;
+  let first = -1;
+  times.forEach((t, i) => { if (positive(t) && positive(closes[i]) && (first < 0 || t < times[first])) first = i; });
+  return first >= 0 && positive(opens[first]) ? { t: times[first] * 1000, price: opens[first] } : null;
+}
+
 /** `response` is `{ status, ok, text }` with the body already read. */
 export function decodeYahoo(symbol, response, now) {
   // Herdr's fetch does not expose headers, so Retry-After is unknown: wait at least a minute.
@@ -101,6 +129,9 @@ export function decodeYahoo(symbol, response, now) {
     series,
     // The same line with Yahoo's own bar times, and the exchange clock.
     points: timedPoints(body.chart.result[0].timestamp, bars.close),
+    // The watchlist line: the session those bars belong to, and the first bar's open.
+    session: barSession(meta, body.chart.result[0].timestamp),
+    firstOpen: firstOpen(body.chart.result[0].timestamp, bars.open, bars.close),
     timeZone: yahooTimeZone(meta),
     // Whether Yahoo has pre-market / after-hours data for this market: the dialog asks for it only then.
     hasPrePost: meta.hasPrePostMarketData === true,
@@ -131,8 +162,10 @@ export function decodeBinance(pairs, response, now) {
     const pair = typeof ticker?.symbol === "string" ? wanted.get(ticker.symbol) : undefined;
     if (!pair) continue;
     const price = Number(ticker.lastPrice);
-    const close = Number(ticker.prevClosePrice);
+    // The rolling window's first price, which Binance's own 24h change is measured against.
+    const close = Number(ticker.openPrice);
     const time = Number(ticker.closeTime);
+    const start = Number(ticker.openTime);
     if (!positive(price) || !positive(time)) continue;
     quotes[pair] = {
       symbol: pair,
@@ -142,6 +175,7 @@ export function decodeBinance(pairs, response, now) {
       changePercent: positive(close) ? (price - close) / close * 100 : null,
       currency: pair.split("/")[1],
       timestamp: time,
+      windowStart: positive(start) && start < time ? start : null,
       fetchedAt: now,
       delaySeconds: 0,
       series: [],
@@ -169,6 +203,15 @@ export function decodeKlines(response) {
   try { body = JSON.parse(response.text); } catch { throw new QuoteError("Binance returned an unreadable response."); }
   if (!Array.isArray(body)) throw new QuoteError("Binance returned an unreadable response.");
   return cleanSeries(body.map((bar) => Array.isArray(bar) ? Number(bar[4]) : NaN));
+}
+
+/** The 24-hour line and its first kline's open: `{ points, firstOpen }` (see decodeKlinePoints). */
+export function decodeKlineWindow(response) {
+  const points = decodeKlinePoints(response);
+  const body = JSON.parse(response.text).filter(Array.isArray);
+  const first = body.find((bar) => Number(bar[0]) === (points[0]?.t ?? NaN));
+  const open = first ? Number(first[1]) : NaN;
+  return { points, firstOpen: points.length && positive(open) ? { t: points[0].t, price: open } : null };
 }
 
 /**

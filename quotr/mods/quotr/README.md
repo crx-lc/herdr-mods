@@ -52,27 +52,19 @@ Compared with Pulse at `99f70b2c`:
   ticker through the logo sources that can show it.
 
 **Panel and refresh**
-- The watchlist's 56×22 sparkline separates two scales: observed closes above, a daily-move rail
-  below. The rail runs from zero at the center toward −50% or +50%, with an end stop beyond those
-  limits. Nonzero moves have a 3px visibility minimum (not literal linear magnitude below
-  that length), painted above the zero tick; the adjacent signed percentage gives the exact magnitude.
-  Stocks use the same previous regular close as the headline; Binance pairs use their rolling 24h reference. It is a day-move
-  indicator, not an opening-gap path.
-- The upper line uses only observed bar closes and its own vertical scale: the total span is at
-  least 1% of their midpoint, with 16% padding for larger ranges. Thus 0.03% noise stays almost
-  flat (0.33px), an ordinary 1% trend remains legible, and a 20% swing spans about 9.48px.
-  This price-relative scale is independent of the daily rail. Time positions use the
-  reported regular session for stocks or the quote's rolling 24h window for pairs; blank time is
-  unobserved. Rest the pointer on it for a wrapped card with bar times, formatted observed price range and reference (with the headline’s
-  supported currency/precision), scale rules and freshness. The card opens beside the sparkline (left of it, or right when the
-  window has no room there), never over it, so leaving or clicking the sparkline closes it on any row. No opening price is inferred from a late first bar, and the headline quote is never appended to bars.
-- Missing or inconsistent references omit the rail. Missing session/times, mismatched cached
-  points omit the line; one bar is a dot. Stocks with out-of-session bars omit the line.
-  For crypto, the entire cache must first have paired, ordered, positive finite values; then only
-  bars outside the quote’s rolling window are clipped. Surviving bars keep actual time positions
-  and blank coverage, including when the ticker advances before klines. Old caches remain readable
-  without a schema migration. A stale/failed quote dims the sparkline; bar times remain independent of the
-  quote's fetch time, including retained Binance klines after a failed bar request.
+- Each row's 56×22 chart is a small version of the dialog's 1D chart: the line in the color of
+  the row's percentage over a faint fill, and a dashed line at the price that percentage is
+  measured against: a stock's previous regular close, a pair's price 24 hours ago (Binance's own
+  24h open). The reference is part of the vertical scale, so an opening gap reads as the line sitting
+  well above or below it even when the session then trades flat; the scale spans at least 1% of the
+  reference, so small moves stay small.
+- Only observed prices are drawn, each at its own time: the first bar's open, every bar's close at
+  the bar's end, and the quote itself. Stocks span Yahoo's regular session for the day the bars
+  belong to (a half-finished day fills half the width); pairs span the quote's rolling 24h. Time
+  with no data stays blank; nothing is filled in. Missing reference: no dashed line, the line in
+  `dim`. One price: a dot. A stale or failed quote dims the chart.
+- Resting on the chart shows one line, for example `Regular 09:30–13:12 EST · vs prev close 354.07 USD`
+  or `Last 24h · vs 60,115.22 USDT 24h ago`. Clicking it opens the dialog like the rest of the row.
 - A New York market clock under the title (`marketclock.js`, `clockview.js`): New York time, the
   US regular session's state (Open, Pre-market, After-hours, Closed, Weekend, Holiday) and its next
   open or close with a live countdown ("NY Tue Nov 17 15:42 · Open · Closes 16:00 · 18m"), early closes included.
