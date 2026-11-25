@@ -17,6 +17,8 @@ export function element(kind = "div") {
   } });
   return proxy;
 }
+// The window's drawable size as `window.viewport_size()` reports it; tests may change or clear it.
+export const viewport = { size: { width: 1280, height: 820 } };
 export function walk(tree) {
   return tree && typeof tree === "object" ? [tree, ...(tree.nodes ?? []).flatMap(walk)] : tree == null ? [] : [tree];
 }
@@ -26,7 +28,8 @@ export async function views() {
     v_flex: () => element("column"), h_flex: () => element("row"),
     PathBuilder: { stroke: (width) => element("path").stroke(width), fill: () => element("path").fill() },
     Background: { solid: (color) => element().solid(color) },
-    window: { paint_path: (path, paint) => element("paint").path(path).paint(paint) },
+    window: { paint_path: (path, paint) => element("paint").path(path).paint(paint),
+      get viewport_size() { return viewport.size ? () => ({ ...viewport.size }) : undefined; } },
     Input: { new: () => element("input") }, INTERVAL_MS: 60_000,
     // A Popup's trigger is a constructor argument; recorded as its first node so walk() reaches it.
     Popup: { new: (id, trigger) => element("popup").popup(id).child(trigger) },

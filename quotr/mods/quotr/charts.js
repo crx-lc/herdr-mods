@@ -4,14 +4,14 @@
 import { div, PathBuilder, Background } from "gpui-kit";
 import { v_flex, h_flex, Popup } from "gpui-base";
 import { chartGeometry, formatPrice } from "./quotes.js";
-import { SPARK_WIDTH, SPARK_HEIGHT, watchlistSparkline } from "./sparkline.js";
+import { SPARK_WIDTH, SPARK_HEIGHT, SPARK_CARD_GAP, watchlistSparkline, sparkCardPlacement } from "./sparkline.js";
 import { nearestIndex, readoutAt } from "./readout.js";
 import { SESSION_NAMES, sessionHours } from "./extended.js";
 
 // The sparkline's explanation is a card Quotr draws, not the shell's `tooltip`: that label is one
 // line that never wraps, so its long text ran past the window's edge. Same rest delay as the shell's.
+// The card sits beside the sparkline (sparkCardPlacement), never over it.
 const SPARK_CARD_DELAY = 500;
-const SPARK_CARD_WIDTH = 272; // fits inside the 300px panel with room to spare
 
 export class ChartParts {
   // Under the 1D extended chart: which shading is which, with the hours Yahoo gives for the latest day.
@@ -41,6 +41,8 @@ export class ChartParts {
     const box = div().id(`quotr-spark-${symbol}`).relative().flex_none()
       .w(SPARK_WIDTH).h(SPARK_HEIGHT).accessibility_label(g.description).opacity(g.stale ? 0.5 : 1)
       .on_hover((inside, cx) => this.sparkHover(symbol, inside, cx))
+      // Where the sparkline is in the window, so the card can go beside it. No redraw.
+      .on_mouse_move((event) => this.sparkTrack(symbol, event))
       // GPUI gives the press to the row too, so its detail still opens; the card must not stay over it.
       .on_mouse_down("left", (_e, cx) => this.sparkHover(symbol, false, cx));
     const layer = (path, paint) => window.paint_path(path.build(), paint)
@@ -67,8 +69,31 @@ export class ChartParts {
       if (g.move.capped) box.child(layer(stroke(g.move.to, 16, g.move.to, 21), color));
     }
     const open = this.sparkTip?.symbol === symbol && this.sparkTip.open === true;
-    return Popup.new(`quotr-spark-tip-${symbol}`, box).flex_none().anchor("top_right")
-      .when(open, (el) => el.content(this.sparkCard(g.notes, t)));
+    return box.when(open, (el) => el.child(this.sparkPopup(symbol, g.notes, t)));
+  }
+
+  // The card's Popup. Its trigger is a 1px stand-in just outside the sparkline, so the card's near
+  // edge is pinned beside it: clamping into the window can then only move it up or down, never over
+  // the sparkline. "below" (geometry unknown, or no room either side) pins to the sparkline itself.
+  sparkPopup(symbol, notes, t) {
+    const at = this.sparkAt?.symbol === symbol ? this.sparkAt : null;
+    const viewport = typeof window.viewport_size === "function" ? window.viewport_size() : null;
+    const place = sparkCardPlacement(at, viewport?.width);
+    const id = `quotr-spark-tip-${symbol}`;
+    const popup = place.side === "below"
+      ? Popup.new(id, div().w(SPARK_WIDTH).h(SPARK_HEIGHT)).absolute().top(0).left(0).anchor("top_right")
+      : Popup.new(id, div().w(1).h(1)).absolute().top(0)
+        .left(place.side === "left" ? -SPARK_CARD_GAP - 1 : SPARK_WIDTH + SPARK_CARD_GAP)
+        .anchor(place.side === "left" ? "top_right" : "top_left");
+    return popup.content(this.sparkCard(symbol, notes, t, place.width));
+  }
+
+  // The sparkline's place in the window: pointer position less its offset inside the box.
+  sparkTrack(symbol, event) {
+    const x = event?.position?.x, local = event?.local_position?.x;
+    if (!Number.isFinite(x) || !Number.isFinite(local)) return;
+    const width = Number.isFinite(event.bounds?.width) ? event.bounds.width : SPARK_WIDTH;
+    this.sparkAt = { symbol, left: x - local, width };
   }
 
   // Resting on a sparkline opens its card after the delay; leaving it or pressing it closes it.
@@ -89,10 +114,14 @@ export class ChartParts {
     });
   }
 
-  // One wrapped paragraph per note, so the lower-rail part is as readable as the top.
-  sparkCard(notes, t) {
-    return v_flex().w(SPARK_CARD_WIDTH).gap(4).px(9).py(7).rounded(6).border_1().border_color(t.border)
-      .bg(t.popover).whitespace_normal().text_size(11).text_color(t.foreground)
+  // One wrapped paragraph per note, so the lower-rail part is as readable as the top. If the card
+  // ever does end up under the pointer, leaving it or pressing it still closes it.
+  sparkCard(symbol, notes, t, width) {
+    const close = (cx) => this.sparkHover(symbol, false, cx);
+    return v_flex().id(`quotr-spark-card-${symbol}`).w(width).gap(3).px(9).py(6).rounded(6)
+      .border_1().border_color(t.border).bg(t.popover).whitespace_normal().text_size(11).text_color(t.foreground)
+      .on_hover((inside, cx) => { if (!inside) close(cx); })
+      .on_mouse_down("left", (_e, cx) => close(cx))
       .children(notes.map((note) => div().w_full().child(note)));
   }
 

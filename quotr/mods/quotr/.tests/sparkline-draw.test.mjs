@@ -11,7 +11,7 @@ const near = (a, b) => assert.ok(Math.abs(a - b) < 1e-9, `${a} ≈ ${b}`);
 const moveQuote = percent => fixture([100, 100 * (1 + percent / 100)], {
   price: 100 * (1 + percent / 100), changePercent: percent,
 });
-// watchlistChart returns the Popup that carries the card; the 56×22 box is its trigger.
+// watchlistChart returns the 56×22 box; an open card is a Popup child beside it.
 const sparkBox = tree => walk(tree).find(n => n.calls?.some(c => c[0] === "id" && /^quotr-spark-/.test(c[1])));
 function recordings(tree) {
   const box = sparkBox(tree);

@@ -70,3 +70,32 @@ export function watchlistSparkline(quote, now, { failed = false } = {}) {
   ].filter(Boolean);
   return { line, move, stale, notes, description: notes.join(" ") };
 }
+
+// The card that explains the sparkline goes beside it, never over it: a card over its own trigger
+// swallows the pointer, so it can't close on leave and the row's click never arrives.
+export const SPARK_CARD_WIDTH = 320;
+export const SPARK_CARD_MIN_WIDTH = 160; // narrower than this, the card goes under the row instead
+export const SPARK_CARD_GAP = 6; // between the sparkline and the card
+export const SPARK_CARD_MARGIN = 8; // between the card and the window's edge
+
+/** Which side of the sparkline the card goes on, and how wide it is.
+ * `trigger` is the sparkline's { left, width } in window pixels, `viewportWidth` the window's drawable width.
+ * Left first (Quotr is usually docked right), then right, then the roomier side at a narrower width.
+ * Unknown geometry or a window too narrow for either side: "below", the Popup's own placement.
+ */
+export function sparkCardPlacement(trigger, viewportWidth) {
+  const finite = (v) => typeof v === "number" && Number.isFinite(v);
+  if (!finite(viewportWidth) || viewportWidth <= 0 || !finite(trigger?.left) || !finite(trigger?.width)
+    || trigger.width < 0) {
+    return { side: "below", width: SPARK_CARD_WIDTH };
+  }
+  const room = {
+    left: Math.floor(trigger.left - SPARK_CARD_GAP - SPARK_CARD_MARGIN),
+    right: Math.floor(viewportWidth - trigger.left - trigger.width - SPARK_CARD_GAP - SPARK_CARD_MARGIN),
+  };
+  for (const side of ["left", "right"]) if (room[side] >= SPARK_CARD_WIDTH) return { side, width: SPARK_CARD_WIDTH };
+  const side = room.left >= room.right ? "left" : "right";
+  if (room[side] >= SPARK_CARD_MIN_WIDTH) return { side, width: room[side] };
+  return { side: "below", width: Math.max(SPARK_CARD_MIN_WIDTH, Math.min(SPARK_CARD_WIDTH,
+    Math.floor(viewportWidth - 2 * SPARK_CARD_MARGIN))) };
+}

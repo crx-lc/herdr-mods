@@ -64,7 +64,8 @@ Compared with Pulse at `99f70b2c`:
   This price-relative scale is independent of the daily rail. Time positions use the
   reported regular session for stocks or the quote's rolling 24h window for pairs; blank time is
   unobserved. Rest the pointer on it for a wrapped card with bar times, formatted observed price range and reference (with the headline’s
-  supported currency/precision), scale rules and freshness; leaving or clicking the sparkline closes it. No opening price is inferred from a late first bar, and the headline quote is never appended to bars.
+  supported currency/precision), scale rules and freshness. The card opens beside the sparkline (left of it, or right when the
+  window has no room there), never over it, so leaving or clicking the sparkline closes it on any row. No opening price is inferred from a late first bar, and the headline quote is never appended to bars.
 - Missing or inconsistent references omit the rail. Missing session/times, mismatched cached
   points omit the line; one bar is a dot. Stocks with out-of-session bars omit the line.
   For crypto, the entire cache must first have paired, ordered, positive finite values; then only
