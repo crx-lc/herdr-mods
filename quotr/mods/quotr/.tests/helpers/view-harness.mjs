@@ -5,6 +5,7 @@ import * as quotes from "../../quotes.js";
 import * as readout from "../../readout.js";
 import * as extended from "../../extended.js";
 import * as spark from "../../sparkline.js";
+import * as history from "../../history.js";
 export function element(kind = "div") {
   const target = { kind, nodes: [], calls: [] };
   const proxy = new Proxy(target, { get(o, key) {
@@ -23,7 +24,10 @@ export function walk(tree) {
   return tree && typeof tree === "object" ? [tree, ...(tree.nodes ?? []).flatMap(walk)] : tree == null ? [] : [tree];
 }
 export async function views() {
-  const bindings = { ...quotes, ...readout, ...extended, ...spark,
+  const bindings = { ...quotes, ...readout, ...extended, ...spark, ...history,
+    // The dialog's Herdr side: no history or extended hours loaded, nothing to close.
+    HISTORY: { peek: () => null, peekExtended: () => null, load: async () => {}, loadExtended: async () => {} },
+    closeOverlay: () => {}, HEADERS: {},
     View: class {}, div: () => element(), image: () => element("image"), svg: (path) => element("svg").path(path),
     SESSION_ICONS: { pre: "sunrise.svg", post: "moon.svg" },
     v_flex: () => element("column"), h_flex: () => element("row"),
@@ -45,7 +49,7 @@ export async function views() {
     return runInNewContext(`${code}\n;${className}`, bindings, { filename: `${name}.js` });
   };
   bindings.ChartParts = await load("charts", "ChartParts");
-  return { ChartParts: bindings.ChartParts, Quotr: await load("main", "Quotr") };
+  return { ChartParts: bindings.ChartParts, DialogParts: await load("dialog", "DialogParts"), Quotr: await load("main", "Quotr") };
 }
 export const theme = { muted: "muted", dim: "dim", border: "border", ansi1: "red", ansi2: "green",
   popover: "popover", foreground: "foreground" };

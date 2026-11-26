@@ -28,7 +28,7 @@ A panel 300px wide in the theme's `chrome` background with `foreground` text at 
 - for a US stock with extended hours: the latest pre-market or after-hours price, its time and its change against the regular close; a note instead when that data is stale, missing or inconsistent.
 - range tabs `1D 1W 1M 1Y` (22px, the selected one on `selected`).
 - a 140px chart: the line at 2px over a 16% fill, the dashed previous close; on 1D with extended hours, shaded pre-market and after-hours bands with a legend. Hovering shows a vertical rule and the nearest real point's date, time, zone, price and session.
-- stats: Open, High, Low, Prev close on 1D (a pair: 24h open, high, low); on other ranges the period's change, high, low and session count, with notes when a period is partial.
+- stats: Open, High, Low, Prev close and Volume on 1D (a pair: 24h open, high, low and 24h volume), five equal columns; Volume only when `cleanVolume` accepts it (a finite number above zero): Yahoo `regularMarketVolume` in shares, Binance `quoteVolume` with the quote currency, short form by hand (`formatVolume`: `950`, `12.3K`, `267.8M`, `1.48B USDT`); on other ranges the period's change, high, low and session count, with notes when a period is partial.
 - `As of 15:04 · Delay 15m · Yahoo Finance · regular session` in 11px `dim`.
 - the logo line: `Logo by AllInvestView ↗` (brand blue) and, when more than one source can show the ticker, a small outlined **Change** button.
 

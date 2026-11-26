@@ -43,6 +43,10 @@ Compared with Pulse at `99f70b2c`:
 **Detail dialog**
 - 1D · 1W · 1M · 1Y ranges (`history.js`): period change from the first to the last point, period
   high and low, trading-session count, and notes when a period is partial or ends early.
+- Volume on 1D, a fifth stat after Open, High, Low and Prev close: a stock's regular-session
+  volume (Yahoo's `regularMarketVolume`, e.g. `267.8M`), a pair's 24h volume in its quote currency
+  (Binance's `quoteVolume`, e.g. `1.48B USDT`). Shown only when the source gives a number above
+  zero; no column otherwise.
 - Hover readout on every chart (`readout.js`): the nearest real point's date, time and timezone (the
   exchange's own offsets from Yahoo; UTC for Binance), price and session.
 - Pre-market and after-hours for US stocks (`extended.js`): latest extended price, its time and change

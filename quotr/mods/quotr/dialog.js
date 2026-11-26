@@ -6,7 +6,7 @@ import { v_flex, h_flex } from "gpui-base";
 import { closeOverlay } from "herdr";
 import {
   SESSION_LABELS, formatBandPrice, formatChange, formatPrice, formatStaleDate, formatTime, isCryptoPair,
-  marketSession,
+  marketSession, cleanVolume, formatVolume,
 } from "./quotes.js";
 import { HistoryStore, RANGES, RANGE_SPECS, formatDay, sourceName } from "./history.js";
 import { UTC_ZONE, formatPointTime } from "./readout.js";
@@ -215,6 +215,11 @@ export class DialogParts {
     const stat = (label, price) => v_flex().flex_1().gap(2)
       .child(div().text_size(10.5).text_color(t.dim).child(label))
       .child(div().font_semibold().child(value(price)));
+    // Volume, a fifth column only when it is known: stocks in shares, pairs in their quote currency.
+    const volume = cleanVolume(q.volume);
+    const volumeStat = (label) => v_flex().flex_1().min_w(0).gap(2)
+      .child(div().text_size(10.5).text_color(t.dim).truncate().child(label))
+      .child(div().font_semibold().truncate().child(crypto ? `${formatVolume(volume)} ${q.currency ?? ""}`.trim() : formatVolume(volume)));
 
     return v_flex().id("quotr-detail").w_full().p(18).gap(14).text_color(t.foreground).text_size(12.5)
       .child(h_flex().items_center().gap(10)
@@ -259,8 +264,10 @@ export class DialogParts {
               : [div().h(60).flex().items_center().justify_center().text_color(t.dim).child("No intraday line yet.")]),
           crypto
             ? h_flex().gap(12).child(stat("24h open", q.open)).child(stat("24h high", q.high)).child(stat("24h low", q.low))
+              .when(volume !== null, (el) => el.child(volumeStat("24h volume")))
             : h_flex().gap(12).child(stat("Open", q.open)).child(stat("High", q.high)).child(stat("Low", q.low))
-              .child(stat("Prev close", q.previousClose)),
+              .child(stat("Prev close", q.previousClose))
+              .when(volume !== null, (el) => el.child(volumeStat("Volume"))),
         ]
         : this.periodParts(q, t, stat))
       .child(div().text_size(11).text_color(t.dim).child(asOf))
