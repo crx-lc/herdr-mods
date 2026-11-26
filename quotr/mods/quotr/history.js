@@ -72,6 +72,55 @@ export function yahooHistoryUrl(symbol, range, window) {
     + `&interval=${interval}&includePrePost=false`;
 }
 
+/** The same window in daily bars: a stock's 1W day volumes (its 30-minute volumes don't add up). */
+export function yahooDailyUrl(symbol, window) {
+  return YAHOO_CHART + encodeURIComponent(normalizeSymbol(symbol))
+    + `?period1=${Math.floor(window.start / 1000)}&period2=${Math.floor(window.end / 1000)}&interval=1d&includePrePost=false`;
+}
+
+/** The trading day a time falls on, on the exchange's calendar. */
+const dayOf = (t, offsetSeconds) => Math.floor((t + offsetSeconds * 1000) / DAY);
+
+/**
+ * Yahoo's daily bars as Map(trading day → volume): only days with a volume above zero.
+ * Throws QuoteError for an answer that isn't this ticker's daily bars.
+ */
+export function decodeYahooDayVolumes(symbol, response) {
+  if (response.status === 429) throw new QuoteError("Yahoo rate limited requests.", { retryAfterMs: 60_000 });
+  if (!response.ok) throw new QuoteError(`Yahoo returned HTTP ${response.status}.`);
+  let body;
+  try { body = JSON.parse(response.text); } catch { throw new QuoteError("Yahoo returned an unreadable response."); }
+  const result = body?.chart?.result?.[0];
+  const meta = result?.meta;
+  if (body?.chart?.error || !meta) throw new QuoteError("Yahoo returned no daily volume.");
+  let returned = null;
+  try { returned = typeof meta.symbol === "string" ? normalizeSymbol(meta.symbol) : null; } catch { /* checked below */ }
+  if (returned !== symbol) throw new QuoteError("Yahoo returned a different ticker.");
+  if (meta.dataGranularity !== "1d") throw new QuoteError("Yahoo returned other bars than daily ones.");
+  const offset = typeof meta.gmtoffset === "number" && Number.isFinite(meta.gmtoffset) ? meta.gmtoffset : 0;
+  const times = Array.isArray(result.timestamp) ? result.timestamp : [];
+  const volumes = result.indicators?.quote?.[0]?.volume ?? [];
+  const days = new Map();
+  times.forEach((seconds, i) => {
+    const volume = cleanVolume(volumes[i]);
+    if (positive(seconds) && volume !== null) days.set(dayOf(seconds * 1000, offset), volume);
+  });
+  return days;
+}
+
+/**
+ * A 1W stock history with each bar's trading-day volume (`dayVolume`, `day`), drawn as one bar per
+ * day. Only when every trading day the line shows has its own day volume; otherwise unchanged.
+ */
+export function attachDayVolumes(history, days) {
+  const keyed = history.bars.map((b) => ({ ...b, day: dayOf(b.t, history.utcOffsetSeconds ?? 0) }));
+  if (!keyed.length || !keyed.every((b) => days.has(b.day))) return history;
+  return { ...history, bars: keyed.map((b) => ({ ...b, dayVolume: days.get(b.day) })), volumes: true, volumesByDay: true };
+}
+
+// How long the 1W day-volume request may take before the dialog gives up on it (the line is already shown).
+export const DAY_VOLUME_TIMEOUT_MS = 10_000;
+
 export function binanceHistoryUrl(pair, range, window) {
   const { interval } = spec(range).binance;
   return `${BINANCE_KLINES}?symbol=${encodeURIComponent(pair.replace("/", ""))}&interval=${interval}`
@@ -229,8 +278,11 @@ export function summarize(history, now) {
     high,
     low,
     sessions,
-    // The period's traded volume (shares, or a pair's quote currency), only when every bar has its own.
-    volume: history.volumes ? bars.reduce((sum, b) => sum + b.volume, 0) : null,
+    // The period's traded volume (shares, or a pair's quote currency), only when every bar (or, for
+    // a stock's 1W, every trading day) has its own.
+    volume: !history.volumes ? null : history.volumesByDay
+      ? [...new Map(bars.map((b) => [b.day, b.dayVolume])).values()].reduce((sum, v) => sum + v, 0)
+      : bars.reduce((sum, b) => sum + b.volume, 0),
     startsLate,
     endsEarly: notes.includes("ends"),
     partial: notes.length > 0,
@@ -327,6 +379,34 @@ export class HistoryStore {
     this.yahooFailures++;
     const backoff = Math.min(900_000, 60_000 * 2 ** Math.min(this.yahooFailures - 1, 4));
     this.yahooRetryAt = host.now() + Math.max(backoff, error.retryAfterMs);
+  }
+
+  /**
+   * A stock's 1W day volumes, after its line is shown: one daily-bar request (`yahooDailyUrl`) against
+   * `host.deadline(promise, ms)` (null once ms pass). Tried once per fetched period; any failure
+   * leaves the period without volume (and a 429 still holds further Yahoo requests).
+   */
+  async loadDayVolumes(symbol, range, host) {
+    const key = HistoryStore.key(symbol, range);
+    const entry = this.entries.get(key);
+    if (range !== "1W" || isCryptoPair(symbol) || !entry || entry.dayVolumesTried || entry.history.volumes) return entry ?? null;
+    entry.dayVolumesTried = true;
+    await this.yahooTurn(host);
+    let days;
+    try {
+      const response = await host.deadline(host.fetch(yahooDailyUrl(symbol, entry.history.window)), DAY_VOLUME_TIMEOUT_MS);
+      if (!response) throw new QuoteError("Yahoo gave no daily volume in time.");
+      days = decodeYahooDayVolumes(symbol, response);
+    } catch (error) {
+      if (error instanceof QuoteError && error.retryAfterMs !== undefined) this.yahooLimited(error, host);
+      throw error instanceof QuoteError ? error : new QuoteError("Could not reach Yahoo Finance.");
+    }
+    // The period may have been fetched again meanwhile: attach only to the one asked about.
+    if (this.entries.get(key) !== entry) return this.entries.get(key) ?? null;
+    const history = attachDayVolumes(entry.history, days);
+    const updated = { ...entry, history, summary: summarize(history, entry.fetchedAt) };
+    this.remember(key, updated);
+    return updated;
   }
 
   // The 1D extended-hours series and latest pre-market / after-hours price.

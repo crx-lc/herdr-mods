@@ -146,3 +146,105 @@ test("no volume, no strip, no total and no readout line", async () => {
   assert.ok(!nodes.some((n) => typeof n === "string" && n.startsWith("Vol ")));
   assert.ok(!nodes.some((n) => n.calls?.some((c) => c[0] === "h" && c[1] === 22) && polygons(n).flat().length));
 });
+
+// A stock's 1W: day volumes from one daily-bar request after the line is shown.
+import { decodeYahooDayVolumes, attachDayVolumes, HistoryStore, DAY_VOLUME_TIMEOUT_MS } from "../history.js";
+
+const OFFSET = -18_000; // EST
+const tradingDays = [3, 2, 1].map((i) => Date.UTC(2026, 10, 25 - i, 14, 30)); // 09:30 EST, three days
+const thirty = tradingDays.flatMap((d) => [d, d + 1_800_000, d + 3_600_000]);
+const week = () => yahooHistory("1W", "30m", thirty, thirty.map((_, i) => 10 + i / 10), thirty.map(() => 999));
+const dailyAnswer = (volumes, meta = {}) => ok({ chart: { result: [{
+  meta: { symbol: "SAMPLE", dataGranularity: "1d", gmtoffset: OFFSET, ...meta },
+  timestamp: tradingDays.map((t) => t / 1000), indicators: { quote: [{ volume: volumes }] } }] } });
+
+test("Yahoo's daily answer gives one volume per trading day; anything else is refused", () => {
+  const days = decodeYahooDayVolumes("SAMPLE", dailyAnswer([1e6, 2e6, 3e6]));
+  assert.equal(days.size, 3);
+  assert.deepEqual([...decodeYahooDayVolumes("SAMPLE", dailyAnswer([1e6, null, 0])).values()], [1e6], "only volumes above zero");
+  assert.throws(() => decodeYahooDayVolumes("SAMPLE", { status: 500, ok: false, text: "" }), /HTTP 500/);
+  assert.equal((() => { try { decodeYahooDayVolumes("SAMPLE", { status: 429, ok: false, text: "" }); } catch (e) { return e.retryAfterMs; } })(), 60_000);
+  assert.throws(() => decodeYahooDayVolumes("SAMPLE", { status: 200, ok: true, text: "<html>" }), /unreadable/);
+  assert.throws(() => decodeYahooDayVolumes("SAMPLE", dailyAnswer([1, 2, 3], { symbol: "OTHER" })), /different ticker/);
+  assert.throws(() => decodeYahooDayVolumes("SAMPLE", dailyAnswer([1, 2, 3], { dataGranularity: "1wk" })), /daily/);
+});
+
+test("1W gets day volumes only when every day on the line has one", () => {
+  const h = week();
+  assert.equal(h.volumes, false, "30-minute volumes are not used");
+  const all = attachDayVolumes(h, decodeYahooDayVolumes("SAMPLE", dailyAnswer([1e6, 2e6, 3e6])));
+  assert.equal(all.volumes, true); assert.equal(all.volumesByDay, true);
+  assert.deepEqual(all.bars.map((b) => b.dayVolume), [1e6, 1e6, 1e6, 2e6, 2e6, 2e6, 3e6, 3e6, 3e6]);
+  assert.equal(summarize(all, NOW).volume, 6e6, "each day counted once");
+  const gap = attachDayVolumes(h, decodeYahooDayVolumes("SAMPLE", dailyAnswer([1e6, null, 3e6])));
+  assert.equal(gap, h, "a day without volume: the period keeps none");
+});
+
+function storeWith(history) {
+  const store = new HistoryStore({ yahooSpacingMs: 0 });
+  store.remember(HistoryStore.key("SAMPLE", "1W"), { history, summary: summarize(history, NOW), fetchedAt: NOW });
+  return store;
+}
+const hostFor = (answer, calls = []) => ({
+  fetch: (url) => { calls.push(url); return typeof answer === "function" ? answer() : Promise.resolve(answer); },
+  now: () => NOW, sleep: async () => {},
+  // The dialog's deadline, with the timer firing at once for a request that never answers.
+  deadline: (promise, ms) => { assert.equal(ms, DAY_VOLUME_TIMEOUT_MS); return Promise.race([promise, new Promise((r) => setImmediate(() => r(null)))]); },
+});
+
+test("loadDayVolumes: one daily request after the line, attached on success, tried once", async () => {
+  const store = storeWith(week());
+  const calls = [];
+  const entry = await store.loadDayVolumes("SAMPLE", "1W", hostFor(dailyAnswer([1e6, 2e6, 3e6]), calls));
+  assert.equal(calls.length, 1); assert.match(calls[0], /interval=1d/);
+  assert.equal(entry.history.volumesByDay, true); assert.equal(entry.summary.volume, 6e6);
+  assert.equal(store.peek("SAMPLE", "1W", NOW).history.volumesByDay, true);
+  await store.loadDayVolumes("SAMPLE", "1W", hostFor(dailyAnswer([1e6, 2e6, 3e6]), calls));
+  assert.equal(calls.length, 1, "not asked again");
+});
+
+test("loadDayVolumes: no answer, a hung request, an error status or a malformed answer leave the line without volume", async () => {
+  for (const [name, answer] of [["no answer", () => Promise.reject(new TypeError("network"))],
+    ["hung", () => new Promise(() => {})], ["status", { status: 503, ok: false, text: "" }],
+    ["malformed", { status: 200, ok: true, text: "{ not json" }], ["empty", dailyAnswer([])]]) {
+    const store = storeWith(week());
+    let failed = false;
+    try { await store.loadDayVolumes("SAMPLE", "1W", hostFor(answer)); } catch { failed = true; }
+    const h = store.peek("SAMPLE", "1W", NOW).history;
+    assert.equal(h.volumes, false, name); assert.equal(store.peek("SAMPLE", "1W", NOW).summary.volume, null, name);
+    assert.ok(failed || name === "empty", name);
+    // And the line itself is untouched.
+    assert.equal(h.bars.length, thirty.length, name);
+  }
+});
+
+test("loadDayVolumes: a 429 holds further Yahoo requests; pairs and other ranges never ask", async () => {
+  const store = storeWith(week());
+  await assert.rejects(store.loadDayVolumes("SAMPLE", "1W", hostFor({ status: 429, ok: false, text: "" })));
+  assert.ok(store.yahooRetryAt > NOW);
+  const calls = [];
+  assert.equal(await new HistoryStore().loadDayVolumes("COIN/USDT", "1W", hostFor(dailyAnswer([1]), calls)), null);
+  await storeWith(week()).loadDayVolumes("SAMPLE", "1M", hostFor(dailyAnswer([1]), calls));
+  assert.equal(calls.length, 0);
+});
+
+test("1W stock dialog: one bar per trading day, the day's volume in the readout", async () => {
+  const h = attachDayVolumes(week(), decodeYahooDayVolumes("SAMPLE", dailyAnswer([1e6, 4e6, 2e6])));
+  historyStub.entry = { history: h, summary: summarize(h, NOW), fetchedAt: NOW, fresh: true };
+  try {
+    const { DialogParts, ChartParts } = await views();
+    const v = Object.create(DialogParts.prototype);
+    for (const name of Object.getOwnPropertyNames(ChartParts.prototype)) if (name !== "constructor") v[name] = ChartParts.prototype[name];
+    Object.assign(v, { detail: yahoo({}), range: "1W", hover: { id: "quotr-chart-1W", index: 4, width: 400, height: 140 },
+      pending: new Set(), historyErrors: {}, extPending: false,
+      assetIcon: () => element(), logoChoice: () => [], extendedParts: () => [], rangeTabs: () => element() });
+    const nodes = walk(v.detailView(theme));
+    assert.ok(nodes.includes("Vol (day) 4.00M"));
+    const strip = nodes.find((n) => n.calls?.some((c) => c[0] === "h" && c[1] === 22) && polygons(n).flat().length);
+    const [days, hovered] = polygons(strip);
+    assert.equal(days.length, 3, "three trading days, three bars");
+    assert.deepEqual(days.map((c) => parseFloat(c[1][0][1])), [75, 0, 50]);
+    assert.equal(hovered.length, 1, "the hovered day stands out");
+    assert.ok(nodes.includes("7.00M"), "the week's total, each day once");
+  } finally { historyStub.entry = null; }
+});

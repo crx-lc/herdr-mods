@@ -51,8 +51,11 @@ Compared with Pulse at `99f70b2c`:
   point of the line, the hovered one highlighted and its volume in the hover readout (`Vol 12.3M`),
   and the period's total as a fourth stat (`1M volume`, or `Volume shown` for a partial period).
   Stocks on 1M and 1Y from Yahoo's daily volumes (each day's equals its day total); pairs on every
-  range from Binance's klines in the quote currency. Stocks on 1W have none: Yahoo's 30-minute
-  volumes don't add up to its daily totals. One bar without a volume and the period shows none.
+  range from Binance's klines in the quote currency. Stocks on 1W draw one wide bar per trading day
+  under that day's part of the line, with `Vol (day) …` in the readout: Yahoo's 30-minute volumes
+  don't add up to its daily totals, so the week's daily bars are asked for once more (one small
+  request, after the line is shown, at most 10 seconds; the owner's choice), and the 1W total adds
+  each trading day shown once. One bar or day without a volume and the period shows none.
 - Hover readout on every chart (`readout.js`): the nearest real point's date, time and timezone (the
   exchange's own offsets from Yahoo; UTC for Binance), price and session.
 - Pre-market and after-hours for US stocks (`extended.js`): latest extended price, its time and change

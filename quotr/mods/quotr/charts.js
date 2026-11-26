@@ -100,25 +100,35 @@ export class ChartParts {
   // Under a range's chart: each bar's volume, from zero, one bar per point of the line above
   // (same index spacing), faint; the bar under the chart's hover readout stands out. Only called
   // when every bar has its own volume (history.js).
-  volumeStrip(bars, hoverId, t) {
+  // `byDay` (a stock's 1W): one wide bar per trading day, under that day's points, at its day volume.
+  volumeStrip(bars, hoverId, t, { byDay = false } = {}) {
     const n = bars.length;
-    const max = Math.max(...bars.map((b) => b.volume));
+    // Groups of points sharing one volume: each point alone, or each trading day's run of points.
+    const groups = [];
+    bars.forEach((b, i) => {
+      if (byDay && groups.length && groups.at(-1).day === b.day) groups.at(-1).last = i;
+      else groups.push({ first: i, last: i, day: b.day, volume: byDay ? b.dayVolume : b.volume });
+    });
+    const max = Math.max(...groups.map((g) => g.volume));
     if (!n || !(max > 0)) return div();
-    const slot = 100 / Math.max(n, 1);
-    const half = Math.max(slot * 0.36, 0.12);
+    const step = n > 1 ? 100 / (n - 1) : 100;
     const pct = (v) => `${Math.min(100, Math.max(0, v))}%`;
-    const rect = (i) => {
-      const x = n > 1 ? i / (n - 1) * 100 : 50;
-      const top = 100 - bars[i].volume / max * 100;
-      return [[pct(x - half), pct(top)], [pct(x + half), pct(top)], [pct(x + half), "100%"], [pct(x - half), "100%"]];
+    const x = (i) => (n > 1 ? i / (n - 1) * 100 : 50);
+    const rect = (g) => {
+      // A single point's bar fills 72% of its slot; a day's bar spans its points, less a small gap.
+      const pad = g.first === g.last ? Math.max(step * 0.36, 0.12) : step * 0.5 - Math.min(step * 0.5, 0.6);
+      const left = x(g.first) - pad, right = x(g.last) + pad;
+      const top = 100 - g.volume / max * 100;
+      return [[pct(left), pct(top)], [pct(right), pct(top)], [pct(right), "100%"], [pct(left), "100%"]];
     };
     let all = PathBuilder.fill();
-    for (let i = 0; i < n; i++) all = all.add_polygon(rect(i), true);
+    for (const g of groups) all = all.add_polygon(rect(g), true);
     const layer = (path, paint) => window.paint_path(path.build(), paint).absolute().top(0).left(0).size_full();
     const at = this.hover?.id === hoverId ? this.hover.index : -1;
+    const hovered = groups.find((g) => at >= g.first && at <= g.last);
     return div().relative().w_full().h(22)
       .child(layer(all, Background.solid(t.muted).opacity(0.35)))
-      .when(at >= 0 && at < n, (el) => el.child(layer(PathBuilder.fill().add_polygon(rect(at), true), Background.solid(t.muted).opacity(0.9))));
+      .when(Boolean(hovered), (el) => el.child(layer(PathBuilder.fill().add_polygon(rect(hovered), true), Background.solid(t.muted).opacity(0.9))));
   }
 
   // Pointer tracking for a chart. Redraws only when the nearest point
@@ -160,10 +170,11 @@ export class ChartParts {
       .child(div().text_size(10.5).text_color(t.muted).child(info.when))
       .child(div().text_size(12).font_semibold().text_color(t.foreground)
         .child(formatPrice({ price: info.price, currency: hover.currency ?? null })))
-      // With a volume strip under the chart, the bar's own volume.
-      .when(Boolean(hover.volumes) && cleanVolume(hover.points[h.index]?.volume) !== null, (el) => el.child(
-        div().text_size(10.5).text_color(t.muted)
-          .child(`Vol ${formatVolume(hover.points[h.index].volume)}${hover.volumeUnit ? ` ${hover.volumeUnit}` : ""}`)));
+      // With a volume strip under the chart, the bar's own volume (a stock's 1W: its day's).
+      .when(Boolean(hover.volumes) && cleanVolume(hover.byDay ? hover.points[h.index]?.dayVolume : hover.points[h.index]?.volume) !== null,
+        (el) => el.child(div().text_size(10.5).text_color(t.muted).child(hover.byDay
+          ? `Vol (day) ${formatVolume(hover.points[h.index].dayVolume)}`
+          : `Vol ${formatVolume(hover.points[h.index].volume)}${hover.volumeUnit ? ` ${hover.volumeUnit}` : ""}`)));
     return [
       div().absolute().top(0).left(Math.round(x)).w(1).h(h.height).bg(t.muted).opacity(0.6),
       div().absolute().left(Math.round(x - 4)).top(Math.round(y - 4)).w(8).h(8).rounded_full()

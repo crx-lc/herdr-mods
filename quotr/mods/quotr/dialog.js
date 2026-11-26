@@ -46,6 +46,29 @@ export class DialogParts {
         this.pending.delete(key);
         cx.notify();
       }
+      // A stock's 1W: its day volumes come after the line is shown, never holding it up. A failure,
+      // a timeout or a refused answer just leaves the period without volume.
+      if (range === "1W" && !isCryptoPair(symbol) && !this.historyErrors[key]) {
+        try {
+          await HISTORY.loadDayVolumes(symbol, range, {
+            fetch: async (url) => {
+              const response = await fetch(url, { headers: HEADERS });
+              return { status: response.status, ok: response.ok, text: await response.text() };
+            },
+            now: () => Date.now(),
+            sleep: (ms) => cx.sleep(ms),
+            yahooRetryAt: this.detail.yahooRetryAt ?? 0,
+            // GPUI's timer, so a hung request can't hold it (cx.sleep would wait on the same task).
+            deadline: (promise, ms) => new Promise((resolve) => {
+              let done = false;
+              const finish = (value) => { if (!done) { done = true; resolve(value); } };
+              cx.timer.after(ms, () => finish(null));
+              promise.then(finish, () => finish(null));
+            }),
+          });
+          cx.notify();
+        } catch { /* no volume for this period */ }
+      }
     });
   }
 
@@ -182,10 +205,10 @@ export class DialogParts {
         ? this.chart({ series: h.bars.map((b) => b.close), previousClose: s.first }, color, t, {
           width: "full", height: 140, fill: true,
           hover: { id: `quotr-chart-${range}`, points: h.bars, zone: h.timeZone ?? UTC_ZONE, daily: Boolean(h.daily), currency: q.currency,
-            volumes: showVolume, volumeUnit },
+            volumes: showVolume, volumeUnit, byDay: Boolean(h.volumesByDay) },
         })
         : box(`Only one ${name} data point from ${h.source}; no line to draw.`, t.dim),
-      ...(showVolume ? [this.volumeStrip(h.bars, `quotr-chart-${range}`, t)] : []),
+      ...(showVolume ? [this.volumeStrip(h.bars, `quotr-chart-${range}`, t, { byDay: Boolean(h.volumesByDay) })] : []),
       h_flex().gap(12)
         .child(v_flex().flex_1().gap(2)
           .child(div().text_size(10.5).text_color(t.dim).child(changeLabel))
