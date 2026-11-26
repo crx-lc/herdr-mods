@@ -1,0 +1,19 @@
+{
+  "schema": "herdr-agents/project",
+  "version": 2,
+  "id": "herdr-mods",
+  "displayName": "Herdr Mods",
+  "primary": "crx-lc/herdr-mods",
+  "board": { "provider": "github-project", "owner": "crx-lc", "ownerType": "user", "number": 5 },
+  "repos": [
+    { "name": "crx-lc/herdr-mods", "verify": "npm test" }
+  ],
+  "herdr": { "spaceName": "Herdr Mods" },
+  "presentation": {
+    "icon": { "path": "project-icon.svg", "version": 1 },
+    "palette": {
+      "light": { "foreground": "#1D4A38", "background": "#E7F3EC" },
+      "dark": { "foreground": "#E7F3EC", "background": "#1D4A38" }
+    }
+  }
+}

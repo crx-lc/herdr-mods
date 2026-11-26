@@ -87,3 +87,7 @@ Adding a mod, or changing one with an agent: see [AGENTS.md](AGENTS.md).
 
 [MIT](LICENSE) © 2026 crx-lc, for this repository's own work. Mods based on other projects keep those
 projects' notices in their own folders (Quotr: `quotr/mods/quotr/LICENSE-PULSE.txt`).
+
+The project icon (`project-icon.svg`, named by `project.json`) is the Herdr ram from
+[herdrdev/herdr](https://github.com/herdrdev/herdr/blob/HEAD/assets/logo.svg), Apache-2.0, flattened and recolored:
+see [project-icon.NOTICE.txt](project-icon.NOTICE.txt).
