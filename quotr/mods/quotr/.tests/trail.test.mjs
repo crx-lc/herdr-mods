@@ -176,3 +176,15 @@ test("the session icon's tooltip says what the row's price is and what its chang
   assert.equal(extendedNote(day), null, "no icon for the regular quote");
   assert.equal(extendedNote({ symbol: "COIN/USDT", price: 1 }), null);
 });
+
+test("a quote restored from an older cache never shows the close as an extended-hours trade", () => {
+  const now = WED + 21 * H + 25 * M;
+  const fresh = answer({ days: [TUE, WED], now, price: (d) => (d === TUE ? 3.77 : 3.79), previousClose: 3.77, regularClose: 3.79 });
+  // What an earlier version saved: an after-hours trail at the very closing price.
+  const restored = { ...fresh, trail: { ...fresh.trail, session: "post", price: 3.79, t: now, changePercent: (3.79 - 3.77) / 3.77 * 100 } };
+  assert.equal(shownQuote(restored), restored, "the stored regular quote, not an after-hours trade");
+  assert.equal(extendedNote(restored), null, "no moon, no tooltip");
+  // A cached extended price that really differs from the close still shows.
+  const moved = { ...restored, trail: { ...restored.trail, price: 3.81, changePercent: (3.81 - 3.77) / 3.77 * 100 } };
+  assert.equal(shownQuote(moved).shownSession, "post");
+});

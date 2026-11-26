@@ -152,6 +152,8 @@ export function yahooTrail(meta, bars, regular, now, reference = null) {
 export function shownQuote(quote) {
   const tr = quote?.trail;
   if (!tr || !positive(tr.price) || !positive(tr.t)) return quote;
+  // The same rule as yahooTrail, for trails saved before it: an extended price at the close is the close.
+  if ((tr.session === "pre" || tr.session === "post") && tr.price === quote.price) return quote;
   // No reference: the latest trade still shows, with no change rather than a wrong one.
   const known = positive(tr.reference) && Number.isFinite(tr.changePercent);
   return { ...quote, price: tr.price, changePercent: known ? tr.changePercent : null,
