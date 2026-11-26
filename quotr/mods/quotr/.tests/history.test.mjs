@@ -66,7 +66,7 @@ test("decodes Yahoo history with each bar's own time, skipping missing bars", ()
     granularity: "30m", times: t, close: [100, null, 104, 110], high: [101, 999, 103, 112], low: [99, 1, 103.5, 108],
   }), window);
   assert.deepEqual(h.bars.map((b) => b.t), [t[0], t[2], t[3]], "the null close at t[1] is dropped with its time");
-  assert.deepEqual(h.bars[1], { t: t[2], close: 104, high: 104, low: 103.5 }, "a high below the close is raised to it");
+  assert.deepEqual(h.bars[1], { t: t[2], close: 104, high: 104, low: 103.5, volume: null }, "a high below the close is raised to it");
   assert.equal(h.interval, "30-minute bars");
   assert.equal(h.source, "Yahoo Finance");
 });

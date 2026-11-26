@@ -3,7 +3,7 @@
 // view (main.js joins them to its class), so `this` is the view.
 import { div, PathBuilder, Background } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { chartGeometry, formatPrice } from "./quotes.js";
+import { chartGeometry, formatPrice, formatVolume, cleanVolume } from "./quotes.js";
 import { SPARK_WIDTH, SPARK_HEIGHT, watchlistSparkline } from "./sparkline.js";
 import { nearestIndex, readoutAt } from "./readout.js";
 import { SESSION_NAMES, sessionHours } from "./extended.js";
@@ -97,6 +97,30 @@ export class ChartParts {
       .children(readable ? this.hoverParts(hover, g, color, t) : []);
   }
 
+  // Under a range's chart: each bar's volume, from zero, one bar per point of the line above
+  // (same index spacing), faint; the bar under the chart's hover readout stands out. Only called
+  // when every bar has its own volume (history.js).
+  volumeStrip(bars, hoverId, t) {
+    const n = bars.length;
+    const max = Math.max(...bars.map((b) => b.volume));
+    if (!n || !(max > 0)) return div();
+    const slot = 100 / Math.max(n, 1);
+    const half = Math.max(slot * 0.36, 0.12);
+    const pct = (v) => `${Math.min(100, Math.max(0, v))}%`;
+    const rect = (i) => {
+      const x = n > 1 ? i / (n - 1) * 100 : 50;
+      const top = 100 - bars[i].volume / max * 100;
+      return [[pct(x - half), pct(top)], [pct(x + half), pct(top)], [pct(x + half), "100%"], [pct(x - half), "100%"]];
+    };
+    let all = PathBuilder.fill();
+    for (let i = 0; i < n; i++) all = all.add_polygon(rect(i), true);
+    const layer = (path, paint) => window.paint_path(path.build(), paint).absolute().top(0).left(0).size_full();
+    const at = this.hover?.id === hoverId ? this.hover.index : -1;
+    return div().relative().w_full().h(22)
+      .child(layer(all, Background.solid(t.muted).opacity(0.35)))
+      .when(at >= 0 && at < n, (el) => el.child(layer(PathBuilder.fill().add_polygon(rect(at), true), Background.solid(t.muted).opacity(0.9))));
+  }
+
   // Pointer tracking for a chart. Redraws only when the nearest point
   // changes (every redraw repaints the window); leaving the chart clears the readout.
   hoverable(el, hover, count) {
@@ -135,7 +159,11 @@ export class ChartParts {
       .bg(t.popover).whitespace_nowrap()
       .child(div().text_size(10.5).text_color(t.muted).child(info.when))
       .child(div().text_size(12).font_semibold().text_color(t.foreground)
-        .child(formatPrice({ price: info.price, currency: hover.currency ?? null })));
+        .child(formatPrice({ price: info.price, currency: hover.currency ?? null })))
+      // With a volume strip under the chart, the bar's own volume.
+      .when(Boolean(hover.volumes) && cleanVolume(hover.points[h.index]?.volume) !== null, (el) => el.child(
+        div().text_size(10.5).text_color(t.muted)
+          .child(`Vol ${formatVolume(hover.points[h.index].volume)}${hover.volumeUnit ? ` ${hover.volumeUnit}` : ""}`)));
     return [
       div().absolute().top(0).left(Math.round(x)).w(1).h(h.height).bg(t.muted).opacity(0.6),
       div().absolute().left(Math.round(x - 4)).top(Math.round(y - 4)).w(8).h(8).rounded_full()

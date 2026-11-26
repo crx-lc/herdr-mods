@@ -20,13 +20,15 @@ export function element(kind = "div") {
 }
 // The window's drawable size as `window.viewport_size()` reports it; tests may change or clear it.
 export const viewport = { size: { width: 1280, height: 820 } };
+// The dialog's history cache: a test puts a loaded period in `entry` (HistoryStore.peek's shape).
+export const historyStub = { entry: null };
 export function walk(tree) {
   return tree && typeof tree === "object" ? [tree, ...(tree.nodes ?? []).flatMap(walk)] : tree == null ? [] : [tree];
 }
 export async function views() {
   const bindings = { ...quotes, ...readout, ...extended, ...spark, ...history,
     // The dialog's Herdr side: no history or extended hours loaded, nothing to close.
-    HISTORY: { peek: () => null, peekExtended: () => null, load: async () => {}, loadExtended: async () => {} },
+    HISTORY: { peek: () => historyStub.entry, peekExtended: () => null, load: async () => {}, loadExtended: async () => {} },
     closeOverlay: () => {}, HEADERS: {},
     View: class {}, div: () => element(), image: () => element("image"), svg: (path) => element("svg").path(path),
     SESSION_ICONS: { pre: "sunrise.svg", post: "moon.svg" },

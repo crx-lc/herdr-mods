@@ -174,19 +174,27 @@ export class DialogParts {
       s.endsEarly ? `latest bar is ${formatDay(s.lastAt, now)} ${formatTime(s.lastAt)}` : "",
     ].filter(Boolean).join("; ");
 
+    // Volume, only when every bar has its own (history.js): bars under the chart, the period total.
+    const volumeUnit = h.volumeUnit ?? null;
+    const showVolume = Boolean(h.volumes) && s.volume !== null && s.points > 1;
     return [
       s.points > 1
         ? this.chart({ series: h.bars.map((b) => b.close), previousClose: s.first }, color, t, {
           width: "full", height: 140, fill: true,
-          hover: { id: `quotr-chart-${range}`, points: h.bars, zone: h.timeZone ?? UTC_ZONE, daily: Boolean(h.daily), currency: q.currency },
+          hover: { id: `quotr-chart-${range}`, points: h.bars, zone: h.timeZone ?? UTC_ZONE, daily: Boolean(h.daily), currency: q.currency,
+            volumes: showVolume, volumeUnit },
         })
         : box(`Only one ${name} data point from ${h.source}; no line to draw.`, t.dim),
+      ...(showVolume ? [this.volumeStrip(h.bars, `quotr-chart-${range}`, t)] : []),
       h_flex().gap(12)
         .child(v_flex().flex_1().gap(2)
           .child(div().text_size(10.5).text_color(t.dim).child(changeLabel))
           .child(div().font_semibold().text_color(color).child(formatChange(s.change))))
         .child(stat(s.startsLate ? "High shown" : `${range} high`, s.high))
-        .child(stat(s.startsLate ? "Low shown" : `${range} low`, s.low)),
+        .child(stat(s.startsLate ? "Low shown" : `${range} low`, s.low))
+        .when(showVolume, (el) => el.child(v_flex().flex_1().min_w(0).gap(2)
+          .child(div().text_size(10.5).text_color(t.dim).truncate().child(s.startsLate ? "Volume shown" : `${range} volume`))
+          .child(div().font_semibold().truncate().child(`${formatVolume(s.volume)}${volumeUnit ? ` ${volumeUnit}` : ""}`)))),
       div().text_size(11).text_color(t.dim).child(coverage),
       ...(partial ? [div().text_size(11).text_color(t.blocked).child(`Partial period: ${partial}.`)] : []),
       ...notes,

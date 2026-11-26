@@ -63,3 +63,86 @@ test("a pair's 1D stats show its 24h volume in the quote currency", async () => 
   assert.ok(nodes.includes("1.48B USDT"));
   assert.equal(statRow(await dialog({ ...pair, volume: 0 }), "24h open").nodes.length, 3);
 });
+
+// 1W / 1M / 1Y: volume bars and the period total, only from volumes that hold up.
+import { decodeYahooHistory, decodeBinanceHistory, rangeWindow, summarize } from "../history.js";
+import { historyStub } from "./helpers/view-harness.mjs";
+
+const DAY_MS = 86_400_000;
+const yahooHistory = (range, granularity, times, close, volume) => decodeYahooHistory("SAMPLE", range, ok({ chart: { result: [{
+  meta: { symbol: "SAMPLE", dataGranularity: granularity, gmtoffset: -18_000 },
+  timestamp: times.map((t) => t / 1000), indicators: { quote: [{ close, high: close, low: close, volume }] } }] } }), rangeWindow(range, NOW));
+const klines = (rows) => decodeBinanceHistory("COIN/USDT", "1M", ok(rows), rangeWindow("1M", NOW));
+const days = (n) => Array.from({ length: n }, (_, i) => NOW - (n - i) * DAY_MS);
+
+test("Yahoo daily bars carry their volume; one bar without leaves the whole period without", () => {
+  const h = yahooHistory("1M", "1d", days(3), [10, 11, 12], [1_000_000, 2_000_000, 3_500_000]);
+  assert.equal(h.volumes, true);
+  assert.equal(summarize(h, NOW).volume, 6_500_000);
+  for (const bad of [[1_000_000, null, 3], [1_000_000, 0, 3], [1_000_000, -1, 3], [1_000_000, "x", 3], undefined]) {
+    const g = yahooHistory("1M", "1d", days(3), [10, 11, 12], bad);
+    assert.equal(g.volumes, false, JSON.stringify(bad)); assert.equal(summarize(g, NOW).volume, null);
+  }
+});
+
+test("Yahoo's intraday (1W, 30-minute) volumes are never used", () => {
+  const times = [NOW - 3 * 1_800_000, NOW - 2 * 1_800_000, NOW - 1_800_000];
+  const h = yahooHistory("1W", "30m", times, [10, 11, 12], [100, 200, 300]);
+  assert.equal(h.volumes, false); assert.equal(summarize(h, NOW).volume, null);
+});
+
+test("Binance klines carry their quote-currency volume ([7]); a malformed one drops the period's volume", () => {
+  const t = days(3);
+  const row = (i, quoteVolume) => [t[i], "10", "11", "9", "10.5", "999", t[i] + 1, quoteVolume];
+  const h = klines([row(0, "1000.5"), row(1, "2000"), row(2, "3000")]);
+  assert.equal(h.volumes, true); assert.equal(h.volumeUnit, "USDT");
+  assert.equal(summarize(h, NOW).volume, 6000.5);
+  assert.equal(klines([row(0, "1000.5"), row(1, "n/a"), row(2, "3000")]).volumes, false);
+  assert.equal(klines([row(0, "1000.5"), [t[1], "10", "11", "9", "10.5"], row(2, "3000")]).volumes, false, "a short kline");
+});
+
+async function rangeDialog(quote, history, hover = null) {
+  historyStub.entry = { history, summary: summarize(history, NOW), fetchedAt: NOW, fresh: true };
+  try {
+    const { DialogParts, ChartParts } = await views();
+    const v = Object.create(DialogParts.prototype);
+    for (const name of Object.getOwnPropertyNames(ChartParts.prototype)) if (name !== "constructor") v[name] = ChartParts.prototype[name];
+    Object.assign(v, { detail: quote, range: "1M", hover, pending: new Set(), historyErrors: {}, extPending: false,
+      assetIcon: () => element(), logoChoice: () => [], extendedParts: () => [], rangeTabs: () => element() });
+    return walk(v.detailView(theme));
+  } finally { historyStub.entry = null; }
+}
+const polygons = (node) => walk(node).filter((n) => n.kind === "paint")
+  .map((n) => n.calls.find((c) => c[0] === "path")[1].calls.filter((c) => c[0] === "add_polygon"));
+
+test("1M: a volume strip from zero under the chart, and the period's total", async () => {
+  const h = yahooHistory("1M", "1d", days(4), [10, 11, 12, 11], [1_000_000, 4_000_000, 2_000_000, 3_000_000]);
+  const nodes = await rangeDialog(yahoo({ regularMarketVolume: 3_000_000 }), h);
+  // A few days of a month: a partial period, labelled like its high and low.
+  assert.ok(nodes.includes("Volume shown")); assert.ok(nodes.includes("10.0M"));
+  const strip = nodes.find((n) => n.calls?.some((c) => c[0] === "h" && c[1] === 22) && polygons(n).flat().length);
+  assert.ok(strip, "the strip");
+  const [bars] = polygons(strip);
+  assert.equal(bars.length, 4, "one bar per point of the line");
+  const tops = bars.map((c) => parseFloat(c[1][0][1]));
+  assert.deepEqual(tops, [75, 0, 50, 25], "heights from zero, the largest full height");
+  for (const c of bars) assert.equal(c[1][2][1], "100%");
+});
+
+test("the hover readout gains the bar's volume, and its bar stands out", async () => {
+  const h = klines([0, 1, 2].map((i) => [days(3)[i], "10", "11", "9", "10.5", "1", 0, String(1000 * (i + 1))]));
+  const pair = binance({ quoteVolume: "6000" });
+  const nodes = await rangeDialog(pair, h, { id: "quotr-chart-1M", index: 1, width: 400, height: 140 });
+  assert.ok(nodes.includes("Vol 2.00K USDT"));
+  assert.ok(nodes.includes("Volume shown")); assert.ok(nodes.includes("6.00K USDT"));
+  const strip = nodes.find((n) => n.calls?.some((c) => c[0] === "h" && c[1] === 22) && polygons(n).flat().length);
+  assert.equal(polygons(strip).length, 2, "all bars, then the hovered one on top");
+});
+
+test("no volume, no strip, no total and no readout line", async () => {
+  const h = yahooHistory("1M", "1d", days(3), [10, 11, 12], [1_000_000, null, 3_000_000]);
+  const nodes = await rangeDialog(yahoo({}), h, { id: "quotr-chart-1M", index: 0, width: 400, height: 140 });
+  assert.ok(!nodes.includes("Volume shown") && !nodes.includes("1M volume"));
+  assert.ok(!nodes.some((n) => typeof n === "string" && n.startsWith("Vol ")));
+  assert.ok(!nodes.some((n) => n.calls?.some((c) => c[0] === "h" && c[1] === 22) && polygons(n).flat().length));
+});

@@ -1,7 +1,7 @@
 // Price history for the
 // detail dialog's 1W / 1M / 1Y ranges. No Herdr imports, so `node --test` runs it.
 // Same two hosts as quotes.js: Yahoo Finance for stocks and indices, Binance Spot for pairs.
-import { BINANCE_KLINES, QuoteError, YAHOO_CHART, isCryptoPair, normalizeSymbol } from "./quotes.js";
+import { BINANCE_KLINES, QuoteError, YAHOO_CHART, cleanVolume, isCryptoPair, normalizeSymbol } from "./quotes.js";
 import { UTC_ZONE, yahooTimeZone } from "./readout.js";
 import { decodeExtended, extendedUrl } from "./extended.js";
 
@@ -88,14 +88,24 @@ function tidy(bars) {
   return out.length > MAX_BARS ? out.slice(out.length - MAX_BARS) : out;
 }
 
-/** A bar keeps its own high/low when present, never inside its close. */
-function bar(t, close, high, low) {
+/** A bar keeps its own high/low when present, never inside its close; its volume when trusted, else null. */
+function bar(t, close, high, low, volume = null) {
   return {
     t,
     close,
     high: positive(high) ? Math.max(high, close) : close,
     low: positive(low) ? Math.min(low, close) : close,
+    volume: cleanVolume(volume),
   };
+}
+
+/**
+ * Whether a period's volume can be shown: its source's volumes hold up and every bar has its own.
+ * One bar without (missing, zero, malformed) and the period shows no volume at all, never a
+ * total or bars with a hole that would read as a quiet day.
+ */
+function withVolumes(history, trusted) {
+  return { ...history, volumes: trusted && history.bars.length > 0 && history.bars.every((b) => b.volume !== null) };
 }
 
 /** `response` is `{ status, ok, text }` with the body already read. */
@@ -125,9 +135,11 @@ export function decodeYahooHistory(symbol, range, response, window) {
   times.forEach((seconds, i) => {
     const close = q.close?.[i];
     if (!positive(seconds) || !positive(close)) return;
-    bars.push(bar(seconds * 1000, close, q.high?.[i], q.low?.[i]));
+    bars.push(bar(seconds * 1000, close, q.high?.[i], q.low?.[i], q.volume?.[i]));
   });
-  return {
+  // Only Yahoo's daily volumes add up (each day's equals its day total); its intraday ones don't
+  // (30-minute bars summed to 0.45-0.99 of a past day, several times today's), so 1W has none.
+  return withVolumes({
     symbol,
     range,
     source: "Yahoo Finance",
@@ -142,7 +154,7 @@ export function decodeYahooHistory(symbol, range, response, window) {
     // whether a bar is a whole trading day (shown as a date) or part of one (date and time).
     timeZone: yahooTimeZone(meta),
     daily: s.yahoo.interval === "1d",
-  };
+  }, s.yahoo.interval === "1d");
 }
 
 export function decodeBinanceHistory(pair, range, response, window) {
@@ -159,9 +171,10 @@ export function decodeBinanceHistory(pair, range, response, window) {
     const t = Number(k[0]);
     const close = Number(k[4]);
     if (!positive(t) || !positive(close)) continue;
-    bars.push(bar(t, close, Number(k[2]), Number(k[3])));
+    // [7]: the kline's volume in the quote currency, as the 1D stat's 24h volume.
+    bars.push(bar(t, close, Number(k[2]), Number(k[3]), k[7]));
   }
-  return {
+  return withVolumes({
     symbol: pair,
     range,
     source: "Binance Spot",
@@ -173,7 +186,8 @@ export function decodeBinanceHistory(pair, range, response, window) {
     // Binance klines open on UTC boundaries; a daily kline is a UTC day.
     timeZone: UTC_ZONE,
     daily: s.binance.interval === "1d",
-  };
+    volumeUnit: pair.split("/")[1],
+  }, true);
 }
 
 /**
@@ -215,6 +229,8 @@ export function summarize(history, now) {
     high,
     low,
     sessions,
+    // The period's traded volume (shares, or a pair's quote currency), only when every bar has its own.
+    volume: history.volumes ? bars.reduce((sum, b) => sum + b.volume, 0) : null,
     startsLate,
     endsEarly: notes.includes("ends"),
     partial: notes.length > 0,
