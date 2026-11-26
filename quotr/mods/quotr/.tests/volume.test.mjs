@@ -248,3 +248,61 @@ test("1W stock dialog: one bar per trading day, the day's volume in the readout"
     assert.ok(nodes.includes("7.00M"), "the week's total, each day once");
   } finally { historyStub.entry = null; }
 });
+
+// #43: a malformed or contradictory volume column gives no volume; prices are untouched.
+const dailyRaw = (timestamps, volume) => ok({ chart: { result: [{
+  meta: { symbol: "SAMPLE", dataGranularity: "1d", gmtoffset: OFFSET },
+  timestamp: timestamps.map((t) => t / 1000), indicators: { quote: [{ volume }] } }] } });
+const noVolume = (h) => {
+  assert.equal(h.volumes, false, "no bars");
+  assert.equal(summarize(h, NOW).volume, null, "no total");
+};
+
+test("#43 daily answer: a string or object volume column, or a short one, gives no day volumes", () => {
+  for (const column of ["123", { 0: 1e6, 1: 2e6, 2: 3e6, length: 3 }, [1e6, 2e6], ["1000000", "2000000", "3000000"]]) {
+    // Numeric strings (the last case) are not Yahoo's numbers either.
+    const days = decodeYahooDayVolumes("SAMPLE", dailyRaw(tradingDays, column));
+    assert.equal(days.size, 0, JSON.stringify(column));
+    noVolume(attachDayVolumes(week(), days));
+  }
+});
+
+test("#43 daily answer: two different volumes for one trading day give the week no volume", () => {
+  const t = [...tradingDays, tradingDays[1] + 60_000]; // a second entry for the middle day
+  const days = decodeYahooDayVolumes("SAMPLE", dailyRaw(t, [1e6, 1_000_000, 3e6, 9_000_000]));
+  assert.equal(days.size, 0);
+  const h = attachDayVolumes(week(), days);
+  noVolume(h);
+  assert.deepEqual(h.bars, week().bars, "the line is unchanged");
+  // The same volume twice is no contradiction.
+  assert.equal(decodeYahooDayVolumes("SAMPLE", dailyRaw(t, [1e6, 2e6, 3e6, 2e6])).size, 3);
+});
+
+test("#43 1M/1Y: a string, object or short volume column gives no volume; prices unchanged", () => {
+  const t = days(3);
+  const plain = yahooHistory("1M", "1d", t, [10, 11, 12], [1e6, 2e6, 3e6]);
+  assert.equal(plain.volumes, true);
+  for (const column of ["123", { 0: 1e6, 1: 2e6, 2: 3e6 }, [1e6, 2e6]]) {
+    const h = yahooHistory("1M", "1d", t, [10, 11, 12], column);
+    noVolume(h);
+    assert.deepEqual(h.bars.map(({ t, close, high, low }) => ({ t, close, high, low })),
+      plain.bars.map(({ t, close, high, low }) => ({ t, close, high, low })), JSON.stringify(column));
+    assert.equal(summarize(h, NOW).change, summarize(plain, NOW).change);
+  }
+});
+
+test("#43 1M/1Y: one timestamp with two different volumes gives no volume; the line keeps its first bar", () => {
+  const t = days(3);
+  const dup = yahooHistory("1Y", "1d", [...t, t[1]], [10, 11, 12, 11], [1e6, 1_000_000, 3e6, 9_000_000]);
+  noVolume(dup);
+  assert.deepEqual(dup.bars.map((b) => b.close), [10, 11, 12]);
+  assert.equal(yahooHistory("1Y", "1d", [...t, t[1]], [10, 11, 12, 11], [1e6, 2e6, 3e6, 2e6]).volumes, true, "agreeing duplicates");
+});
+
+test("#43 the dialog draws no strip and no total for a malformed column", async () => {
+  const h = yahooHistory("1M", "1d", days(3), [10, 11, 12], "123");
+  const nodes = await rangeDialog(yahoo({}), h, { id: "quotr-chart-1M", index: 0, width: 400, height: 140 });
+  assert.ok(!nodes.includes("Volume shown") && !nodes.includes("1M volume"));
+  assert.ok(!nodes.some((n) => typeof n === "string" && n.startsWith("Vol ")));
+  assert.ok(!nodes.some((n) => n.calls?.some((c) => c[0] === "h" && c[1] === 22) && polygons(n).flat().length));
+});
