@@ -1,3 +1,4 @@
+import { execFailure } from './github.js';
 // Spaces list from Herdr's own Space data, in the stock sidebar's order and look.
 // Pure: the caller passes spaces(), machines(), the shared avatar colors and folds.
 // No git, no exec: the stock list's repo/ahead-behind tail is not reproduced here.
@@ -412,9 +413,51 @@ export function matchingSpace(machine, top, spaces = [], panes = [], lookup = ()
 // Verify one folder with the two read-only identity queries, raced against a deadline.
 // On a remote machine, D8 (above), before each of the two commands and on the answer:
 // not ready, or readiness lost at any point, is "Not verified" without another attempt.
-export function verifyFolder(exec, machine, folder, after, deadlineMs = 12000, isReady = null) {
+// It always settles: { status: 'repo', top, common, linked }, { status: 'none' } (Git's own
+// "not a git repository"), or { status: 'unsure', reason, detail? } saying why it is not known
+// (FOLDER_REASONS). now() (optional) times a rejected exec, as execFailure does for gh.
+export function verifyFolder(exec, machine, folder, after, deadlineMs = 12000, isReady = null, now = null) {
   const options = { cwd: folder, on: machine ?? null, timeout: deadlineMs };
-  const run = deadlined(live => runEach(exec, isReady, machine ?? null, [GIT_TOP, GIT_COMMON], options, { accept: acceptIdentity, live })
-    .then(answers => gitIdentity(...answers)), after, deadlineMs + 1000);
-  return run.result.catch(() => ({ status: 'unsure' }));
+  let last = null, failure = null;
+  const tracked = async (cmd, args, opts) => {
+    const started = typeof now === 'function' ? now() : null;
+    try { last = await exec(cmd, args, opts); return last; }
+    catch (error) { failure = { error, elapsed: started === null ? 0 : now() - started }; throw error; }
+  };
+  let run;
+  try {
+    run = deadlined(live => runEach(tracked, isReady, machine ?? null, [GIT_TOP, GIT_COMMON], options, { accept: acceptIdentity, live })
+      .then(answers => gitIdentity(...answers)), after, deadlineMs + 1000);
+  } catch { return Promise.resolve({ status: 'unsure', reason: 'error' }); }
+  return run.result.then(r => r.status === 'unsure' ? { status: 'unsure', reason: 'malformed' } : r, error => {
+    const why = String(error?.message ?? '');
+    if (why === 'deadline' || why === 'cancelled') return { status: 'unsure', reason: 'timeout' };
+    if (why === 'readiness-lost') return { status: 'unsure', reason: 'not-ready' };
+    if (failure) return { status: 'unsure', reason: execFailure(failure.error, failure.elapsed, deadlineMs) === 'timeout' ? 'timeout' : 'git-unavailable' };
+    if (why === 'failed' && last && typeof last === 'object' && Number.isInteger(last.code) && last.code !== 0) {
+      const detail = gitMessage(last.stderr);
+      return detail ? { status: 'unsure', reason: 'git-error', detail } : { status: 'unsure', reason: 'git-error' };
+    }
+    return { status: 'unsure', reason: why === 'failed' ? 'malformed' : 'error' };
+  });
+}
+// Why a folder could not be verified, in words for the panel ("Not verified: <why>.").
+export const FOLDER_REASONS = Object.freeze({
+  none: 'Git says this folder is not a checkout',
+  timeout: 'Git did not answer in time',
+  'git-unavailable': 'Git did not run (is Git installed?)',
+  'not-ready': 'the machine stopped being ready',
+  'git-error': 'Git could not read this folder',
+  malformed: 'Git gave an answer Roster could not read',
+  error: 'the check failed',
+});
+export function folderReason(check) {
+  const why = FOLDER_REASONS[check?.status === 'none' ? 'none' : check?.reason] ?? 'Git did not confirm a checkout here';
+  return check?.detail ? why + ' (' + check.detail + ')' : why;
+}
+// Git's first message line, short and without control characters, to say why it refused.
+function gitMessage(stderr) {
+  const line = typeof stderr === 'string' ? stderr.split(/\r?\n/).map(l => l.trim()).find(Boolean) ?? '' : '';
+  const clean = line.replace(/[\x00-\x1f\x7f]/g, ' ');
+  return clean.length > 160 ? clean.slice(0, 159) + '…' : clean;
 }

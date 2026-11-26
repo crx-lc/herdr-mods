@@ -202,7 +202,7 @@ test('a command that answers after the deadline causes no further dispatch; the 
   const exec = (cmd, args) => { calls.push(args); return new Promise(r => { late = r; }); };
   const check = verifyFolder(exec, 'edge', '/srv/repo', (ms, fn) => timers.push(fn), 50, () => true);
   await flush(); timers[0]();
-  assert.deepEqual(await check, { status: 'unsure' });
+  assert.deepEqual(await check, { status: 'unsure', reason: 'timeout' });
   late(ok('/srv/repo\n')); await flush();
   assert.deepEqual(calls, [[...GIT_TOP]], 'no second command after the deadline');
 });

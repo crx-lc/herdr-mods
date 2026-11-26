@@ -2,7 +2,7 @@ import { machineAnchor, rowAnchor, sameDisclosure, returnControl, folderActionAl
 import { Controller } from './controller.js';
 import { LayoutOptIn } from './layout.js';
 import { desktopHost, desktopLayoutHost } from './desktop.js';
-import { spaceRows, machineKey, spaceFill, spacePlace, GitIdentities, MachineOs, folderSuggestions, matchingSpace, verifyFolder, spaceObservation } from './spaces.js';
+import { spaceRows, machineKey, spaceFill, spacePlace, GitIdentities, MachineOs, folderSuggestions, matchingSpace, verifyFolder, folderReason, spaceObservation } from './spaces.js';
 import { actionReason, rowContext, detailLabel, hoverText, reasonText, agentFacts, homeRelative } from './detail.js';
 import { terminalKind } from './runtime.js';
 import { reducedMotion, readStored, writeStored, PULSE } from './motion.js';
@@ -22,6 +22,10 @@ export const TAB_ACTIONS = Object.freeze({ next: 'roster_tab_next', prev: 'roste
 // The inline folder form: its full height, the least it shrinks to under its machine header,
 // and the least it takes as a row of its own in a list too short for both (the path field).
 export const FOLDER = Object.freeze({ height: 112, min: 60, least: 36 });
+// The folder check: each Git command's time, and how long "Checking…" can show at most (the check's own
+// deadline is FOLDER_CHECK_MS + 1 s; the view's 1 s timer ends anything still checking after the limit).
+export const FOLDER_CHECK_MS = 12000;
+export const FOLDER_CHECK_LIMIT_MS = 15000;
 // The one group header's measures (see groupHeader in render).
 const HEADER = Object.freeze({ height: 30, iconSize: 18, titleSize: 13, chevron: 11, gapAbove: 8 });
 export function timerDeadline(cx, promise) {
@@ -117,7 +121,15 @@ export function createRosterView(kit, app, options = {}) {
       }
       this.applyProjects();
       // One gentle 1s timer: the Needs you reminders, the Spaces probes when there are any, and the projects data.
-      if (ticking) cx.timer.every(1000, cx => { this.reconcilePanel(cx); this.watchNeedsYou(cx); if (this.machineReady) this.pollGit(cx); this.pollProjects(cx); });
+      if (ticking) cx.timer.every(1000, cx => { this.reconcilePanel(cx); this.watchFolderCheck(cx); this.watchNeedsYou(cx); if (this.machineReady) this.pollGit(cx); this.pollProjects(cx); });
+    }
+    // "Checking…" is bounded by the view's own clock too, whatever happens to the check's task or its timer.
+    watchFolderCheck(cx) {
+      const ns = this.newSpace, check = ns?.check;
+      if (check?.status !== 'checking' || !Number.isFinite(check.since)) return;
+      if (this.controller.host.now() - check.since < FOLDER_CHECK_LIMIT_MS) return;
+      ns.check = { status: 'unsure', reason: 'timeout', run: check.run }; ns.confirmUnverified = false;
+      cx.notify();
     }
     // Watch readiness in every tab; ask about Spaces' folders on ready machines while Spaces
     // is shown; redraw on answers.
@@ -371,35 +383,55 @@ export function createRosterView(kit, app, options = {}) {
       else { this.inputFocused = false; this.handle.focus(); }
       cx.notify();
     }
-    // This computer: Herdr's native folder picker.
-    async chooseLocalFolder(cx) {
+    // This computer: Herdr's native folder picker. The click's cx ends when its handler returns, long before the
+    // picker answers (issue #36: a check begun with it set "Checking…" and then threw), so the wait and the check run
+    // in a task with its own cx. Returns a promise that settles when both have ended.
+    chooseLocalFolder(cx) {
       const pick = options.pickFolder ?? app.pickFolder;
       const ns = this.newSpace;
-      if (typeof pick !== 'function' || !ns || !this.activeNewSpace()) return;
-      let folder;
-      try { folder = await pick({ prompt: 'Open as Space' }); }
-      catch { if (this.newSpace === ns) { this.message = 'Folder picker unavailable'; cx.notify(); } return; }
-      if (folder && this.newSpace === ns && this.activeNewSpace()) this.checkFolder(folder, cx); else cx.notify();
+      if (typeof pick !== 'function' || !ns || !this.activeNewSpace()) return Promise.resolve();
+      return new Promise(done => cx.spawn(async cx => {
+        try {
+          let folder;
+          try { folder = await pick({ prompt: 'Open as Space' }); }
+          catch { if (this.newSpace === ns) { this.message = 'Folder picker unavailable'; cx.notify(); } return; }
+          if (!folder || this.newSpace !== ns || !this.activeNewSpace()) { cx.notify(); return; }
+          const job = this.beginFolderCheck(folder, cx);
+          if (job) await this.finishFolderCheck(job, cx);
+        } finally { done(); }
+      }));
     }
-    // Verify with the two read-only identity queries; a negative answer is "Not verified".
+    // Verify with the two read-only identity queries; a negative answer is "Not verified", with why.
+    // From an event handler: the check runs in a task of its own.
     checkFolder(folder, cx) {
+      const job = this.beginFolderCheck(folder, cx);
+      if (job) cx.spawn(async cx => { await null; await this.finishFolderCheck(job, cx); });
+    }
+    // Shows "Checking…" for this folder, stamped with its start; finishFolderCheck (or watchFolderCheck) ends it.
+    beginFolderCheck(folder, cx) {
       const ns = this.newSpace, target = typeof folder === 'string' ? folder.trim() : '';
-      if (!ns || !this.activeNewSpace()) return;
+      if (!ns || !this.activeNewSpace()) return null;
       if (!target || /[\x00-\x1f\x7f]/.test(target)) {
         Object.assign(ns, { folder: null, check: null, confirmUnverified: false });
-        this.message = 'Choose a nonempty folder without control characters'; cx.notify(); return;
+        this.message = 'Choose a nonempty folder without control characters'; cx.notify(); return null;
       }
-      Object.assign(ns, { folder: target, check: { status: 'checking' }, confirmUnverified: false });
+      const check = { status: 'checking', since: this.controller.host.now(), run: (this.folderRun = (this.folderRun ?? 0) + 1) };
+      Object.assign(ns, { folder: target, check, confirmUnverified: false });
       cx.notify();
+      return { ns, target, run: check.run };
+    }
+    async finishFolderCheck({ ns, target, run }, cx) {
       const exec = options.exec ?? app.exec;
-      if (typeof exec !== 'function') { ns.check = { status: 'unsure' }; cx.notify(); return; }
-      cx.spawn(async cx => {
-        const result = await verifyFolder(exec, ns.machine, target, (ms, fn) => cx.timer.after(ms, fn), 12000, this.isReady);
-        if (this.newSpace === ns && ns.folder === target) {
-          if (!this.activeNewSpace()) this.dismissPanel(cx, false);
-          else { ns.check = result; cx.notify(); }
-        }
-      });
+      let result;
+      try {
+        result = typeof exec === 'function'
+          ? await verifyFolder(exec, ns.machine, target, (ms, fn) => cx.timer.after(ms, fn), FOLDER_CHECK_MS, this.isReady, () => this.controller.host.now())
+          : { status: 'unsure', reason: 'git-unavailable' };
+      } catch { result = { status: 'unsure', reason: 'error' }; }
+      // Only this run's answer, while its folder is still the one shown: a retry or a timeout has replaced it.
+      if (this.newSpace !== ns || ns.folder !== target || ns.check?.run !== run || ns.check.status !== 'checking') return;
+      if (!this.activeNewSpace()) this.dismissPanel(cx, false);
+      else { ns.check = { ...result, run }; cx.notify(); }
     }
     createSpace(cx, ns = this.newSpace, folder = ns?.folder, confirmed = false) {
       if (app.checking() || this.newSpace !== ns || !this.activeNewSpace()
@@ -663,8 +695,9 @@ export function createRosterView(kit, app, options = {}) {
             append(control('new-space:duplicate', 'Create another Space for the same checkout', 'Create another Space here', cx => { if (ns.check === drawnCheck) this.createSpace(cx, ns, drawnFolder); }, muted));
           } else append(control('new-space:create', 'Create a Space on ' + machineLabel + ' in this folder', 'Create Space', cx => { if (ns.check === drawnCheck) this.createSpace(cx, ns, drawnFolder); }));
         } else {
-          // Git said no or could not answer: that does not mean the folder is missing.
-          append(labelText('Not verified: Git did not confirm a checkout here; the folder may still exist.', 11, muted).id('new-space:status').whitespace_normal());
+          // Git said no or could not answer: that does not mean the folder is missing. Say which, and offer a retry.
+          append(labelText('Not verified: ' + folderReason(check) + '. The folder may still exist.', 11, muted).id('new-space:status').whitespace_normal());
+          append(control('new-space:retry', 'Check this folder again on ' + machineLabel, 'Check again', cx => { if (ns.check === drawnCheck) this.checkFolder(drawnFolder, cx); }));
           if (!ns.confirmUnverified) append(control('new-space:unverified', 'Create a Space in a folder that is not verified', 'Create in unverified folder…',
             cx => { ns.confirmUnverified = true; cx.notify(); }, muted));
           else { append(labelText('Create a Space on ' + machineLabel + ' in ' + shown(ns.folder) + ' anyway?', 11, fg).id('new-space:confirm-text').whitespace_normal());
