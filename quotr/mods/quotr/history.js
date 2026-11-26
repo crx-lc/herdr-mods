@@ -78,6 +78,26 @@ export function yahooDailyUrl(symbol, window) {
     + `?period1=${Math.floor(window.start / 1000)}&period2=${Math.floor(window.end / 1000)}&interval=1d&includePrePost=false`;
 }
 
+/**
+ * Yahoo's volume column, or null when it isn't one: an array as long as the timestamps, each entry a
+ * number or null. A string, an object or a short array gives no volume at all; a non-number entry
+ * is that bar's missing volume.
+ */
+export function yahooVolumes(column, length) {
+  if (!Array.isArray(column) || column.length !== length) return null;
+  return column.map((v) => (typeof v === "number" ? v : null));
+}
+
+/** Whether two entries for the same key (a time, a trading day) disagree on the volume. */
+function conflicting(entries) {
+  const seen = new Map();
+  for (const [key, volume] of entries) {
+    if (seen.has(key) && seen.get(key) !== volume) return true;
+    seen.set(key, volume);
+  }
+  return false;
+}
+
 /** The trading day a time falls on, on the exchange's calendar. */
 const dayOf = (t, offsetSeconds) => Math.floor((t + offsetSeconds * 1000) / DAY);
 
@@ -99,12 +119,17 @@ export function decodeYahooDayVolumes(symbol, response) {
   if (meta.dataGranularity !== "1d") throw new QuoteError("Yahoo returned other bars than daily ones.");
   const offset = typeof meta.gmtoffset === "number" && Number.isFinite(meta.gmtoffset) ? meta.gmtoffset : 0;
   const times = Array.isArray(result.timestamp) ? result.timestamp : [];
-  const volumes = result.indicators?.quote?.[0]?.volume ?? [];
+  const volumes = yahooVolumes(result.indicators?.quote?.[0]?.volume, times.length);
   const days = new Map();
+  if (!volumes) return days;
+  const entries = [];
   times.forEach((seconds, i) => {
     const volume = cleanVolume(volumes[i]);
-    if (positive(seconds) && volume !== null) days.set(dayOf(seconds * 1000, offset), volume);
+    if (positive(seconds) && volume !== null) entries.push([dayOf(seconds * 1000, offset), volume]);
   });
+  // Two different volumes for one trading day: neither can be trusted, so the week gets none.
+  if (conflicting(entries)) return days;
+  for (const [day, volume] of entries) days.set(day, volume);
   return days;
 }
 
@@ -180,12 +205,16 @@ export function decodeYahooHistory(symbol, range, response, window) {
   }
   const times = Array.isArray(result.timestamp) ? result.timestamp : [];
   const q = result.indicators?.quote?.[0] ?? {};
+  const volumes = yahooVolumes(q.volume, times.length);
   const bars = [];
   times.forEach((seconds, i) => {
     const close = q.close?.[i];
     if (!positive(seconds) || !positive(close)) return;
-    bars.push(bar(seconds * 1000, close, q.high?.[i], q.low?.[i], q.volume?.[i]));
+    bars.push(bar(seconds * 1000, close, q.high?.[i], q.low?.[i], volumes ? volumes[i] : null));
   });
+  // One timestamp with two different volumes: the price line keeps its first bar as before, but
+  // the period shows no volume.
+  const contradicted = conflicting(bars.map((b) => [b.t, b.volume]));
   // Only Yahoo's daily volumes add up (each day's equals its day total); its intraday ones don't
   // (30-minute bars summed to 0.45-0.99 of a past day, several times today's), so 1W has none.
   return withVolumes({
@@ -203,7 +232,7 @@ export function decodeYahooHistory(symbol, range, response, window) {
     // whether a bar is a whole trading day (shown as a date) or part of one (date and time).
     timeZone: yahooTimeZone(meta),
     daily: s.yahoo.interval === "1d",
-  }, s.yahoo.interval === "1d");
+  }, s.yahoo.interval === "1d" && !contradicted);
 }
 
 export function decodeBinanceHistory(pair, range, response, window) {

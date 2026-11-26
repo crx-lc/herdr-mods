@@ -55,7 +55,9 @@ Compared with Pulse at `99f70b2c`:
   under that day's part of the line, with `Vol (day) …` in the readout: Yahoo's 30-minute volumes
   don't add up to its daily totals, so the week's daily bars are asked for once more (one small
   request, after the line is shown, at most 10 seconds; the owner's choice), and the 1W total adds
-  each trading day shown once. One bar or day without a volume and the period shows none.
+  each trading day shown once. One bar or day without a volume and the period shows none, and so
+  does a malformed volume column (not an array of numbers as long as the timestamps) or two different
+  volumes for one time or trading day.
 - Hover readout on every chart (`readout.js`): the nearest real point's date, time and timezone (the
   exchange's own offsets from Yahoo; UTC for Binance), price and session.
 - Pre-market and after-hours for US stocks (`extended.js`): latest extended price, its time and change
