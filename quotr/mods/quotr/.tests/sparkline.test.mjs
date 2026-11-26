@@ -1,162 +1,197 @@
+// The watchlist row's chart (sparkline.js): what is drawn, against what, and where.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { watchlistSparkline } from "../sparkline.js";
-import { chartGeometry, decodeYahoo, decodeBinance } from "../quotes.js";
-import { nearestIndex, readoutAt } from "../readout.js";
-import { fixture, scenarios, NOW, START, END } from "./helpers/spark-fixtures.mjs";
-import { views, element, walk, theme } from "./helpers/view-harness.mjs";
+import {
+  watchlistSparkline, observedPrices, sparkReference, sparkWindow,
+  SPARK_TOP, SPARK_BOTTOM, SPARK_LEFT, SPARK_RIGHT, STOCK_BAR_MS, CRYPTO_BAR_MS,
+} from "../sparkline.js";
+import { decodeYahoo, decodeBinance, decodeKlineWindow } from "../quotes.js";
+import { fixture, START, END, NOW } from "./helpers/spark-fixtures.mjs";
 
-const extent = (points) => Math.max(...points.map(p => p[1])) - Math.min(...points.map(p => p[1]));
+const near = (a, b, eps = 1e-9) => assert.ok(Math.abs(a - b) < eps, `${a} ≈ ${b}`);
+const ys = (g) => g.line.map((p) => p[1]);
+const DAY = 86_400_000;
 
-test("large signed moves retain observed shape, separate daily magnitude and no invented points", () => {
-  for (const [, q] of scenarios) {
-    const saved = JSON.stringify(q);
-    const g = watchlistSparkline(q, NOW);
-    assert.equal(g.line.length, q.points.length);
-    assert.ok(extent(g.line) > 0 && extent(g.line) < 11, "observed trend uses price-relative floor, no reference compression");
-    assert.equal(g.move?.percent ?? null, q.changePercent);
-    assert.equal(JSON.stringify(q), saved);
-    assert.equal(g.line[0][0], 2, "starts at first observed bar, not previous close");
-  }
-  const q = fixture();
-  assert.ok(extent(chartGeometry(q.series, q.previousClose).points) * 0.22 < 1, "baseline root cause");
-  assert.equal(watchlistSparkline(q, NOW).move.to, 43.6);
-  assert.equal(watchlistSparkline(scenarios[1][1], NOW).move.to, 12.4);
-});
+// A stock that opened 8.12% below the previous close and traded flat: bars every 5 minutes.
+function gapDown({ bars = 40, prev = 100, level = 91.88 } = {}) {
+  const points = Array.from({ length: bars }, (_, i) => ({ t: START + i * STOCK_BAR_MS, close: level + (i % 2 ? 0.02 : -0.02) }));
+  const last = points.at(-1);
+  return { symbol: "SAMPLE", price: last.close, previousClose: prev, changePercent: (last.close - prev) / prev * 100,
+    timestamp: last.t + 60_000, fetchedAt: NOW, currency: "USD", series: points.map((p) => p.close), points,
+    session: [START, END], periods: { regular: [START, END] }, firstOpen: { t: START, price: level } };
+}
 
-test("missing, nonpositive, nonfinite or inconsistent reference never fabricates daily rail", () => {
-  for (const previousClose of [null, undefined, 0, -1, NaN, Infinity, "100"]) {
-    const g = watchlistSparkline(fixture(undefined, { previousClose }), NOW);
-    assert.equal(g.move, null);
-    assert.equal(g.line.length, 5, "observed shape remains independent");
-  }
-  for (const changePercent of [null, NaN, Infinity, -30]) {
-    assert.equal(watchlistSparkline(fixture(undefined, { changePercent }), NOW).move, null);
-  }
-});
+// A pair over its rolling 24h window, 15-minute klines (open times), the quote at the window's end.
+function pair({ open = 60_000, last = 58_800, bars = 96, now = Date.UTC(2026, 10, 25, 18, 9) } = {}) {
+  const first = Math.floor(now / CRYPTO_BAR_MS) * CRYPTO_BAR_MS - (bars - 1) * CRYPTO_BAR_MS;
+  const points = Array.from({ length: bars }, (_, i) => ({ t: first + i * CRYPTO_BAR_MS, close: open + (last - open) * (i + 1) / bars }));
+  return { symbol: "COIN/USDT", price: last, previousClose: open, changePercent: (last - open) / open * 100,
+    timestamp: now, windowStart: now - DAY, fetchedAt: now, currency: "USDT", series: points.map((p) => p.close), points,
+    firstOpen: { t: first, price: open }, periods: null };
+}
 
-test("flat/zero and capped moves have finite, symmetric geometry", () => {
-  const flat = watchlistSparkline(fixture([100, 100, 100]), NOW);
-  assert.equal(extent(flat.line), 0);
-  assert.equal(flat.move.to, 28);
-  for (const price of [200, 10]) {
-    const g = watchlistSparkline(fixture([price, price]), NOW);
-    assert.equal(g.move.capped, true);
-    assert.equal(g.move.to, price > 100 ? 54 : 2);
-  }
-});
-
-test("empty, single, partial, missing-open and quote/bar mismatch do not add coverage or quote points", () => {
-  assert.deepEqual(watchlistSparkline(fixture([]), NOW).line, []);
-  assert.equal(watchlistSparkline(fixture([130]), NOW).line.length, 1);
-  const q = fixture([130, 131], { open: 999, price: 150, changePercent: 50 });
-  q.points = [{ t: START + 3_600_000, close: 130 }, { t: START + 3_900_000, close: 131 }];
+test("an opening gap reads against the previous close even when the session is flat", () => {
+  const q = gapDown();
   const g = watchlistSparkline(q, NOW);
-  assert.equal(g.line.length, 2);
-  assert.ok(g.line[0][0] > 2 && g.line[1][0] < 54, "only observed time span");
-  assert.equal(g.move.percent, 50, "headline quote and reference, not bar return or open");
-  assert.match(g.description, /different timestamps/);
-  assert.match(g.description, /no opening-price inference/);
+  assert.ok(g.reference !== null, "the previous close is drawn");
+  near(g.reference, SPARK_TOP, 1e-9); // the reference is the highest price: top of the box
+  for (const y of ys(g)) assert.ok(y - g.reference > 14, "every point sits well below the reference");
+  // The flat session itself stays flat next to an 8% gap.
+  assert.ok(Math.max(...ys(g)) - Math.min(...ys(g)) < 0.2);
+  // A gap up mirrors it.
+  const up = watchlistSparkline(gapDown({ level: 130 }), NOW);
+  near(up.reference, SPARK_BOTTOM);
+  for (const y of ys(up)) assert.ok(up.reference - y > 14);
 });
 
-test("old caches, unordered, mismatched, malformed and out-of-session bars fall back conservatively", () => {
-  for (const overrides of [{ points: undefined }, { points: [] }, { periods: null },
-    { points: [{ t: START, close: 200 }] }, { series: [NaN, Infinity] },
-    { points: [{ t: START - 1, close: 130 }, { t: END, close: 130 }], series: [130, 130] }]) {
-    const g = watchlistSparkline(fixture(undefined, overrides), NOW);
-    assert.equal(g.line.length, 0);
-    assert.equal(g.move.percent, 30, "independent truthful headline magnitude remains");
+test("the line ends on the displayed side of the reference: one rule with the percentage", () => {
+  for (const level of [91.88, 99.9, 100.1, 130]) {
+    const q = gapDown({ level });
+    const g = watchlistSparkline(q, NOW);
+    const end = g.line.at(-1)[1];
+    // Pixels grow downward: below the reference means a loss, as the percentage says.
+    assert.equal(Math.sign(end - g.reference), -Math.sign(q.changePercent), `level ${level}`);
   }
-  const q = fixture(); q.points.reverse();
-  assert.equal(watchlistSparkline(q, NOW).line.length, 0);
+  const c = pair({ open: 60_000, last: 58_800 });
+  const g = watchlistSparkline(c, c.timestamp);
+  assert.ok(g.line.at(-1)[1] > g.reference && c.changePercent < 0);
 });
 
-test("stale and failed quotes keep geometry and explain freshness", () => {
-  const q = fixture();
-  for (const [now, options] of [[NOW + 180001, {}], [NOW, { failed: true }]]) {
-    const g = watchlistSparkline(q, now, options);
-    assert.equal(g.stale, true);
-    assert.match(g.description, /Stale or refresh failed/);
-    assert.deepEqual(g.line, watchlistSparkline(q, NOW).line);
+test("the reference is the one the percentage uses, or none", () => {
+  const q = gapDown();
+  assert.equal(sparkReference(q), 100);
+  for (const bad of [{ previousClose: null }, { previousClose: 0 }, { previousClose: -1 }, { previousClose: NaN },
+    { changePercent: null }, { changePercent: 1 }, { price: 0 }]) {
+    const g = watchlistSparkline({ ...q, ...bad }, NOW);
+    assert.equal(sparkReference({ ...q, ...bad }), null, JSON.stringify(bad));
+    assert.equal(g.reference, null);
+    assert.ok(g.line.length > 1, "the observed line still draws");
+    assert.match(g.label, /no reference/);
   }
 });
 
-test("crypto uses rolling 24h reference and observed kline times, including retained older bars", () => {
-  const q = fixture(undefined, { symbol: "COIN/USDT", periods: null });
-  let g = watchlistSparkline(q, NOW);
-  assert.equal(g.move.percent, 30);
-  assert.match(g.description, /rolling 24h reference/);
-  assert.doesNotMatch(g.description, /previous regular close|opening gap/);
-  assert.ok(g.line[0][0] > 2, "does not imply a full rolling window");
-  q.points = q.points.map(p => ({ ...p, t: p.t - 86_400_000 }));
-  g = watchlistSparkline(q, NOW);
-  assert.equal(g.line.length, 1, "only the bar exactly at the rolling-window start survives");
-  assert.equal(g.line[0][0], 2, "survivor stays at its actual time");
-  assert.equal(g.move.percent, 30);
+test("small moves stay small: the vertical span is at least 1% of the reference", () => {
+  const q = fixture([100.02, 100.05, 99.98, 100.04], { previousClose: 100, changePercent: 0.04, price: 100.04 });
+  const g = watchlistSparkline(q, NOW);
+  const extent = Math.max(...ys(g), g.reference) - Math.min(...ys(g), g.reference);
+  assert.ok(extent < (SPARK_BOTTOM - SPARK_TOP) * 0.1, `0.07% spans ${extent}px`);
+  // A flat line with no reference is finite and centered.
+  const flat = watchlistSparkline(fixture([50, 50, 50], { previousClose: null, changePercent: null }), NOW);
+  for (const y of ys(flat)) near(y, (SPARK_TOP + SPARK_BOTTOM) / 2);
 });
 
-test("actual source decoders agree with daily rail, including fallback reference and missing open", () => {
+test("stocks: x follows time across the session from Yahoo's trading period, partial days stay partial", () => {
+  const q = gapDown({ bars: 12 }); // the first hour
+  const g = watchlistSparkline(q, NOW);
+  near(g.line[0][0], SPARK_LEFT, 1e-9); // the first bar's open at 09:30
+  const lastT = q.timestamp;
+  near(g.line.at(-1)[0], SPARK_LEFT + (SPARK_RIGHT - SPARK_LEFT) * (lastT - START) / (END - START));
+  assert.ok(g.line.at(-1)[0] < 15, "one hour of 6.5 is the left sixth");
+  // currentTradingPeriod already on the next day: the bars' own session still places them.
+  const rolled = { ...q, periods: { regular: [START + DAY, END + DAY] } };
+  assert.deepEqual(watchlistSparkline(rolled, NOW).line, g.line);
+  // An old cache with neither session: the bars span the box, nothing dropped.
+  const old = { ...q, session: undefined, periods: { regular: [START + DAY, END + DAY] } };
+  const og = watchlistSparkline(old, NOW);
+  assert.equal(og.line.length, g.line.length);
+  near(og.line[0][0], SPARK_LEFT); near(og.line.at(-1)[0], SPARK_RIGHT);
+});
+
+test("crypto: the rolling 24h window, its open as reference, kline closes at each kline's end", () => {
+  const c = pair();
+  const [from, to] = sparkWindow(c, observedPrices(c));
+  assert.equal(from, c.timestamp - DAY); assert.equal(to, c.timestamp);
+  const g = watchlistSparkline(c, c.timestamp);
+  // The first kline's open (at most one kline after the window starts), 96 closes, the quote merges with the last.
+  assert.equal(g.line.length, 97);
+  assert.ok(g.line[0][0] < SPARK_LEFT + 54 / 96 + 1e-9);
+  near(g.line.at(-1)[0], SPARK_RIGHT);
+  assert.match(g.label, /^Last 24h · vs 60,000\.00 USDT 24h ago$/);
+  // Bars older than the window are left out, never stretched in.
+  const old = { ...c, firstOpen: null, points: [{ t: c.timestamp - DAY - 2 * CRYPTO_BAR_MS, close: 1 }, ...c.points] };
+  assert.equal(watchlistSparkline(old, c.timestamp).line.length, 96);
+  assert.ok(!observedPrices(old).every((p) => p.t >= c.timestamp - DAY));
+});
+
+test("no invented points: only bar opens, bar closes and the quote, each at its own time", () => {
+  const q = gapDown({ bars: 3 });
+  const prices = observedPrices(q);
+  assert.deepEqual(prices.map((p) => p.price), [q.firstOpen.price, ...q.points.map((p) => p.close)]);
+  assert.deepEqual(prices.map((p) => p.t), [START, START + STOCK_BAR_MS, START + 2 * STOCK_BAR_MS, q.timestamp]);
+  // A quote newer than the bars is a trade of its own: it ends the line.
+  const later = { ...q, timestamp: q.timestamp + 20 * 60_000, price: 92.5, changePercent: -7.5 };
+  const tp = ({ t, price }) => ({ t, price });
+  assert.deepEqual(tp(observedPrices(later).at(-1)), { t: later.timestamp, price: 92.5 });
+  // A quote older than the bars adds nothing.
+  // A quote older than the bars still ends the line: bars after it are left out.
+  const older = observedPrices({ ...q, timestamp: START + 60_000, price: 50 });
+  assert.deepEqual(older.map(tp), [{ t: START, price: q.firstOpen.price }, { t: START + 60_000, price: 50 }]);
+  // A gap in the data stays a gap: two bars two hours apart are joined, nothing is filled between them.
+  const holes = { ...q, firstOpen: null, points: [q.points[0], { t: START + 2 * 3_600_000, close: 92 }], timestamp: START + 2 * 3_600_000 + 60_000 };
+  assert.equal(watchlistSparkline(holes, NOW).line.length, 2);
+  // Malformed entries are skipped, not repaired.
+  const junk = { ...q, firstOpen: { t: -1, price: 5 }, points: [null, { t: "x", close: 1 }, { t: START, close: -3 }, ...q.points] };
+  assert.equal(observedPrices(junk).length, q.points.length);
+});
+
+test("empty, single and missing data: a dot, the reference alone, or nothing", () => {
+  const none = watchlistSparkline({ symbol: "SAMPLE" }, NOW);
+  assert.deepEqual(none.line, []); assert.equal(none.reference, null); assert.match(none.label, /^No bars yet/);
+  const bare = { ...gapDown(), points: [], series: [], firstOpen: null };
+  assert.equal(watchlistSparkline(bare, NOW).line.length, 1, "a stock's quote alone is one dot in its session");
+  const onlyQuote = watchlistSparkline({ ...bare, session: null, periods: null }, NOW);
+  assert.equal(onlyQuote.line.length, 0, "a quote with no session to place it in is not drawn");
+  const pairOnly = pair(); const dot = watchlistSparkline({ ...pairOnly, points: [], firstOpen: null }, pairOnly.timestamp);
+  assert.equal(dot.line.length, 1, "a pair's quote alone is one dot at the window's end");
+  near(dot.line[0][0], SPARK_RIGHT);
+  for (const g of [none, onlyQuote, dot]) for (const [x, y] of g.line) assert.ok(Number.isFinite(x) && Number.isFinite(y));
+});
+
+test("stale and failed quotes are flagged, never redrawn differently", () => {
+  const q = gapDown();
+  assert.equal(watchlistSparkline(q, NOW).stale, false);
+  assert.equal(watchlistSparkline(q, NOW, { failed: true }).stale, true);
+  assert.equal(watchlistSparkline(q, NOW + 10 * 60_000).stale, true);
+  assert.equal(watchlistSparkline({ ...q, fetchedAt: undefined }, NOW).stale, true);
+  assert.deepEqual(watchlistSparkline(q, NOW, { failed: true }).line, watchlistSparkline(q, NOW).line);
+});
+
+test("the hover is one short line: the session's times and the reference", () => {
+  const q = { ...gapDown({ bars: 12 }), timeZone: { label: "EST", offsetSeconds: -18_000, periods: [] } };
+  const g = watchlistSparkline(q, NOW);
+  assert.equal(g.label, "Regular 09:30–10:26 EST · vs prev close 100.00 USD");
+  assert.ok(g.label.length < 60);
+  assert.equal(g.description, `Chart: ${g.label}`);
+});
+
+test("decoders: Yahoo's bar session and first open, Binance's 24h open and window", () => {
   const response = (body) => ({ status: 200, ok: true, text: JSON.stringify(body) });
+  const s = START / 1000;
   const q = decodeYahoo("SAMPLE", response({ chart: { result: [{ meta: {
-    symbol: "SAMPLE", regularMarketPrice: 130, regularMarketTime: END / 1000 - 300,
-    chartPreviousClose: 100, currentTradingPeriod: { regular: { start: START / 1000, end: END / 1000 } },
-  }, timestamp: [START / 1000 + 3600, START / 1000 + 3900],
-  indicators: { quote: [{ close: [130, 130], open: [null, 130] }] } }] } }), NOW);
-  assert.equal(q.open, 130, "first valid open is late and is never used as opening-gap evidence");
-  assert.equal(watchlistSparkline(q, NOW).move.percent, q.changePercent);
-  assert.ok(watchlistSparkline(q, NOW).line[0][0] > 2);
-  const crypto = decodeBinance(["COIN/USDT"], response({ symbol: "COINUSDT", lastPrice: "130", prevClosePrice: "100", closeTime: END }), NOW)["COIN/USDT"];
-  assert.equal(watchlistSparkline(crypto, NOW).move.percent, crypto.changePercent);
-});
+    symbol: "SAMPLE", regularMarketPrice: 92, regularMarketTime: s + 700, previousClose: 100,
+    currentTradingPeriod: { regular: { start: s + 86_400, end: END / 1000 + 86_400 } },
+    tradingPeriods: [[{ start: s, end: END / 1000, gmtoffset: -18000, timezone: "EST" }]],
+  }, timestamp: [s, s + 300, s + 600], indicators: { quote: [{ close: [91.9, 92.1, 92], open: [91.8, 91.9, 92.1] }] } }] } }), NOW);
+  assert.deepEqual(q.session, [START, END]);
+  assert.deepEqual(q.firstOpen, { t: START, price: 91.8 });
+  assert.equal(sparkReference(q), 100);
+  const g = watchlistSparkline(q, NOW);
+  assert.equal(g.line.length, 4); near(g.line[0][0], SPARK_LEFT);
+  // No open for the first bar: no open point, never a later bar's open in its place.
+  const noOpen = decodeYahoo("SAMPLE", response({ chart: { result: [{ meta: { symbol: "SAMPLE", regularMarketPrice: 92,
+    regularMarketTime: s + 700, previousClose: 100 }, timestamp: [s, s + 300], indicators: { quote: [{ close: [91.9, 92], open: [null, 91.9] }] } }] } }), NOW);
+  assert.equal(noOpen.firstOpen, null); assert.equal(noOpen.session, null);
 
-test("real watchlist panel mounts 56×22 sparkline; selection, removal, reorder and unknown fallbacks survive", async () => {
-  const { Quotr } = await views();
-  const v = new Quotr();
-  v.watch = { preferences: { symbols: ["SAMPLE", "UNKNOWN"], paused: false }, quotes: { SAMPLE: fixture() },
-    errors: {}, message: "", inflight: new Set(), remove: s => { v.removed = s; } };
-  v.assetIcon = () => element(); v.logoCredits = () => []; v.openDetail = s => { v.opened = s; };
-  v.act = (_cx, f) => f();
-  const tree = v.panel(element(), theme);
-  const nodes = walk(tree);
-  const find = id => nodes.find(n => n.calls?.some(c => c[0] === "id" && c[1] === id));
-  const spark = find("quotr-spark-SAMPLE");
-  assert.ok(spark, "actual panel calls watchlistChart");
-  assert.ok(spark.calls.some(c => c[0] === "w" && c[1] === 56));
-  assert.ok(spark.calls.some(c => c[0] === "h" && c[1] === 22));
-  assert.equal(spark.calls.find(c => c[0] === "tooltip"), undefined, "never the shell's one-line tooltip");
-  assert.match(spark.calls.find(c => c[0] === "accessibility_label")[1], /previous regular close/);
-  find("quotr-row-SAMPLE").calls.find(c => c[0] === "on_click")[1]();
-  assert.equal(v.opened, "SAMPLE");
-  find("quotr-remove-SAMPLE").calls.find(c => c[0] === "on_click")[1](null, {});
-  assert.equal(v.removed, "SAMPLE");
-  assert.ok(nodes.includes("Waiting…"));
-  assert.equal(find("quotr-spark-UNKNOWN"), undefined);
-  v.reordering = true;
-  assert.ok(!walk(v.panel(element(), theme)).some(n => n.calls?.some(c => c[0] === "id" && c[1] === "quotr-spark-SAMPLE")));
-});
-
-test("shared chart still uses original point indices, reference and session bands with real hover readout", async () => {
-  const { ChartParts } = await views();
-  const v = new ChartParts();
-  const q = fixture(); const before = JSON.stringify(q);
-  v.hover = { id: "detail", index: 2, width: 400, height: 140 };
-  const tree = v.chart(q, "green", theme, { width: 400, height: 140, fill: true,
-    hover: { id: "detail", points: q.points }, bands: [{ session: "pre", from: 0, to: 20 }] });
-  const nodes = walk(tree);
-  const paints = nodes.filter(n => n.kind === "paint");
-  assert.equal(paints.length, 4, "session band, dashed reference, fill, observed line");
-  const referencePath = paints[1].calls.find(c => c[0] === "path")[1].calls;
-  assert.ok(referencePath.some(c => c[0] === "dash_array"));
-  assert.equal(referencePath.find(c => c[0] === "move_to")[2], `${chartGeometry(q.series, q.previousClose).reference}%`);
-  const band = paints[0].calls.find(c => c[0] === "path")[1].calls;
-  assert.ok(band.some(c => c[0] === "line_to" && c[1] === "20%"));
-  const move = tree.calls.find(c => c[0] === "on_mouse_move")[1];
-  let notifications = 0;
-  move({ local_position: { x: 300 }, bounds: { width: 400, height: 140 } }, { notify: () => notifications++ });
-  assert.equal(v.hover.index, 3);
-  assert.equal(notifications, 1);
-  assert.ok(nodes.includes(readoutAt(q.points, 2).when));
-  assert.equal(nearestIndex(200, 400, 5), 2);
-  assert.equal(JSON.stringify(q), before);
-  assert.equal(chartGeometry(q.series, q.previousClose).points.length, q.points.length);
+  const now = Date.UTC(2026, 10, 25, 18, 9);
+  const c = decodeBinance(["COIN/USDT"], response({ symbol: "COINUSDT", lastPrice: "58800", openPrice: "60000",
+    prevClosePrice: "60010", openTime: now - DAY, closeTime: now }), now)["COIN/USDT"];
+  assert.equal(c.previousClose, 60000, "Binance's own 24h change is measured from the window's open");
+  near(c.changePercent, -2);
+  assert.equal(c.windowStart, now - DAY);
+  const k = decodeKlineWindow(response([[now - 3 * CRYPTO_BAR_MS, "60000", "0", "0", "59900"], [now - 2 * CRYPTO_BAR_MS, "59900", "0", "0", "59000"]]));
+  assert.deepEqual(k.firstOpen, { t: now - 3 * CRYPTO_BAR_MS, price: 60000 });
+  assert.equal(k.points.length, 2);
+  assert.deepEqual(decodeKlineWindow(response([])), { points: [], firstOpen: null });
+  assert.throws(() => decodeKlineWindow({ status: 500, ok: false, text: "" }));
+  assert.throws(() => decodeKlineWindow(response({ not: "a list" })));
 });

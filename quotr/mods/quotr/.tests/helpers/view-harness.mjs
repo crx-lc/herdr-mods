@@ -24,7 +24,8 @@ export function walk(tree) {
 }
 export async function views() {
   const bindings = { ...quotes, ...readout, ...extended, ...spark,
-    View: class {}, div: () => element(), image: () => element("image"),
+    View: class {}, div: () => element(), image: () => element("image"), svg: (path) => element("svg").path(path),
+    SESSION_ICONS: { pre: "sunrise.svg", post: "moon.svg" },
     v_flex: () => element("column"), h_flex: () => element("row"),
     PathBuilder: { stroke: (width) => element("path").stroke(width), fill: () => element("path").fill() },
     Background: { solid: (color) => element().solid(color) },

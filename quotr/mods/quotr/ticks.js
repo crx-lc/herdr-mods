@@ -4,6 +4,11 @@
 // A tick is a NEW quote object for a symbol (a refresh delivered data), compared with the price of
 // the quote it replaced. Redraws without new data, a first-ever quote and a removed symbol are not ticks.
 
+import { shownQuote } from "./quotes.js";
+
+// The price the row shows (a stock's latest trade, extended hours included).
+const priceOf = (q) => shownQuote(q)?.price;
+
 export function createTickMemory() {
   return { ref: new Map(), price: new Map() };
 }
@@ -14,7 +19,8 @@ export function primeTicks(memory, quotes, symbols) {
     const q = quotes[s];
     if (!q) continue;
     memory.ref.set(s, q);
-    if (Number.isFinite(q.price) && q.price > 0) memory.price.set(s, q.price);
+    const price = priceOf(q);
+    if (Number.isFinite(price) && price > 0) memory.price.set(s, price);
   }
 }
 
@@ -25,7 +31,8 @@ export function takeTicks(memory, quotes, symbols) {
     const q = quotes[s];
     if (!q || memory.ref.get(s) === q) continue;
     memory.ref.set(s, q);
-    const price = Number.isFinite(q.price) && q.price > 0 ? q.price : null;
+    const shown = priceOf(q);
+    const price = Number.isFinite(shown) && shown > 0 ? shown : null;
     const before = memory.price.get(s);
     if (price === null) continue;
     memory.price.set(s, price);

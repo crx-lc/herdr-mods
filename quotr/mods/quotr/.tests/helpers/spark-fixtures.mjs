@@ -4,9 +4,10 @@ export const NOW = END + 60_000;
 export function fixture(series = [130, 130.2, 129.9, 130.1, 130], overrides = {}) {
   return { symbol: "SAMPLE", name: "Sample instrument", price: series.at(-1) ?? 130,
     previousClose: 100, changePercent: ((series.at(-1) ?? 130) - 100),
-    timestamp: END - 300_000, fetchedAt: NOW, currency: "USD", delaySeconds: 0,
+    timestamp: START + series.length * 300_000, fetchedAt: NOW, currency: "USD", delaySeconds: 0,
     periods: { regular: [START, END] }, series,
-    points: series.map((close, i) => ({ close, t: START + i * (END - START - 300_000) / Math.max(1, series.length - 1) })),
+    // Consecutive 5-minute bars from the open; the quote at the last bar's end.
+    points: series.map((close, i) => ({ close, t: START + i * 300_000 })),
     ...overrides };
 }
 export const scenarios = [

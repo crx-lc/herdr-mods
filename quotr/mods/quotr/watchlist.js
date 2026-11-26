@@ -1,7 +1,7 @@
 // The watchlist and its refresh loop. Herdr's APIs come in through `host`,
 // so tests drive it under Node with a fake clock and network.
 import {
-  BINANCE_BATCH, QuoteError, STARTER_SYMBOLS, binanceKlinesUrl, binanceUrl, decodeBinance, decodeKlinePoints, decodeYahoo,
+  BINANCE_BATCH, QuoteError, STARTER_SYMBOLS, binanceKlinesUrl, binanceUrl, decodeBinance, decodeKlineWindow, decodeYahoo,
   isCryptoPair, normalizeSymbol, yahooUrl,
 } from "./quotes.js";
 // The 24-hour line keeps each kline's time (decodeKlinePoints) for the hover readout.
@@ -309,6 +309,7 @@ export class Watchlist {
           // Keep the last line until a new one arrives.
           quotes[pair].series = this.quotes[pair]?.series ?? [];
           quotes[pair].points = this.quotes[pair]?.points ?? [];
+          quotes[pair].firstOpen = this.quotes[pair]?.firstOpen ?? null;
           this.quotes[pair] = quotes[pair];
           delete this.errors[pair];
         } else this.errors[pair] = "Binance returned no quote for this pair.";
@@ -340,9 +341,10 @@ export class Watchlist {
       if (!current()) return;
       if (!this.quotes[pair]) continue;
       try {
-        const points = decodeKlinePoints(await this.get(binanceKlinesUrl(pair)));
+        const { points, firstOpen } = decodeKlineWindow(await this.get(binanceKlinesUrl(pair)));
         if (current() && this.quotes[pair]) {
           this.quotes[pair].points = points;
+          this.quotes[pair].firstOpen = firstOpen;
           this.quotes[pair].series = points.map((point) => point.close);
         }
       } catch { /* The quote itself is fine. */ }

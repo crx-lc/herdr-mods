@@ -52,27 +52,34 @@ Compared with Pulse at `99f70b2c`:
   ticker through the logo sources that can show it.
 
 **Panel and refresh**
-- The watchlist's 56×22 sparkline separates two scales: observed closes above, a daily-move rail
-  below. The rail runs from zero at the center toward −50% or +50%, with an end stop beyond those
-  limits. Nonzero moves have a 3px visibility minimum (not literal linear magnitude below
-  that length), painted above the zero tick; the adjacent signed percentage gives the exact magnitude.
-  Stocks use the same previous regular close as the headline; Binance pairs use their rolling 24h reference. It is a day-move
-  indicator, not an opening-gap path.
-- The upper line uses only observed bar closes and its own vertical scale: the total span is at
-  least 1% of their midpoint, with 16% padding for larger ranges. Thus 0.03% noise stays almost
-  flat (0.33px), an ordinary 1% trend remains legible, and a 20% swing spans about 9.48px.
-  This price-relative scale is independent of the daily rail. Time positions use the
-  reported regular session for stocks or the quote's rolling 24h window for pairs; blank time is
-  unobserved. Rest the pointer on it for a wrapped card with bar times, formatted observed price range and reference (with the headline’s
-  supported currency/precision), scale rules and freshness. The card opens beside the sparkline (left of it, or right when the
-  window has no room there), never over it, so leaving or clicking the sparkline closes it on any row. No opening price is inferred from a late first bar, and the headline quote is never appended to bars.
-- Missing or inconsistent references omit the rail. Missing session/times, mismatched cached
-  points omit the line; one bar is a dot. Stocks with out-of-session bars omit the line.
-  For crypto, the entire cache must first have paired, ordered, positive finite values; then only
-  bars outside the quote’s rolling window are clipped. Surviving bars keep actual time positions
-  and blank coverage, including when the ticker advances before klines. Old caches remain readable
-  without a schema migration. A stale/failed quote dims the sparkline; bar times remain independent of the
-  quote's fetch time, including retained Binance klines after a failed bar request.
+- Each row's 56×22 chart is a small version of the dialog's 1D chart: the line in the color of
+  the row's percentage over a faint fill, and a dashed line at the price that percentage is
+  measured against: a stock's previous regular close, a pair's price 24 hours ago (Binance's own
+  24h open). The reference is part of the vertical scale, so an opening gap reads as the line sitting
+  well above or below it even when the session then trades flat; the scale spans at least 1% of the
+  reference, so small moves stay small.
+- A stock's chart is its latest regular session, placed by time across the session (a
+  half-finished day fills part of the width). The price and percentage beside it are the latest
+  trade, pre-market and after hours included, once that price differs from the close (Yahoo's
+  after-hours bars often just repeat it). Such a price has a small sunrise (pre-market) or moon
+  (after hours) left of it, in the dialog's session colors; its tooltip says what it is, for
+  example `After-hours trade 80.72 USD at 16:31 EST · +4.09% vs prev close 77.55 USD · close
+  79.96 USD (+3.11%)`; the dashed line is always the close that percentage is measured against: the
+  previous regular close, and from the next day's first pre-market trade on, the session's own
+  close (where its line ends), so evenings and weekends keep the last day. Without a previous close
+  the row shows the latest trade with `—` for the change and no dashed line. The dialog is
+  unchanged: the regular session and its own extended-hours section.
+- A pair's chart spans its rolling 24h by time: the first kline's open, every finished kline's
+  close at its end, and the quote.
+- Only observed prices are drawn, and consecutive ones are joined: a stretch with no trade (a quiet
+  stock, a missing kline) is a straight segment from one trade to the next, not a blank. That is the
+  owner's choice for the row; thin tickers would otherwise break into dots.
+- The displayed quote always ends the line. A bar or kline still forming at the quote's time is
+  left out: its close was read at another moment, so it could end the line on the wrong side of
+  the dashed reference. Missing reference: no dashed line, the line in `dim`. One price: a dot. A
+  stale or failed quote dims the chart.
+- Resting on the chart shows one line, for example `Regular 09:30–16:00 EST · vs prev close 354.07 USD`
+  or `Last 24h · vs 60,115.22 USDT 24h ago`. Clicking it opens the dialog like the rest of the row.
 - A New York market clock under the title (`marketclock.js`, `clockview.js`): New York time, the
   US regular session's state (Open, Pre-market, After-hours, Closed, Weekend, Holiday) and its next
   open or close with a live countdown ("NY Tue Nov 17 15:42 · Open · Closes 16:00 · 18m"), early closes included.
@@ -131,8 +138,8 @@ or copy this folder to `~/.config/herdr-app/mods/quotr/`. Then
 ## Data sources and limits
 
 - **Quotes:** Yahoo Finance's chart endpoint (unofficial, may be rate-limited or unavailable in some
-  regions; regular-session prices with exchange delays, plus extended hours for US stocks where Yahoo
-  has them) and Binance Spot public market data (24-hour change).
+  regions; prices with exchange delays, extended hours included for US stocks where Yahoo has
+  them) and Binance Spot public market data (24-hour change).
 - **Online logo sources:** [AllInvestView Ticker Logos](https://www.allinvestview.com/tools/ticker-logos/)
   and [Elbstream](https://elbstream.com/logos). These are the two online sources currently supported.
   Source adapters make it easy to add others without changing the panel. See the logo selection and per-ticker settings above.
