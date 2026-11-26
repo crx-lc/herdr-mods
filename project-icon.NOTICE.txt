@@ -1,0 +1,11 @@
+project-icon.svg — the Herdr ram
+
+Source: https://github.com/herdrdev/herdr/blob/HEAD/assets/logo.svg (the Herdr project), taken from the
+ram path of Herdr's shipped app icon, which names that file as its origin.
+
+The upstream project is licensed under the Apache License, Version 2.0:
+https://www.apache.org/licenses/LICENSE-2.0
+
+Modifications: the drawing was flattened to the static SVG subset of the herdr-agents project manifest,
+colored green (#1D4A38) and placed on a full-bleed pale green tile (#E7F3EC). The modified file is
+distributed under the same license.
