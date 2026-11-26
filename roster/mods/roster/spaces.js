@@ -455,9 +455,10 @@ export function folderReason(check) {
   const why = FOLDER_REASONS[check?.status === 'none' ? 'none' : check?.reason] ?? 'Git did not confirm a checkout here';
   return check?.detail ? why + ' (' + check.detail + ')' : why;
 }
-// Git's first message line, short and without control characters, to say why it refused.
+// Git's first message line, short and without control, bidirectional or invisible formatting
+// characters (they can reorder or hide text), to say why it refused.
 function gitMessage(stderr) {
   const line = typeof stderr === 'string' ? stderr.split(/\r?\n/).map(l => l.trim()).find(Boolean) ?? '' : '';
-  const clean = line.replace(/[\x00-\x1f\x7f]/g, ' ');
+  const clean = line.replace(/[\u061c\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, '').replace(/[\x00-\x1f\x7f-\x9f]/g, ' ');
   return clean.length > 160 ? clean.slice(0, 159) + '…' : clean;
 }
