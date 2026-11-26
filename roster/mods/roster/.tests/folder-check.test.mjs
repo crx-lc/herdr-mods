@@ -131,6 +131,26 @@ test('errors say why and leave Checking…: Git missing, Herdr\'s exec timeout, 
   }
 });
 
+const refusal = stderr => verifyFolder(() => Promise.resolve({ code: 128, stdout: '', stderr }), null, 'C:\\x', () => {}, 50);
+
+test('Git\'s diagnostic loses C1, bidirectional and invisible formatting characters before truncation (#48)', async () => {
+  // The issue's reproduction: U+0085, U+009B and U+202E.
+  const repro = await refusal('fatal: bad\u0085path\u009bname \u202egnp.exe\n');
+  assert.equal(repro.detail, 'fatal: bad path name gnp.exe');
+  assert.equal(folderReason(repro), 'Git could not read this folder (fatal: bad path name gnp.exe)');
+  // Both ends of every other range.
+  const hidden = '\u061c\u200b\u200c\u200d\u200e\u200f\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069\ufeff';
+  assert.equal((await refusal('fatal: sam' + hidden + 'ple\n')).detail, 'fatal: sample');
+  assert.equal((await refusal('fatal:\u0080sample\u009f.\n')).detail, 'fatal: sample .');
+  // Removed characters do not count toward the 160-character limit.
+  assert.equal((await refusal('a'.repeat(100) + '\u200b'.repeat(100) + 'b'.repeat(60) + '\n')).detail, 'a'.repeat(100) + 'b'.repeat(60));
+});
+
+test('Git\'s diagnostic keeps accented and CJK text', async () => {
+  const message = "fatal: não foi possível ler 'C:/trabalho/ação/Ünïcode/日本語/中文/한글': Zugriff verweigert\u00a0¡";
+  assert.equal((await refusal(message + '\n')).detail, message);
+});
+
 test('Cancel while checking creates and opens nothing, and a late answer does not bring the panel back', async () => {
   const s = setup(); s.render(); s.mode = 'hang';
   await open(s);
