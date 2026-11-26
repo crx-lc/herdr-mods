@@ -63,7 +63,10 @@ Row-name activation keeps the existing exact native session/pane revalidation.
 Details open/close never activates a terminal. Folder expansion/toggle/Cancel/Esc
 never creates or opens a Space. A local Choose folder uses Herdr's native picker;
 remote input/suggestions use exact paths on that machine. Existing bounded read-only
-Git checks classify checkout/unverified. Explicit final actions alone call space.new
+Git checks classify checkout/unverified; unverified says why (not a checkout, no answer in time, Git did not
+run, Git's refusal, unreadable answer) and offers Check again. The picker's wait and the check run in a task with
+its own cx (the click's cx ends before the picker answers), and the view's 1 s timer ends any "Checking…" older
+than 15 s. Explicit final actions alone call space.new
 or select a still-matching existing Space. Unverified creation requires a second
 explicit confirmation. Cancelled/late picker/check results never enter another panel.
 

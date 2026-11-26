@@ -99,7 +99,10 @@ inline panels, with surrounding rows still usable; none covers the sidebar.
   the form at that machine; with only this computer listed it sits below the toolbar.
   Choose folder uses Herdr's unchanged native picker locally. Remote targets use
   a path field or host-reported suggestions. Checking a path performs the existing
-  bounded read-only Git checks on that machine. Only explicit **Create Space**,
+  bounded read-only Git checks on that machine. **Checking…** shows for at most 15 s
+  (each Git command has 12 s); a folder that cannot be verified reads
+  **Not verified: <why>** (not a checkout, Git did not answer in time, Git did not run,
+  Git's own refusal, an unreadable answer) with **Check again**. Only explicit **Create Space**,
   **Open existing Space**, **Create another Space**, or the final **Create anyway**
   action can create/open anything. An unverified folder requires a separate explicit
   confirmation. Cancel, Esc and a toggled trigger create/open nothing.

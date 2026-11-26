@@ -124,11 +124,11 @@ test('D8 OS: not ready, readiness lost before the read or after it, and a failed
 test('D8 folder check: a remote machine that is not ready, or stops being ready, is Not verified', async () => {
   const calls = [], after = () => {};
   const exec = (cmd, args, options) => { calls.push(options.on); return Promise.resolve(ok('/srv/repo\n')); };
-  assert.deepEqual(await verifyFolder(exec, 'edge', '/srv/repo', after, 50, () => false), { status: 'unsure' });
+  assert.deepEqual(await verifyFolder(exec, 'edge', '/srv/repo', after, 50, () => false), { status: 'unsure', reason: 'not-ready' });
   assert.deepEqual(calls, [], 'no call when not ready');
   let ready = true;
   const flipping = (cmd, args, options) => { calls.push(options.on); ready = false; return Promise.resolve(ok('/srv/repo\n')); };
-  assert.deepEqual(await verifyFolder(flipping, 'edge', '/srv/repo', after, 50, () => ready), { status: 'unsure' });
+  assert.deepEqual(await verifyFolder(flipping, 'edge', '/srv/repo', after, 50, () => ready), { status: 'unsure', reason: 'not-ready' });
   assert.deepEqual(calls, ['edge'], 'lost between the two commands: the second is not sent');
   assert.equal((await verifyFolder(exec, null, '/home/sample/work', after, 50, () => false)).status, 'repo', 'this computer needs no remote readiness');
   assert.equal(readyNow(() => { throw Error('x'); }, 'edge'), false, 'a throw is not ready');
