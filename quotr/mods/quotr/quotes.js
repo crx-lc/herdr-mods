@@ -231,6 +231,8 @@ export function decodeYahoo(symbol, response, now) {
     high: positive(meta.regularMarketDayHigh) ? meta.regularMarketDayHigh : highs.length ? Math.max(...highs) : null,
     low: positive(meta.regularMarketDayLow) ? meta.regularMarketDayLow : lows.length ? Math.min(...lows) : null,
     previousClose: positive(close) ? close : null,
+    // The regular session's traded volume (shares), for the dialog.
+    volume: cleanVolume(meta.regularMarketVolume),
     periods: { pre: period(periods.pre), regular: period(periods.regular), post: period(periods.post) },
   };
 }
@@ -277,6 +279,8 @@ export function decodeBinance(pairs, response, now) {
       high: positive(Number(ticker.highPrice)) ? Number(ticker.highPrice) : null,
       low: positive(Number(ticker.lowPrice)) ? Number(ticker.lowPrice) : null,
       previousClose: positive(close) ? close : null,
+      // The rolling 24h's traded volume in the quote currency (Binance's quoteVolume), for the dialog.
+      volume: cleanVolume(ticker.quoteVolume),
       periods: null,
     };
   }
@@ -377,6 +381,34 @@ export function formatPrice(quote) {
 export function formatBandPrice(quote) {
   const named = quote.currency === "USD" || quote.symbol.endsWith(`/${quote.currency}`);
   return formatPrice(named ? { ...quote, currency: null } : quote);
+}
+
+/**
+ * A traded volume, or null when it can't be trusted: not a finite number above zero (a missing,
+ * zero, negative or malformed field), or beyond any real market's day (1e15).
+ */
+export function cleanVolume(value) {
+  const n = typeof value === "string" && value.trim() !== "" ? Number(value) : value;
+  return typeof n === "number" && Number.isFinite(n) && n > 0 && n < 1e15 ? n : null;
+}
+
+const VOLUME_UNITS = [[1e12, "T"], [1e9, "B"], [1e6, "M"], [1e3, "K"]];
+
+/** A volume in short form, by hand (no Intl): 950, 12.3K, 267.8M, 1.48B; "—" without one. */
+export function formatVolume(value) {
+  const n = cleanVolume(value);
+  if (n === null) return "—";
+  for (let i = 0; i < VOLUME_UNITS.length; i++) {
+    const [size, unit] = VOLUME_UNITS[i];
+    if (n < size) continue;
+    const scaled = n / size;
+    const text = scaled.toFixed(scaled < 10 ? 2 : 1);
+    // 999.96K rounds to 1000.0K: say 1.00M instead.
+    if (Number(text) >= 1000 && i > 0) return `${(n / VOLUME_UNITS[i - 1][0]).toFixed(2)}${VOLUME_UNITS[i - 1][1]}`;
+    return `${text}${unit}`;
+  }
+  // Under a thousand: whole units, or two decimals for a fractional volume (a pair in its quote coin).
+  return Number.isInteger(n) ? String(n) : n < 1 ? n.toPrecision(2) : n.toFixed(n < 10 ? 2 : 1);
 }
 
 export function formatChange(value) {

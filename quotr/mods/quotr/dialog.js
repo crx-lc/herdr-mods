@@ -6,7 +6,7 @@ import { v_flex, h_flex } from "gpui-base";
 import { closeOverlay } from "herdr";
 import {
   SESSION_LABELS, formatBandPrice, formatChange, formatPrice, formatStaleDate, formatTime, isCryptoPair,
-  marketSession,
+  marketSession, cleanVolume, formatVolume,
 } from "./quotes.js";
 import { HistoryStore, RANGES, RANGE_SPECS, formatDay, sourceName } from "./history.js";
 import { UTC_ZONE, formatPointTime } from "./readout.js";
@@ -45,6 +45,29 @@ export class DialogParts {
       } finally {
         this.pending.delete(key);
         cx.notify();
+      }
+      // A stock's 1W: its day volumes come after the line is shown, never holding it up. A failure,
+      // a timeout or a refused answer just leaves the period without volume.
+      if (range === "1W" && !isCryptoPair(symbol) && !this.historyErrors[key]) {
+        try {
+          await HISTORY.loadDayVolumes(symbol, range, {
+            fetch: async (url) => {
+              const response = await fetch(url, { headers: HEADERS });
+              return { status: response.status, ok: response.ok, text: await response.text() };
+            },
+            now: () => Date.now(),
+            sleep: (ms) => cx.sleep(ms),
+            yahooRetryAt: this.detail.yahooRetryAt ?? 0,
+            // GPUI's timer, so a hung request can't hold it (cx.sleep would wait on the same task).
+            deadline: (promise, ms) => new Promise((resolve) => {
+              let done = false;
+              const finish = (value) => { if (!done) { done = true; resolve(value); } };
+              cx.timer.after(ms, () => finish(null));
+              promise.then(finish, () => finish(null));
+            }),
+          });
+          cx.notify();
+        } catch { /* no volume for this period */ }
       }
     });
   }
@@ -174,19 +197,27 @@ export class DialogParts {
       s.endsEarly ? `latest bar is ${formatDay(s.lastAt, now)} ${formatTime(s.lastAt)}` : "",
     ].filter(Boolean).join("; ");
 
+    // Volume, only when every bar has its own (history.js): bars under the chart, the period total.
+    const volumeUnit = h.volumeUnit ?? null;
+    const showVolume = Boolean(h.volumes) && s.volume !== null && s.points > 1;
     return [
       s.points > 1
         ? this.chart({ series: h.bars.map((b) => b.close), previousClose: s.first }, color, t, {
           width: "full", height: 140, fill: true,
-          hover: { id: `quotr-chart-${range}`, points: h.bars, zone: h.timeZone ?? UTC_ZONE, daily: Boolean(h.daily), currency: q.currency },
+          hover: { id: `quotr-chart-${range}`, points: h.bars, zone: h.timeZone ?? UTC_ZONE, daily: Boolean(h.daily), currency: q.currency,
+            volumes: showVolume, volumeUnit, byDay: Boolean(h.volumesByDay) },
         })
         : box(`Only one ${name} data point from ${h.source}; no line to draw.`, t.dim),
+      ...(showVolume ? [this.volumeStrip(h.bars, `quotr-chart-${range}`, t, { byDay: Boolean(h.volumesByDay) })] : []),
       h_flex().gap(12)
         .child(v_flex().flex_1().gap(2)
           .child(div().text_size(10.5).text_color(t.dim).child(changeLabel))
           .child(div().font_semibold().text_color(color).child(formatChange(s.change))))
         .child(stat(s.startsLate ? "High shown" : `${range} high`, s.high))
-        .child(stat(s.startsLate ? "Low shown" : `${range} low`, s.low)),
+        .child(stat(s.startsLate ? "Low shown" : `${range} low`, s.low))
+        .when(showVolume, (el) => el.child(v_flex().flex_1().min_w(0).gap(2)
+          .child(div().text_size(10.5).text_color(t.dim).truncate().child(s.startsLate ? "Volume shown" : `${range} volume`))
+          .child(div().font_semibold().truncate().child(`${formatVolume(s.volume)}${volumeUnit ? ` ${volumeUnit}` : ""}`)))),
       div().text_size(11).text_color(t.dim).child(coverage),
       ...(partial ? [div().text_size(11).text_color(t.blocked).child(`Partial period: ${partial}.`)] : []),
       ...notes,
@@ -215,6 +246,11 @@ export class DialogParts {
     const stat = (label, price) => v_flex().flex_1().gap(2)
       .child(div().text_size(10.5).text_color(t.dim).child(label))
       .child(div().font_semibold().child(value(price)));
+    // Volume, a fifth column only when it is known: stocks in shares, pairs in their quote currency.
+    const volume = cleanVolume(q.volume);
+    const volumeStat = (label) => v_flex().flex_1().min_w(0).gap(2)
+      .child(div().text_size(10.5).text_color(t.dim).truncate().child(label))
+      .child(div().font_semibold().truncate().child(crypto ? `${formatVolume(volume)} ${q.currency ?? ""}`.trim() : formatVolume(volume)));
 
     return v_flex().id("quotr-detail").w_full().p(18).gap(14).text_color(t.foreground).text_size(12.5)
       .child(h_flex().items_center().gap(10)
@@ -259,8 +295,10 @@ export class DialogParts {
               : [div().h(60).flex().items_center().justify_center().text_color(t.dim).child("No intraday line yet.")]),
           crypto
             ? h_flex().gap(12).child(stat("24h open", q.open)).child(stat("24h high", q.high)).child(stat("24h low", q.low))
+              .when(volume !== null, (el) => el.child(volumeStat("24h volume")))
             : h_flex().gap(12).child(stat("Open", q.open)).child(stat("High", q.high)).child(stat("Low", q.low))
-              .child(stat("Prev close", q.previousClose)),
+              .child(stat("Prev close", q.previousClose))
+              .when(volume !== null, (el) => el.child(volumeStat("Volume"))),
         ]
         : this.periodParts(q, t, stat))
       .child(div().text_size(11).text_color(t.dim).child(asOf))
