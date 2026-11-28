@@ -4,10 +4,11 @@
 // once per New York day plus every 3 hours (one request at a time across copies, backing off after
 // failures) and kept in localStorage, so reloads and restarts show the clock at once, even offline.
 import { View, div } from "gpui-kit";
-import { h_flex } from "gpui-base";
-import { checking, exec, theme } from "herdr";
+import { h_flex, v_flex } from "gpui-base";
+import { checking, exec, settings, theme } from "herdr";
 import { MARKET_INFO_URL, clockText, formatCountdown, nextTickMs } from "./marketclock.js";
 import { REQUEST_TIMEOUT_MS, ScheduleFeed, USER_AGENT, curlArgs, readCurl } from "./marketfeed.js";
+import { designWidth, layoutClock } from "./widths.js";
 
 const STORE_KEY = "quotr.market.v1";
 const HEADERS = { "User-Agent": USER_AGENT, Accept: "application/json" };
@@ -36,6 +37,8 @@ const MARKET = new ScheduleFeed({
 export class MarketClock extends View {
   init(props, cx) {
     this.band = Boolean(props?.band);
+    // The line's own width (zoom 1), from its first layout on: a narrow panel shortens the line.
+    this.width = null;
     MARKET.restore();
     if (checking()) return;
     cx.spawn(async (cx) => {
@@ -67,16 +70,30 @@ export class MarketClock extends View {
         .child(div().text_color(color).child(state.available ? text.phase : "schedule unavailable"))
         .when(Boolean(short), (el) => el.child(div().text_color(t.dim).child(short)));
     }
-    return h_flex().id("quotr-clock").w_full().min_w(0).items_center().gap(6).text_size(11.5).whitespace_nowrap().tooltip(tip)
-      // "NY Tue Nov 17 14:16": New York's own date, which can differ from the local one.
-      .child(h_flex().flex_none().gap(4).items_center()
-        .child(div().font_semibold().text_color(t.foreground).child("NY"))
-        .child(div().text_color(t.muted).child(text.day))
-        .child(div().font_semibold().text_color(t.foreground).child(state.ny.time)))
-      .child(div().flex_none().text_color(color).child(text.phase))
-      // When the panel is narrow, the event's time gives way first; the countdown always shows.
-      .when(Boolean(text.right), (el) => el
-        .child(div().flex_1().min_w(0).truncate().text_right().text_color(t.muted).child(`${text.event} ·`))
-        .child(div().flex_none().text_color(t.foreground).child(text.countdown)));
+    // Today's line while it fits; then without the date (the tooltip keeps it); then on two lines
+    // (widths.js). The event's time shortens first, as before; the countdown always shows.
+    const fit = layoutClock(this.width, { time: state.ny.time, day: text.day, phase: text.phase, countdown: text.countdown });
+    const measure = (el) => el.on_size_change((size, cx) => {
+      const width = designWidth(size, settings()?.zoom);
+      if (width !== this.width) { this.width = width; cx.notify(); }
+    });
+    const time = h_flex().flex_none().gap(4).items_center()
+      .child(div().font_semibold().text_color(t.foreground).child("NY"))
+      .when(fit.day, (el) => el.child(div().text_color(t.muted).child(text.day)))
+      .child(div().font_semibold().text_color(t.foreground).child(state.ny.time));
+    const event = (el) => el.when(Boolean(text.right), (el) => el
+      .child(div().flex_1().min_w(0).truncate().text_right().text_color(t.muted).child(`${text.event} ·`))
+      .child(div().flex_none().text_color(t.foreground).child(text.countdown)));
+    if (fit.wrap) {
+      return measure(v_flex().id("quotr-clock").w_full().min_w(0).gap(2).text_size(11.5).whitespace_nowrap().tooltip(`${text.day} · ${tip}`))
+        .child(h_flex().min_w(0).items_center().gap(6).child(time)
+          .child(div().flex_1().min_w(0).truncate().text_color(color).child(text.phase)))
+        .when(Boolean(text.right), (el) => el.child(event(h_flex().min_w(0).items_center().gap(6))));
+    }
+    // "NY Tue Nov 17 14:16": New York's own date, which can differ from the local one.
+    return event(measure(h_flex().id("quotr-clock").w_full().min_w(0).items_center().gap(6).text_size(11.5).whitespace_nowrap()
+      .tooltip(fit.day ? tip : `${text.day} · ${tip}`))
+      .child(time)
+      .child(div().flex_none().text_color(color).child(text.phase)));
   }
 }

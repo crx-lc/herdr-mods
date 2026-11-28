@@ -5,11 +5,12 @@
 // mod, given the quote in its props.
 import { View, div, image, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
-import { nextCommand, openOverlay, props, setShared, shared, theme, checking } from "herdr";
+import { nextCommand, openOverlay, props, setShared, shared, theme, checking, settings } from "herdr";
 import { Watchlist, INTERVAL_MS } from "./watchlist.js";
 import { formatBandPrice, formatChange, formatPrice, formatStaleDate, isCryptoPair, shownQuote } from "./quotes.js";
 import { createTickMemory, primeTicks, takeTicks } from "./ticks.js";
 import { MarketClock } from "./clockview.js";
+import { ROW, WIDTHS, designWidth, layoutHeader, layoutRows, priceAtoms } from "./widths.js";
 import {
   STORE, RENAMED_KEYS, HEADERS, BAND_HEIGHT, LOGO, SESSION_ICONS, brand, stamp, loadSnapshot, saveSnapshot, LOGOS,
 } from "./context.js";
@@ -36,6 +37,8 @@ export default class Quotr extends View {
       return;
     }
     this.size = null;
+    // The panel's width in the px the mod writes (zoom 1); null until the first layout (widths.js).
+    this.width = null;
     // The market clock, one for each layout (an entity mounts once per render).
     this.clockPanel = cx.new(MarketClock, { band: false });
     this.clockBand = cx.new(MarketClock, { band: true });
@@ -164,7 +167,7 @@ export default class Quotr extends View {
     this.watch.sync();
     const root = (this.size && this.size.height < BAND_HEIGHT ? h_flex() : v_flex())
       .id("quotr").size_full().bg(t.chrome).text_color(t.foreground).text_size(12.5)
-      .on_size_change((size, cx) => { this.size = size; cx.notify(); });
+      .on_size_change((size, cx) => { this.size = size; this.width = designWidth(size, settings()?.zoom); cx.notify(); });
     return this.size && this.size.height < BAND_HEIGHT ? this.band(root, t) : this.panel(root, t);
   }
 
@@ -206,8 +209,8 @@ export default class Quotr extends View {
       .child(one("bottom", "⇊", count - 1, index < count - 1, "Move to bottom"));
   }
 
-  button(t, id, label, onClick) {
-    return h_flex().id(id).flex_none().h(22).px(8).items_center().rounded(5).border_1().border_color(t.border)
+  button(t, id, label, onClick, compact = false) {
+    return h_flex().id(id).flex_none().h(22).px(compact ? 5 : 8).items_center().rounded(5).border_1().border_color(t.border)
       .text_size(11).text_color(t.muted).cursor_pointer().hover((s) => s.bg(t.hover).text_color(t.foreground))
       .on_click((_e, cx) => onClick(cx)).child(label);
   }
@@ -219,24 +222,29 @@ export default class Quotr extends View {
     const statusColor = paused ? t.blocked : w.loading ? t.working : t.done;
     const status = paused ? "Auto-refresh paused" : w.loading ? "Refreshing quotes…" : `Auto-refresh every ${INTERVAL_MS / 1000}s`;
     const rateLimited = w.message.includes("rate limited");
+    // How the content fits the panel's width (widths.js): the header's buttons tighten, then the
+    // "Quotr" word goes, then they wrap; each row gives up its chart, then its logo, then moves its
+    // values under the symbol. Never wider than the maximum useful width.
+    const showReorder = symbols.length > 1 || this.reordering;
+    const fit = layoutHeader(this.width, [...(showReorder ? [this.reordering ? "Done" : "Reorder"] : []), "Refresh", paused ? "Resume" : "Pause"]);
 
     const header = v_flex().flex_none().px(12).pt(12).gap(6)
-      .child(h_flex().items_center().gap(7)
+      .child(h_flex().items_center().gap(fit.compact ? 4 : 7).when(fit.wrap, (el) => el.flex_wrap().gap_y(4))
         .child(image(LOGO).flex_none().w(18).h(18).rounded(5))
-        .child(div().flex_none().text_size(13.5).font_semibold().text_color(brand()).child("Quotr"))
+        .when(fit.title, (el) => el.child(div().flex_none().text_size(13.5).font_semibold().text_color(brand()).child("Quotr")))
         .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.dim)
           .child(`${symbols.length} ${symbols.length === 1 ? "ticker" : "tickers"}`))
         // Reorder mode (the rows' sparklines become move buttons).
-        .when(symbols.length > 1 || this.reordering, (el) => el.child(this.button(t, "quotr-reorder",
-          this.reordering ? "Done" : "Reorder", (cx) => { this.reordering = !this.reordering; this.notice = ""; cx.notify(); })))
-        .child(this.button(t, "quotr-refresh", "Refresh", (cx) => { this.watch.refreshNow(); cx.notify(); }))
-        .child(this.button(t, "quotr-pause", paused ? "Resume" : "Pause", (cx) => this.act(cx, () => this.togglePause()))))
+        .when(showReorder, (el) => el.child(this.button(t, "quotr-reorder",
+          this.reordering ? "Done" : "Reorder", (cx) => { this.reordering = !this.reordering; this.notice = ""; cx.notify(); }, fit.compact)))
+        .child(this.button(t, "quotr-refresh", "Refresh", (cx) => { this.watch.refreshNow(); cx.notify(); }, fit.compact))
+        .child(this.button(t, "quotr-pause", paused ? "Resume" : "Pause", (cx) => this.act(cx, () => this.togglePause()), fit.compact)))
       // The New York market clock, between the title and the refresh status.
       .child(this.clockPanel)
-      .child(h_flex().items_center().gap(6)
+      .child(h_flex().min_w(0).items_center().gap(6)
         .child(div().flex_none().w(6).h(6).rounded_full().bg(statusColor)
           .when(w.loading, (el) => el.loop("opacity", { from: 0.35, to: 1, period: 1200 })))
-        .child(div().text_size(11.5).text_color(statusColor).child(status)));
+        .child(div().min_w(0).truncate().text_size(11.5).text_color(statusColor).child(status)));
 
     const field = v_flex().flex_none().px(12).pt(10).gap(6)
       .child(Input.new(this.input).h(30).px(8).rounded(6).border_1()
@@ -247,14 +255,26 @@ export default class Quotr extends View {
 
     if (this.reordering && symbols.length < 2) this.reordering = false;
     const reordering = this.reordering;
-    const rows = symbols.map((symbol, index) => {
+    // What each row shows, for its width budget: the same texts the row draws.
+    const shown = symbols.map((symbol) => {
       const stored = w.quotes[symbol];
-      // The row shows a stock's latest trade, extended hours included; the dialog gets the stored quote.
       const quote = stored ? shownQuote(stored) : undefined;
-      // Pre-market or after hours: an icon beside the price, its tooltip saying what the price is.
-      const session = quote?.shownSession === "pre" || quote?.shownSession === "post" ? quote.shownSession : null;
-      const sessionNote = session ? extendedNote(stored) : null;
       const failed = w.errors[symbol];
+      const session = quote?.shownSession === "pre" || quote?.shownSession === "post" ? quote.shownSession : null;
+      return {
+        stored, quote, failed, session,
+        price: quote ? formatPrice(quote) : failed ? "Unavailable" : paused ? "Not fetched" : "Waiting…",
+        change: quote ? formatChange(quote.changePercent) : "—",
+      };
+    });
+    const fits = layoutRows(this.width, symbols.map((symbol, i) => ({ symbol, price: shown[i].price, change: shown[i].change,
+      session: Boolean(shown[i].session && extendedNote(shown[i].stored)), chart: Boolean(shown[i].quote) })), { reordering });
+    const rows = symbols.map((symbol, index) => {
+      // The row shows a stock's latest trade, extended hours included; the dialog gets the stored quote.
+      const { stored, quote, failed, session, price, change } = shown[index];
+      // Pre-market or after hours: an icon beside the price, its tooltip saying what the price is.
+      const sessionNote = session ? extendedNote(stored) : null;
+      const layout = fits.rows[index];
       const stale = quote ? formatStaleDate(quote.timestamp, now) : "";
       // When this row's value was last fetched, if it is older than a few refreshes
       // (restored after a reload, paused, or failing): never presented as current.
@@ -265,46 +285,61 @@ export default class Quotr extends View {
         quote.delaySeconds ? `Delay ${Math.ceil(quote.delaySeconds / 60)}m` : "",
         old ? `Updated ${stamp(quote.fetchedAt, now)}` : ""].filter(Boolean).join(" · ") : "";
       const color = quote ? this.changeColor(t, quote.changePercent) : t.dim;
+      // The asset's logo (or its initial) beside the ticker; no extra height.
+      const identity = h_flex().flex_1().min_w(0).gap(ROW.logoGap).items_center()
+        .when(layout.logo, (el) => el.child(this.assetIcon(symbol, ROW.logo, t)))
+        .child(v_flex().flex_1().min_w(0).gap(1)
+          // The width budget keeps the symbol whole; truncate only guards a font wider than the estimate.
+          .child(div().font_semibold().whitespace_nowrap().truncate().child(symbol))
+          .when(Boolean(meta), (el) => el.child(div().text_size(11).text_color(t.dim).truncate().child(meta))));
+      const values = v_flex().flex_none().gap(1)
+        .when(!layout.stacked, (el) => el.w(layout.values).ml(ROW.gap))
+        .when(layout.stacked, (el) => el.w_full().items_end())
+        // The last value stays during a refresh; a small pulsing dot marks the update in flight.
+        // "Waiting…" only when there has never been a quote for this row.
+        .child(h_flex().justify_end().items_center().gap(5)
+          // One slot left of the price: the update dot during a refresh, else ▲/▼ since the
+          // previous quote (until the next one).
+          .when(updating && Boolean(quote), (el) => el.child(div().flex_none().w(5).h(5).rounded_full().bg(t.working)
+            .loop("opacity", { from: 0.25, to: 0.9, period: 1200 })))
+          .when(Boolean(sessionNote), (el) => el.child(div().id(`quotr-session-${symbol}`).flex_none().tooltip(sessionNote)
+            .accessibility_label(sessionNote)
+            .child(svg(SESSION_ICONS[session]).size(11).text_color(this.sessionColor(t, session)))))
+          .when(!updating && Boolean(quote) && (flash?.dir === "up" || flash?.dir === "down"), (el) => el.child(
+            div().flex_none().text_size(9).text_color(flash.dir === "up" ? t.ansi2 : t.ansi1)
+              .child(flash.dir === "up" ? "▲" : "▼")))
+          // A tint behind the price flashes on the change and fades out.
+          .child(div().relative().px(3).rounded(4)
+            .when(Boolean(quote) && (flash?.dir === "up" || flash?.dir === "down"), (el) => el.child(
+              // A new id per tick mounts a fresh tint at full strength; the next redraw targets 0
+              // and the transition fades it natively.
+              div().id(`quotr-flash-${symbol}-${flash.id}`).absolute().top(0).left(0).size_full().rounded(4)
+                .bg(flash.dir === "up" ? t.ansi2 : t.ansi1).opacity(flash.on ? 0.32 : 0)
+                .transition("opacity", { duration: 1600, easing: "ease-out" })))
+            // Under the symbol a price may still not fit one line (`split`): then the number and its
+            // currency take a line each, never broken inside either.
+            .child((layout.split ? v_flex().items_end() : h_flex().justify_end()).id(`quotr-price-${symbol}`).relative()
+              .whitespace_nowrap().text_color(quote && !failed ? t.foreground : t.dim)
+              .when(Boolean(layout.split), (el) => el.children(priceAtoms(price).map((part) => div().child(part))))
+              .when(!layout.split, (el) => el.child(price)))))
+        .child(div().text_right().whitespace_nowrap().text_size(11).text_color(color).child(change));
+      // The move buttons (reordering) or the chart, beside the symbol; the values beside them or, when the
+      // row is stacked, under the symbol.
+      const buttons = reordering ? this.moveButtons(symbol, index, symbols.length, t) : null;
+      const buttonsBelow = layout.slotBelow ? buttons : null;
+      const line = h_flex().items_center().min_w(0).child(identity)
+        .when(Boolean(buttons) && !buttonsBelow, (el) => el.child(buttons.ml(ROW.clear)))
+        .when(Boolean(quote) && !reordering && layout.chart, (el) => el.child(this.watchlistChart(stored, color, t, now, { failed: Boolean(failed) }).ml(ROW.clear)))
+        .when(!layout.stacked, (el) => el.child(values));
       return h_flex().pl(12).pr(10).gap(6).items_center().hover((s) => s.bg(t.hover))
         // The row opens the ticker's day; × sits beside it, not inside it.
         .child(v_flex().id(`quotr-row-${symbol}`).flex_1().min_w(0).py(7).gap(3)
           .when(Boolean(quote) && !reordering, (el) => el.cursor_pointer())
           // In reorder mode a click on the row does nothing, so a missed arrow never opens a dialog.
           .on_click(() => { if (!this.reordering) this.openDetail(symbol); })
-          .child(h_flex().gap(10).items_center()
-            // The asset's logo (or its initial) beside the ticker; no extra height.
-            .child(h_flex().flex_1().min_w(0).gap(8).items_center()
-              .child(this.assetIcon(symbol, 31.5, t))
-              .child(v_flex().flex_1().min_w(0).gap(1)
-                .child(div().font_semibold().truncate().child(symbol))
-                .when(Boolean(meta), (el) => el.child(div().text_size(11).text_color(t.dim).truncate().child(meta)))))
-            .when(reordering, (el) => el.child(this.moveButtons(symbol, index, symbols.length, t)))
-            .when(Boolean(quote) && !reordering, (el) => el.child(this.watchlistChart(stored, color, t, now, { failed: Boolean(failed) })))
-            .child(v_flex().flex_none().w(108).gap(1)
-              // The last value stays during a refresh; a small pulsing dot marks the update in flight.
-              // "Waiting…" only when there has never been a quote for this row.
-              .child(h_flex().justify_end().items_center().gap(5)
-                .when(updating && Boolean(quote), (el) => el.child(div().flex_none().w(5).h(5).rounded_full().bg(t.working)
-                  .loop("opacity", { from: 0.25, to: 0.9, period: 1200 })))
-                .when(Boolean(sessionNote), (el) => el.child(div().id(`quotr-session-${symbol}`).flex_none().tooltip(sessionNote)
-                  .accessibility_label(sessionNote)
-                  .child(svg(SESSION_ICONS[session]).size(11).text_color(this.sessionColor(t, session)))))
-                // ▲/▼ since the previous quote (until the next one), and a tint
-                // behind the price that flashes on the change and fades out.
-                .when(Boolean(quote) && (flash?.dir === "up" || flash?.dir === "down"), (el) => el.child(
-                  div().flex_none().text_size(9).text_color(flash.dir === "up" ? t.ansi2 : t.ansi1)
-                    .child(flash.dir === "up" ? "▲" : "▼")))
-                .child(div().relative().px(3).rounded(4)
-                  .when(Boolean(quote) && (flash?.dir === "up" || flash?.dir === "down"), (el) => el.child(
-                    // A new id per tick mounts a fresh tint at full strength; the next redraw targets 0
-                    // and the transition fades it natively.
-                    div().id(`quotr-flash-${symbol}-${flash.id}`).absolute().top(0).left(0).size_full().rounded(4)
-                      .bg(flash.dir === "up" ? t.ansi2 : t.ansi1).opacity(flash.on ? 0.32 : 0)
-                      .transition("opacity", { duration: 1600, easing: "ease-out" })))
-                  .child(div().relative().text_right().text_color(quote && !failed ? t.foreground : t.dim)
-                    .child(quote ? formatPrice(quote) : failed ? "Unavailable" : paused ? "Not fetched" : "Waiting…"))))
-              .child(div().text_right().text_size(11).text_color(color)
-                .child(quote ? formatChange(quote.changePercent) : "—"))))
+          .child(layout.stacked
+            ? v_flex().gap(ROW.stackGap).child(line).when(Boolean(buttonsBelow), (el) => el.child(buttonsBelow)).child(values)
+            : line)
           .when(Boolean(failed), (el) => el.child(div().text_size(11).text_color(t.blocked)
             .child(`${quote ? `Stale · last updated ${stamp(quote.fetchedAt, now)} · ` : ""}${failed}`))))
         .child(div().id(`quotr-remove-${symbol}`).flex_none().w(14).text_right().text_color(t.dim).cursor_pointer()
@@ -326,7 +361,9 @@ export default class Quotr extends View {
           : "Yahoo Finance · Change since the last close, extended hours included · Exchange delays vary"))
       .children(this.logoCredits(symbols, t));
 
-    return root.child(header).child(field).child(list).child(footer);
+    // Above the maximum useful width the content stops growing; the extra width stays empty.
+    return root.child(v_flex().id("quotr-content").flex_1().min_h(0).w_full().max_w(WIDTHS.maximum)
+      .child(header).child(field).child(list).child(footer));
   }
 }
 
