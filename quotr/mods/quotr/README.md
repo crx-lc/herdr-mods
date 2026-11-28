@@ -183,8 +183,9 @@ personal layout. After that the layout decides: the width you set is kept throug
 and updates, and a new version of Quotr does not apply 410 again. This was checked on Herdr 0.1.18 on
 Windows.
 
-**How the content fits.** The symbol, the price and the change are never cut or split: a number keeps
-its sign, digits, grouping, decimals, percent sign and currency together. Only the second line (the
+**How the content fits.** With Herdr's default UI font, the symbol, the price and the change are
+never cut or split: a number keeps its sign, digits, grouping, decimals, percent sign and currency
+together. Only the second line (the
 company name, "As of …") shortens, with an ellipsis. Each row fits its own text. When a row is too
 narrow for everything, it gives way in a fixed order: first the chart, then the logo, then the price
 and change move under the symbol. If the price is still too wide there, its number and its currency
@@ -197,8 +198,10 @@ moves the date into its tooltip below about 253 px and uses two lines below abou
 
 **Limits.** The fit uses an estimate of how wide Herdr's default UI font draws each character. It was
 measured on Windows and rounded up, so a row gives way a pixel or two early rather than crowd its
-neighbour. With a wider `ui_font` the estimate can fall short. In that case a symbol ends in an
-ellipsis rather than overlapping the chart. Below about 280 px, the hint text inside the add field is
+neighbour. The guarantee above holds for that font only. With a wider `ui_font` the estimate can
+fall short: a symbol then ends in an ellipsis rather than overlapping the chart, but a price or a
+percentage has no such fallback. Its column keeps the estimated width, so the number can run into the
+chart or past the column's edge. Below about 280 px, the hint text inside the add field is
 cut by the field's edge. Below about 130 px, a long symbol or price can still reach the panel's edge.
 The update dot and the ▲/▼ of the last tick share one slot left of the price: during a refresh the
 dot shows in place of the arrow, so a row keeps its width.
