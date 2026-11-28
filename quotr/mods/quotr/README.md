@@ -47,6 +47,20 @@ Compared with Pulse at `99f70b2c`:
   volume (Yahoo's `regularMarketVolume`, e.g. `267.8M`), a pair's 24h volume in its quote currency
   (Binance's `quoteVolume`, e.g. `1.48B USDT`). Shown only when the source gives a number above
   zero; no column otherwise.
+- Relative volume on 1D, a small line under that Volume stat (`1.4× avg`, details in its tooltip):
+  the day's volume against the average full day of the last month, from full days only. It uses
+  the 1M history the dialog has already loaded (open the 1M tab once); no request is made for it,
+  and without that month there is no line. Full days are proved by when the data was fetched, not
+  by the clock. A stock's figure is its regular session against the average of the month's full
+  sessions before it. It appears only when the quote was fetched after that session closed (plus the
+  exchange's delay). A quote fetched while it traded stays partial, so there is no line, however
+  late the dialog is drawn. A session counts in the average only if the month was fetched after its
+  exchange date ended. A pair's figure is Binance's rolling 24h volume, when its window spans the full
+  24 hours, against the average UTC day of the month's 4-hour klines. A completed UTC day is one whose
+  last kline had closed when the month was fetched, all six present. Missing, zero or
+  malformed volumes, a month whose volumes don't hold up, one day listed with two volumes, a
+  month's bar for the day above the day's own total, a currency that doesn't match, or fewer than
+  10 full days to average: no line rather than a wrong number (`relvolume.js`).
 - Volume on 1W · 1M · 1Y, where the data holds up: faint bars from zero under the chart, one per
   point of the line, the hovered one highlighted and its volume in the hover readout (`Vol 12.3M`),
   and the period's total as a fourth stat (`1M volume`, or `Volume shown` for a partial period).
@@ -172,8 +186,9 @@ personal layout. After that the layout decides: the width you set is kept throug
 and updates, and a new version of Quotr does not apply 410 again. This was checked on Herdr 0.1.18 on
 Windows.
 
-**How the content fits.** The symbol, the price and the change are never cut or split: a number keeps
-its sign, digits, grouping, decimals, percent sign and currency together. Only the second line (the
+**How the content fits.** With Herdr's default UI font, the symbol, the price and the change are
+never cut or split: a number keeps its sign, digits, grouping, decimals, percent sign and currency
+together. Only the second line (the
 company name, "As of …") shortens, with an ellipsis. Each row fits its own text. When a row is too
 narrow for everything, it gives way in a fixed order: first the chart, then the logo, then the price
 and change move under the symbol. If the price is still too wide there, its number and its currency
@@ -186,8 +201,10 @@ moves the date into its tooltip below about 253 px and uses two lines below abou
 
 **Limits.** The fit uses an estimate of how wide Herdr's default UI font draws each character. It was
 measured on Windows and rounded up, so a row gives way a pixel or two early rather than crowd its
-neighbour. With a wider `ui_font` the estimate can fall short. In that case a symbol ends in an
-ellipsis rather than overlapping the chart. Below about 280 px, the hint text inside the add field is
+neighbour. The guarantee above holds for that font only. With a wider `ui_font` the estimate can
+fall short: a symbol then ends in an ellipsis rather than overlapping the chart, but a price or a
+percentage has no such fallback. Its column keeps the estimated width, so the number can run into the
+chart or past the column's edge. Below about 280 px, the hint text inside the add field is
 cut by the field's edge. Below about 130 px, a long symbol or price can still reach the panel's edge.
 The update dot and the ▲/▼ of the last tick share one slot left of the price: during a refresh the
 dot shows in place of the arrow, so a row keeps its width.
