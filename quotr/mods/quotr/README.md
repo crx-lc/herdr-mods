@@ -150,6 +150,44 @@ or copy this folder to `~/.config/herdr-app/mods/quotr/`. Then
   in the mod's excluded .cache/ directory. Installing the source does not replace that saved state.
 - **Keys:** `quotr.refresh` and `quotr.pause` can be bound in Herdr's `keys.json`.
 
+## Panel width
+
+Three widths, in logical pixels at zoom 1 (Herdr's zoom scales them with everything else):
+
+| Width | px | What it means |
+|---|---:|---|
+| Minimum | 280 | The narrowest width Quotr is designed for. An ordinary row (a short ticker such as AAPL with a price under 1,000) still shows its logo, symbol, chart, price and change; the header's buttons tighten and the clock keeps its line. |
+| Default | 320 | What `mod.json` asks for the first time Herdr docks Quotr. |
+| Maximum useful | 350 | The content stops growing here. A wider panel leaves the extra width empty. |
+
+**What Quotr controls, and what it doesn't.** These widths are properties of Quotr's content, not
+limits Herdr enforces. You can still drag the pane narrower than 280 or wider than 350, and a small
+window can be narrower than the panel. Quotr never resizes its pane and never changes a layout.
+`mod.json`'s `size` is a request Herdr honours once, when it first sees the mod and docks it into a
+personal layout. After that the layout decides: the width you set is kept through reloads, restarts
+and updates, and a new version of Quotr does not apply 320 again. This was checked on Herdr 0.1.18 on
+Windows.
+
+**How the content fits.** The symbol, the price and the change are never cut or split: a number keeps
+its sign, digits, grouping, decimals, percent sign and currency together. Only the second line (the
+company name, "As of …") shortens, with an ellipsis. Each row fits its own text. When a row is too
+narrow for everything, it gives way in a fixed order: first the chart, then the logo, then the price
+and change move under the symbol. If the price is still too wide there, its number and its currency
+go on separate lines. A long symbol or price gives way sooner than a short one. For example, BTC/USDT at
+59,565.51 USDT needs about 336 px for its chart, and ^GSPC at 6,812.34 needs about 296. While you
+reorder, the move buttons never give way: the logo goes first instead. The header tightens its
+buttons below about 282 px and drops the word "Quotr" below about 249 (the logo stays). Below about
+208 the buttons wrap onto a second line. The clock moves the date into its tooltip below about 253 px
+and uses two lines below about 190.
+
+**Limits.** The fit uses an estimate of how wide Herdr's default UI font draws each character. It was
+measured on Windows and rounded up, so a row gives way a pixel or two early rather than crowd its
+neighbour. With a wider `ui_font` the estimate can fall short. In that case a symbol ends in an
+ellipsis rather than overlapping the chart. Below the minimum, the hint text inside the add field is
+cut by the field's edge. Below about 130 px, a long symbol or price can still reach the panel's edge.
+The update dot and the ▲/▼ of the last tick share one slot left of the price: during a refresh the
+dot shows in place of the arrow, so a row keeps its width.
+
 ## Data sources and limits
 
 - **Quotes:** Yahoo Finance's chart endpoint (unofficial, may be rate-limited or unavailable in some

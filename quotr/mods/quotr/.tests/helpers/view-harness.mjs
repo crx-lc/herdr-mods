@@ -6,6 +6,7 @@ import * as readout from "../../readout.js";
 import * as extended from "../../extended.js";
 import * as spark from "../../sparkline.js";
 import * as history from "../../history.js";
+import * as widths from "../../widths.js";
 export function element(kind = "div") {
   const target = { kind, nodes: [], calls: [] };
   const proxy = new Proxy(target, { get(o, key) {
@@ -26,7 +27,9 @@ export function walk(tree) {
   return tree && typeof tree === "object" ? [tree, ...(tree.nodes ?? []).flatMap(walk)] : tree == null ? [] : [tree];
 }
 export async function views() {
-  const bindings = { ...quotes, ...readout, ...extended, ...spark, ...history,
+  const bindings = { ...quotes, ...readout, ...extended, ...spark, ...history, ...widths,
+    // Herdr's settings: zoom 1, as the widths are written.
+    settings: () => ({ zoom: 1 }),
     // The dialog's Herdr side: no history or extended hours loaded, nothing to close.
     HISTORY: { peek: () => historyStub.entry, peekExtended: () => null, load: async () => {}, loadExtended: async () => {} },
     closeOverlay: () => {}, HEADERS: {},
