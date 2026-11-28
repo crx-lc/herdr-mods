@@ -50,11 +50,14 @@ Compared with Pulse at `99f70b2c`:
 - Relative volume on 1D, a small line under that Volume stat (`1.4× avg`, details in its tooltip):
   the day's volume against the average full day of the last month, from full days only. It uses
   the 1M history the dialog has already loaded (open the 1M tab once); no request is made for it,
-  and without that month there is no line. A stock's figure is its regular session against the
-  average of the month's full sessions before it, and appears only once that session has closed:
-  while it trades, a partial day is never compared, so there is no line. A pair's is Binance's
-  rolling 24h volume (always a whole 24 hours) against the average UTC day of the month's 4-hour
-  klines, counting only days with all six klines closed, never the current one. Missing, zero or
+  and without that month there is no line. Full days are proved by when the data was fetched, not
+  by the clock. A stock's figure is its regular session against the average of the month's full
+  sessions before it. It appears only when the quote was fetched after that session closed (plus the
+  exchange's delay). A quote fetched while it traded stays partial, so there is no line, however
+  late the dialog is drawn. A session counts in the average only if the month was fetched after its
+  exchange date ended. A pair's figure is Binance's rolling 24h volume, when its window spans the full
+  24 hours, against the average UTC day of the month's 4-hour klines. A completed UTC day is one whose
+  last kline had closed when the month was fetched, all six present. Missing, zero or
   malformed volumes, a month whose volumes don't hold up, one day listed with two volumes, a
   month's bar for the day above the day's own total, a currency that doesn't match, or fewer than
   10 full days to average: no line rather than a wrong number (`relvolume.js`).

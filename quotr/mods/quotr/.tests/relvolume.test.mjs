@@ -30,8 +30,10 @@ function stockMonth({ volume = () => 100e6, times = sessions(), extra = [], now 
 }
 // As HistoryStore keeps it.
 const entry = (history, now) => ({ history, summary: summarize(history, now), fetchedAt: now });
-// `stockQuote()` is a 150M session; `stockQuote(x)` any volume, undefined included.
-const stockQuote = (...given) => ({ symbol: "SAMPLE", currency: "USD", volume: given.length ? given[0] : 150e6, session: SESSION });
+// `stockQuote()` is a 150M session, fetched an hour after its close; `stockQuote(x)` any volume,
+// undefined included.
+const stockQuote = (...given) => ({ symbol: "SAMPLE", currency: "USD", volume: given.length ? given[0] : 150e6, session: SESSION,
+  fetchedAt: AFTER, delaySeconds: 0 });
 
 // A pair: 4-hour klines over the month to `now`, `volume(t)` in the quote currency each.
 const PNOW = Date.UTC(2026, 10, 25, 13, 0);
@@ -44,7 +46,9 @@ function pairMonth({ volume = () => 10e6, now = PNOW, skip = () => false, unit =
   }
   return entry(decodeBinanceHistory(`COIN/${unit}`, "1M", ok(klines), window), now);
 }
-const pairQuote = (...given) => ({ symbol: "COIN/USDT", currency: "USDT", volume: given.length ? given[0] : 90e6, session: null });
+// Binance's rolling 24h: openTime to closeTime, a whole day.
+const pairQuote = (...given) => ({ symbol: "COIN/USDT", currency: "USDT", volume: given.length ? given[0] : 90e6, session: null,
+  timestamp: PNOW, windowStart: PNOW - DAY, fetchedAt: PNOW });
 
 test("ratios are written short", () => {
   assert.equal(formatRatio(1.42), "1.4× avg");
@@ -79,14 +83,43 @@ test("a stock: the session's own day never enters the average, whatever its bar 
   assert.equal(relativeVolume(stockQuote(150e6), later, AFTER + DAY).average, 100e6);
 });
 
-test("a stock: while its session trades there is no figure at all, never a partial one", () => {
+test("a stock: a quote fetched while its session traded stays partial; no figure, however late it is drawn", () => {
   const month = stockMonth();
-  for (const now of [SESSION[0], SESSION[0] + H, SESSION[1] - 1]) assert.equal(relativeVolume(stockQuote(), month, now), null);
-  assert.ok(relativeVolume(stockQuote(), month, SESSION[1]));
-  // Without the session's times there is no telling: nothing.
+  // The review's case: fetched two hours into the session at 20M, drawn after the close. On the first
+  // version this read 0.2× avg; a partial day is never compared.
+  const early = { ...stockQuote(20e6), fetchedAt: SESSION[0] + 2 * H };
+  for (const now of [SESSION[0] + 2 * H, SESSION[1] - 1, SESSION[1], AFTER, AFTER + 3 * DAY]) {
+    assert.equal(relativeVolume(early, month, now), null, `drawn at ${new Date(now).toISOString()}`);
+  }
+  // Fetched after the close: complete.
+  assert.ok(relativeVolume({ ...early, volume: 150e6, fetchedAt: SESSION[1] }, month, AFTER));
+  // The exchange's delay counts: 15 minutes late, a quote fetched 5 minutes after the close is still partial.
+  assert.equal(relativeVolume({ ...stockQuote(), fetchedAt: SESSION[1] + 5 * 60_000, delaySeconds: 900 }, month, AFTER), null);
+  assert.ok(relativeVolume({ ...stockQuote(), fetchedAt: SESSION[1] + 16 * 60_000, delaySeconds: 900 }, month, AFTER));
+  // Without its fetch time or the session's times there is no telling: nothing.
+  for (const fetchedAt of [undefined, null, NaN, "late"]) assert.equal(relativeVolume({ ...stockQuote(), fetchedAt }, month, AFTER), null);
   for (const session of [undefined, null, [], [SESSION[1], SESSION[0]], ["a", "b"]]) {
     assert.equal(relativeVolume({ ...stockQuote(), session }, month, AFTER), null, JSON.stringify(session));
   }
+});
+
+test("a stock: a month fetched while a session traded never counts that session as full", () => {
+  // The review's case: 21 full sessions of 100M, then Tuesday's bar caught two and a half hours in at
+  // 10M; Wednesday's closed session is 150M. On the first version: 1.6× avg. Right: 1.5× avg.
+  const tuesday = Date.UTC(2026, 10, 24, 14, 30);
+  const fetchedAt = tuesday + 2.5 * H;
+  const before = sessions().filter((t) => t < tuesday);
+  assert.equal(before.length, 21);
+  const month = stockMonth({ times: [...before, tuesday], volume: (t) => (t === tuesday ? 10e6 : 100e6), now: fetchedAt });
+  const r = relativeVolume(stockQuote(150e6), month, AFTER);
+  assert.equal(r.days, 21);
+  assert.equal(r.average, 100e6);
+  assert.equal(r.text, "1.5× avg");
+  // The same month fetched after Tuesday's exchange date ended (midnight EST) counts it.
+  const later = stockMonth({ times: [...before, tuesday], now: Date.UTC(2026, 10, 25, 5, 0) });
+  assert.equal(relativeVolume(stockQuote(150e6), later, AFTER).days, 22);
+  // Without its fetch time, nothing.
+  for (const at of [undefined, null, NaN]) assert.equal(relativeVolume(stockQuote(), { ...month, fetchedAt: at }, AFTER), null);
 });
 
 test("a stock: a missing, zero or malformed day volume gives nothing", () => {
@@ -164,12 +197,29 @@ test("a pair: a day missing a kline is not a full day; the others still count", 
   assert.equal(r.average, 60e6);
 });
 
-test("a pair: a day whose last kline closed after the month was fetched isn't full", () => {
-  // Fetched at 23:00 UTC: that day's 20:00 kline is still open.
-  const now = Date.UTC(2026, 10, 25, 23, 0);
-  const month = pairMonth({ now });
-  assert.equal(relativeVolume(pairQuote(90e6), month, now).days, 30);
-  assert.equal(relativeVolume(pairQuote(90e6), { ...month, fetchedAt: Date.UTC(2026, 10, 26) }, now).days, 31);
+test("a pair: a completed day is a UTC day whose last kline had closed when the month was fetched", () => {
+  // Fetched at 23:00 UTC: that day's 20:00 kline is still open, so the day isn't full...
+  const fetched = Date.UTC(2026, 10, 25, 23, 0);
+  const month = pairMonth({ now: fetched, volume: (t) => (t >= Date.UTC(2026, 10, 25) && t < Date.UTC(2026, 10, 25, 20) ? 1e6 : 10e6) });
+  const quote = { ...pairQuote(90e6), timestamp: fetched, windowStart: fetched - DAY };
+  assert.equal(relativeVolume(quote, month, fetched).days, 30);
+  // ...and stays not full when the same cached month is drawn the next day or later.
+  for (const now of [Date.UTC(2026, 10, 26, 1), Date.UTC(2026, 10, 27, 12)]) {
+    const r = relativeVolume(quote, month, now);
+    assert.equal(r.days, 30);
+    assert.equal(r.average, 60e6, "the partial day's small klines never enter the average");
+  }
+  // A month fetched once that day was over counts it.
+  assert.equal(relativeVolume(quote, { ...month, fetchedAt: Date.UTC(2026, 10, 26) }, Date.UTC(2026, 10, 26)).days, 31);
+  for (const at of [undefined, null, NaN]) assert.equal(relativeVolume(quote, { ...month, fetchedAt: at }, fetched), null);
+});
+
+test("a pair: the 24h volume counts only when its window spans the whole 24 hours", () => {
+  const month = pairMonth();
+  assert.ok(relativeVolume(pairQuote(90e6), month, PNOW));
+  for (const windowStart of [undefined, null, 0, PNOW - 20 * H, PNOW]) {
+    assert.equal(relativeVolume({ ...pairQuote(90e6), windowStart }, month, PNOW), null, String(windowStart));
+  }
 });
 
 test("a pair: a malformed kline volume, a malformed 24h volume or another currency gives nothing", () => {
@@ -208,7 +258,7 @@ test("the dialog: a quiet line under the 1D volume, only with the month loaded; 
   const days = [];
   for (let i = 1; i <= 25; i++) days.push(session[0] - i * DAY);
   const quote = { ...stockQuote(150e6), name: "Sample Holdings", price: 50, changePercent: 1, timestamp: session[1] - 60_000,
-    open: 49, high: 51, low: 48, previousClose: 49.5, points: [], series: [], session };
+    open: 49, high: 51, low: 48, previousClose: 49.5, points: [], series: [], session, fetchedAt: now };
   historyStub.entry = null;
   let { tree } = await dialog(quote);
   assert.equal(byId(tree, "quotr-relative-volume"), undefined, "no 1M period loaded: nothing");
@@ -230,6 +280,9 @@ test("the dialog: a quiet line under the 1D volume, only with the month loaded; 
   // The session still trading: nothing.
   ({ tree } = await dialog({ ...quote, session: [now - H, now + 5 * H] }));
   assert.equal(byId(tree, "quotr-relative-volume"), undefined);
+  // A quote fetched before the close, drawn after it (the dialog keeps the quote it opened with): nothing.
+  ({ tree } = await dialog({ ...quote, fetchedAt: session[1] - H }));
+  assert.equal(byId(tree, "quotr-relative-volume"), undefined);
   // On the 1M tab itself the period stats are unchanged: no figure there.
   ({ tree } = await dialog(quote, "1M"));
   assert.equal(byId(tree, "quotr-relative-volume"), undefined);
@@ -238,7 +291,8 @@ test("the dialog: a quiet line under the 1D volume, only with the month loaded; 
 test("the dialog: a pair's 24h volume gets its figure the same way", async (t) => {
   t.after(() => { historyStub.entry = null; });
   const now = Date.now();
-  const quote = { ...pairQuote(90e6), name: "Binance Spot", price: 100, changePercent: 1, timestamp: now, open: 99, high: 101, low: 98,
+  const quote = { ...pairQuote(90e6), name: "Binance Spot", price: 100, changePercent: 1, timestamp: now, windowStart: now - DAY,
+    fetchedAt: now, open: 99, high: 101, low: 98,
     previousClose: 99, points: [], series: [], periods: null };
   historyStub.entry = pairMonth({ now });
   const { tree } = await dialog(quote);
