@@ -47,6 +47,17 @@ Compared with Pulse at `99f70b2c`:
   volume (Yahoo's `regularMarketVolume`, e.g. `267.8M`), a pair's 24h volume in its quote currency
   (Binance's `quoteVolume`, e.g. `1.48B USDT`). Shown only when the source gives a number above
   zero; no column otherwise.
+- Relative volume on 1D, a small line under that Volume stat (`1.4× avg`, details in its tooltip):
+  the day's volume against the average full day of the last month, from full days only. It uses
+  the 1M history the dialog has already loaded (open the 1M tab once); no request is made for it,
+  and without that month there is no line. A stock's figure is its regular session against the
+  average of the month's full sessions before it, and appears only once that session has closed:
+  while it trades, a partial day is never compared, so there is no line. A pair's is Binance's
+  rolling 24h volume (always a whole 24 hours) against the average UTC day of the month's 4-hour
+  klines, counting only days with all six klines closed, never the current one. Missing, zero or
+  malformed volumes, a month whose volumes don't hold up, one day listed with two volumes, a
+  month's bar for the day above the day's own total, a currency that doesn't match, or fewer than
+  10 full days to average: no line rather than a wrong number (`relvolume.js`).
 - Volume on 1W · 1M · 1Y, where the data holds up: faint bars from zero under the chart, one per
   point of the line, the hovered one highlighted and its volume in the hover readout (`Vol 12.3M`),
   and the period's total as a fourth stat (`1M volume`, or `Volume shown` for a partial period).
