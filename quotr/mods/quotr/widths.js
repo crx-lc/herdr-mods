@@ -1,16 +1,17 @@
 // How Quotr's content fits the panel's width (issue #24). No Herdr imports, so tests run it under Node.
 //
-// The owner's three widths, in logical pixels at zoom 1:
-//   280  minimum: an ordinary row (a short ticker, a price like "182.36 USD") still shows its logo,
-//        symbol, chart, price and change; the header and the clock still fit on their lines.
-//   320  default: what mod.json asks for the first time Quotr is docked. Never applied to a layout
+// The owner's three widths, in logical pixels at zoom 1, measured from his live panel:
+//   350  minimum: every row keeps today's look (logo, symbol, chart, price and change), long
+//        crypto prices included; only a pair with a tiny or nine-digit price (0.00001234 USDT,
+//        134,567,890.00 KRW) needs a few px more for its chart.
+//   410  default: what mod.json asks for the first time Quotr is docked. Never applied to a layout
 //        the person already has.
-//   350  maximum useful: the content stops growing; a wider panel leaves the extra width empty.
-// The host doesn't enforce any of them: a person can drag the pane narrower or wider. Below the
-// minimum the content gives way in a fixed order instead of clipping: in a row, the chart first,
-// then the logo, then the price and change move under the symbol. The symbol, the price and the
-// change are never cut or split; only the second line (the company name, "As of …") shortens.
-export const WIDTHS = { minimum: 280, default: 320, maximum: 350 };
+//   460  maximum useful: the content stops growing; a wider panel leaves the extra width empty.
+// The host doesn't enforce any of them: a person can drag the pane narrower or wider. When a row
+// doesn't fit, it gives way in a fixed order instead of clipping: the chart first, then the logo,
+// then the price and change move under the symbol. The symbol, the price and the change are never
+// cut or split; only the second line (the company name, "As of …") shortens.
+export const WIDTHS = { minimum: 350, default: 410, maximum: 460 };
 
 // Before the panel has been measured (the first frame, `herdr-app check`), it is drawn at the default.
 export const ASSUMED_WIDTH = WIDTHS.default;

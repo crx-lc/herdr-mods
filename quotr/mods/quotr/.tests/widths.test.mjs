@@ -9,17 +9,22 @@ import { formatChange, formatPrice } from "../quotes.js";
 import { views, walk, element, theme } from "./helpers/view-harness.mjs";
 
 // An ordinary row: a short ticker and a three-digit price. Long ones: a pair priced in the tens of
-// thousands, a tiny price, a long exchange suffix.
+// thousands, a tiny price, a long exchange suffix. Exceptional ones, which need a little more than
+// the minimum for their chart: a pair with an eight-decimal price, a nine-digit price.
 const ordinary = { symbol: "AAPL", price: "182.36 USD", change: "+1.23%", chart: true };
 const longPrice = { symbol: "ZQX/USDT", price: "59,565.52 USDT", change: "-2.31%", chart: true };
 const tinyPrice = { symbol: "PIX/USDT", price: "0.00004418 USDT", change: "+2.96%", chart: true };
 const suffix = { symbol: "MRLW.L", price: "1,245.51 GBP", change: "+0.08%", chart: true };
 const sample = [ordinary, longPrice, { symbol: "BLRV", price: "7.43 USD", change: "+12.92%", chart: true }, suffix, tinyPrice];
+const exceptional = [
+  { symbol: "SHIB/USDT", price: "0.00001234 USDT", change: "-12.34%", chart: true },
+  { symbol: "BTC/KRW", price: "134,567,890.00 KRW", change: "-12.34%", chart: true },
+];
 const stage = (r) => (r.stacked ? 3 : !r.logo ? 2 : !r.chart ? 1 : 0);
 const NAMES = ["full", "no chart", "no logo", "stacked"];
 
 test("the owner's three widths, and mod.json asks for the default", async () => {
-  assert.deepEqual(WIDTHS, { minimum: 280, default: 320, maximum: 350 });
+  assert.deepEqual(WIDTHS, { minimum: 350, default: 410, maximum: 460 });
   const manifest = JSON.parse(await readFile(new URL("../mod.json", import.meta.url), "utf8"));
   assert.equal(manifest.size, WIDTHS.default);
   assert.equal(manifest.place, "right");
@@ -35,7 +40,7 @@ test("Quotr never sizes the host: no resize or layout command anywhere in the vi
 });
 
 test("on_size_change's window px become the px the mod writes; anything else is unknown", () => {
-  assert.equal(designWidth({ width: 384, height: 600 }, 1.2), 320);
+  assert.equal(designWidth({ width: 492, height: 600 }, 1.2), 410);
   assert.equal(designWidth({ width: 300 }, 1), 300);
   assert.equal(designWidth({ width: 300 }, undefined), 300, "no zoom: zoom 1");
   assert.equal(designWidth({ width: 300 }, 0), 300);
@@ -43,13 +48,13 @@ test("on_size_change's window px become the px the mod writes; anything else is 
 });
 
 test("the content stops growing at the maximum useful width", () => {
-  assert.equal(contentWidth(480), 350);
-  assert.equal(contentWidth(350), 350);
-  assert.equal(contentWidth(351), 350);
-  assert.equal(contentWidth(320), 320);
-  assert.equal(contentWidth(null), 320);
-  assert.deepEqual(layoutRows(900, sample), layoutRows(350, sample));
-  assert.deepEqual(layoutHeader(900, ["Reorder", "Refresh", "Pause"]), layoutHeader(350, ["Reorder", "Refresh", "Pause"]));
+  assert.equal(contentWidth(520), 460);
+  assert.equal(contentWidth(460), 460);
+  assert.equal(contentWidth(461), 460);
+  assert.equal(contentWidth(410), 410);
+  assert.equal(contentWidth(null), 410);
+  assert.deepEqual(layoutRows(900, [...sample, ...exceptional]), layoutRows(460, [...sample, ...exceptional]));
+  assert.deepEqual(layoutHeader(900, ["Reorder", "Refresh", "Pause"]), layoutHeader(460, ["Reorder", "Refresh", "Pause"]));
 });
 
 test("estimates are never narrower than what Herdr's UI font draws (measured at zoom 1 on Windows)", () => {
@@ -74,13 +79,16 @@ test("estimates are never narrower than what Herdr's UI font draws (measured at 
   assert.ok(textWidth("日本", 12.5) >= 25, "an unknown character counts as a full em");
 });
 
-test("at the minimum and wider, an ordinary row shows its logo, symbol, chart, price and change", () => {
-  const others = [{ ...ordinary, symbol: "GOOG" }, { ...ordinary, symbol: "MSFT", price: "412.50 USD" }];
-  for (const width of [280, 300, 320, 340, 350, 480]) {
-    for (const r of [ordinary, ...others]) {
-      const row = layoutRows(width, [r]).rows[0];
-      assert.deepEqual([row.logo, row.chart, row.stacked], [true, true, false], `${r.symbol} at ${width}`);
-    }
+test("at the minimum and wider, every row keeps today's look: logo, symbol, chart, price and change", () => {
+  const rows = [...sample, { ...ordinary, symbol: "GOOG" }, { symbol: "^GSPC", price: "6,812.34 USD", change: "+0.45%", chart: true },
+    { symbol: "BTC/USDT", price: "109,565.51 USDT", change: "-2.31%", chart: true },
+    { symbol: "BTC/JPY", price: "14,023,456.00 JPY", change: "-2.31%", chart: true },
+    { symbol: "005930.KS", price: "54,300.00 KRW", change: "+0.31%", chart: true },
+    { symbol: "BRK-A", price: "712,345.67 USD", change: "+0.31%", session: true, chart: true }];
+  for (const width of [350, 380, 410, 460, 520]) {
+    // Each row alone, and all of them together.
+    for (const r of rows) assert.deepEqual(stage(layoutRows(width, [r]).rows[0]), 0, `${r.symbol} at ${width}`);
+    assert.ok(layoutRows(width, rows).rows.every((r) => stage(r) === 0), `all at ${width}`);
   }
   // With the day's tick or the update dot (one shared slot) and the price's tint counted.
   assert.equal(valuesWidth(ordinary), ROW.marker + ROW.tint + textWidth("182.36 USD", 12.5, { regular: true }));
@@ -88,19 +96,27 @@ test("at the minimum and wider, an ordinary row shows its logo, symbol, chart, p
   assert.ok(valuesWidth({ ...ordinary, session: true }) === valuesWidth(ordinary) + ROW.session);
 });
 
-test("from the default up, ordinary rows keep today's 108 px values column, so their charts line up", () => {
-  for (const width of [320, 350, 480]) {
+test("only exceptional prices need more than the minimum for their chart, and by how much", () => {
+  const needs = (r) => { for (let w = 520; w >= 100; w--) if (!layoutRows(w, [r]).rows[0].chart) return w + 1; return 100; };
+  assert.deepEqual(exceptional.map(needs), [356, 363]);
+  for (const r of exceptional) {
+    // Short of the chart at the minimum, they still keep their logo, symbol, price and change.
+    assert.equal(NAMES[stage(layoutRows(WIDTHS.minimum, [r]).rows[0])], "no chart");
+    assert.equal(NAMES[stage(layoutRows(WIDTHS.default, [r]).rows[0])], "full");
+  }
+});
+
+test("at the minimum and wider, ordinary rows keep today's 108 px values column, so their charts line up", () => {
+  for (const width of [350, 410, 460, 520]) {
     const laid = layoutRows(width, sample);
     assert.equal(laid.column, 108, `at ${width}`);
     for (const [i, row] of laid.rows.entries()) if (row.chart && valuesWidth(sample[i]) <= 108) assert.equal(row.values, 108);
+    // The two long prices take wider columns of their own.
+    assert.ok(laid.rows[1].values > 108 && laid.rows[4].values > 108);
   }
-  // At the maximum every sample row has its chart; the two long prices take wider columns of their own.
-  const wide = layoutRows(350, sample).rows;
-  assert.ok(wide.every((r) => r.logo && r.chart && !r.stacked));
-  assert.ok(wide[1].values > 108 && wide[4].values > 108);
 });
 
-test("below the default the shared column narrows before an ordinary row gives anything up", () => {
+test("below the minimum the shared column narrows before an ordinary row gives anything up", () => {
   const at280 = layoutRows(280, sample);
   assert.ok(at280.column < 108);
   assert.equal(at280.rows[0].values, at280.column);
@@ -114,7 +130,7 @@ test("a row gives way in one order: the chart, then the logo, then the values mo
   for (const r of cases) {
     let last = 0;
     const seen = [];
-    for (let width = 400; width >= 100; width -= 2) {
+    for (let width = 520; width >= 100; width -= 2) {
       const row = layoutRows(width, [r]).rows[0];
       const s = stage(row);
       assert.ok(s >= last, `${r.symbol}: back to ${NAMES[s]} at ${width}`);
@@ -126,7 +142,7 @@ test("a row gives way in one order: the chart, then the logo, then the values mo
     assert.deepEqual(seen, [...new Set(seen)].sort(), r.symbol);
   }
   // Each stage fits exactly what it shows: no row is laid out wider than its content width.
-  for (let width = 100; width <= 400; width += 5) {
+  for (let width = 100; width <= 520; width += 5) {
     for (const [i, row] of layoutRows(width, sample).rows.entries()) {
       if (row.stacked) continue;
       const it = sample[i];
@@ -139,8 +155,10 @@ test("a row gives way in one order: the chart, then the logo, then the values mo
 
 test("the thresholds for the sample rows, row by row", () => {
   const at = (width) => layoutRows(width, sample).rows.map((r) => NAMES[stage(r)]);
+  assert.deepEqual(at(460), ["full", "full", "full", "full", "full"]);
   assert.deepEqual(at(350), ["full", "full", "full", "full", "full"]);
   assert.deepEqual(at(320), ["full", "no chart", "full", "full", "no chart"]);
+  assert.deepEqual(at(300), ["full", "no chart", "full", "no chart", "no chart"]);
   assert.deepEqual(at(280), ["full", "no chart", "full", "no chart", "no logo"]);
   assert.deepEqual(at(240), ["no chart", "no logo", "no chart", "no logo", "stacked"]);
   assert.deepEqual(at(160), ["stacked", "stacked", "stacked", "stacked", "stacked"]);
@@ -148,11 +166,11 @@ test("the thresholds for the sample rows, row by row", () => {
   const split = (width) => layoutRows(width, sample).rows.map((r) => Boolean(r.split));
   assert.deepEqual(split(200), [false, false, false, false, false]);
   assert.deepEqual(split(150), [false, true, false, false, true]);
-  assert.deepEqual(split(320), [false, false, false, false, false]);
+  assert.deepEqual(split(350), [false, false, false, false, false]);
 });
 
 test("while reordering the move buttons never give way: the logo goes first, then the values", () => {
-  for (let width = 400; width >= 120; width -= 4) {
+  for (let width = 520; width >= 120; width -= 4) {
     for (const row of layoutRows(width, sample, { reordering: true }).rows) assert.equal(row.chart, true, `at ${width}`);
   }
   const tight = layoutRows(240, [longPrice], { reordering: true }).rows[0];
@@ -195,9 +213,12 @@ test("a price splits only between its number and its currency; numbers and perce
   for (const change of [formatChange(-12.345), formatChange(0), formatChange(null)]) assert.deepEqual(priceAtoms(change), [change]);
 });
 
-test("the header: today's line from 290 up, tighter buttons at the minimum, then no title, then wrapping", () => {
+test("the header: today's line at the minimum and down to 290, then tighter buttons, no title, wrapping", () => {
   const labels = ["Reorder", "Refresh", "Pause"];
-  assert.deepEqual(layoutHeader(320, labels), { compact: false, title: true, wrap: false });
+  for (const width of [WIDTHS.minimum, WIDTHS.default, WIDTHS.maximum]) {
+    assert.deepEqual(layoutHeader(width, labels), { compact: false, title: true, wrap: false });
+    assert.deepEqual(layoutHeader(width, ["Done", "Refresh", "Resume"]), { compact: false, title: true, wrap: false });
+  }
   assert.deepEqual(layoutHeader(290, labels), { compact: false, title: true, wrap: false });
   assert.deepEqual(layoutHeader(280, labels), { compact: true, title: true, wrap: false });
   assert.deepEqual(layoutHeader(240, labels), { compact: true, title: false, wrap: false });
@@ -207,7 +228,7 @@ test("the header: today's line from 290 up, tighter buttons at the minimum, then
   // One ticker: no Reorder button, so more room.
   assert.equal(layoutHeader(240, ["Refresh", "Pause"]).title, true);
   let last = 0;
-  for (let width = 400; width >= 120; width--) {
+  for (let width = 520; width >= 120; width--) {
     const f = layoutHeader(width, labels);
     const s = f.wrap ? 3 : !f.title ? 2 : f.compact ? 1 : 0;
     assert.ok(s >= last, `header back at ${width}`);
@@ -222,10 +243,10 @@ test("the clock: today's line at the minimum, then without the date, then on two
   assert.deepEqual(layoutClock(WIDTHS.maximum - 24, text), { day: true, wrap: false });
   assert.deepEqual(layoutClock(200, text), { day: false, wrap: false });
   assert.deepEqual(layoutClock(150, text), { day: false, wrap: true });
-  // Unavailable schedule: a long phase, no countdown; at the minimum its date moves to the tooltip.
+  // Unavailable schedule: a long phase, no countdown; the whole line still fits at the minimum.
   const off = { time: "11:53", day: "Sat Nov 28", phase: "Market schedule unavailable", countdown: "" };
-  assert.deepEqual(layoutClock(WIDTHS.default - 24, off), { day: true, wrap: false });
-  assert.deepEqual(layoutClock(WIDTHS.minimum - 24, off), { day: false, wrap: false });
+  assert.deepEqual(layoutClock(WIDTHS.minimum - 24, off), { day: true, wrap: false });
+  assert.deepEqual(layoutClock(256, off), { day: false, wrap: false });
   assert.equal(layoutClock(180, off).wrap, true);
   // Not measured yet: today's line.
   assert.deepEqual(layoutClock(null, text), { day: true, wrap: false });
@@ -283,10 +304,10 @@ test("the content is capped at the maximum useful width; the symbol never trunca
   const { Quotr } = await views();
   const tree = sampleView(Quotr, ["AAPL"], 900).panel(element(), theme);
   const content = walk(tree).find((n) => n.calls?.some((c) => c[0] === "id" && c[1] === "quotr-content"));
-  assert.ok(content.calls.some((c) => c[0] === "max_w" && c[1] === 350));
+  assert.ok(content.calls.some((c) => c[0] === "max_w" && c[1] === 460));
   // Before the first measurement: the default width's layout.
-  const first = sampleView(Quotr, ["AAPL", "ZQX/USDT"], null);
-  assert.ok(ids(first.panel(element(), theme)).includes("quotr-spark-AAPL"));
+  const first = ids(sampleView(Quotr, ["AAPL", "ZQX/USDT"], null).panel(element(), theme));
+  assert.ok(first.includes("quotr-spark-AAPL") && first.includes("quotr-spark-ZQX/USDT"));
 });
 
 test("the update dot and the tick arrow share one slot left of the price", async () => {
